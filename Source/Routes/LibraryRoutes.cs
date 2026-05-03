@@ -1,0 +1,121 @@
+using System.Collections.Generic;
+using System.IO;
+using System.Net;
+using System.Threading.Tasks;
+using FlaxEngine;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
+namespace FAW.Routes
+{
+    public static class LibraryRoutes
+    {
+        private static readonly string LibraryFile;
+
+        static LibraryRoutes()
+        {
+            var root = Path.Combine(Globals.ProjectFolder, "Library");
+            Directory.CreateDirectory(root);
+            LibraryFile = Path.Combine(root, "asset_library.json");
+        }
+
+        public static async Task<JObject> HandleSearchAsync(HttpListenerContext ctx)
+        {
+            var body = await new StreamReader(ctx.Request.InputStream).ReadToEndAsync();
+            var req = JObject.Parse(body ?? "{}");
+            var query = req["query"]?.ToString() ?? "";
+
+            var library = LoadLibrary();
+            var results = new JArray();
+            foreach (var asset in library)
+            {
+                var name = asset["name"]?.ToString() ?? "";
+                var cat = asset["category"]?.ToString() ?? "";
+                if (string.IsNullOrEmpty(query) ||
+                    name.Contains(query, System.StringComparison.OrdinalIgnoreCase) ||
+                    cat.Contains(query, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    results.Add(asset);
+                }
+            }
+
+            return new JObject { ["success"] = true, ["results"] = results, ["count"] = results.Count };
+        }
+
+        public static async Task<JObject> HandleInstallAsync(HttpListenerContext ctx)
+        {
+            var body = await new StreamReader(ctx.Request.InputStream).ReadToEndAsync();
+            var req = JObject.Parse(body ?? "{}");
+
+            var assetId = req["asset_id"]?.ToString();
+            var providerId = req["provider"]?.ToString();
+            var category = req["category"]?.ToString() ?? "unknown";
+            var name = req["name"]?.ToString() ?? assetId;
+
+            if (string.IsNullOrWhiteSpace(assetId))
+                return Error("'asset_id' is required");
+
+            if (string.IsNullOrWhiteSpace(providerId))
+                return Error("'provider' is required");
+
+            var provider = Providers.ProviderRegistry.Instance.GetProvider(providerId);
+            if (provider == null)
+                return Error($"Provider '{providerId}' not found");
+
+            var config = Providers.ProviderRegistry.Instance.GetConfig(providerId);
+            var result = await provider.DownloadAsync(assetId, config);
+
+            if (!result.Success)
+                return new JObject { ["success"] = false, ["error"] = result.Error };
+
+            // Record in library
+            var library = LoadLibrary();
+            var entry = new JObject
+            {
+                ["id"] = assetId,
+                ["name"] = name,
+                ["provider"] = providerId,
+                ["category"] = category,
+                ["local_path"] = result.LocalPath,
+                ["format"] = result.Format,
+                ["file_size_bytes"] = result.FileSizeBytes,
+                ["sha256"] = result.Sha256,
+                ["installed_at"] = System.DateTime.UtcNow.ToString("O")
+            };
+            library.Add(entry);
+            SaveLibrary(library);
+
+            return new JObject
+            {
+                ["success"] = true,
+                ["asset"] = entry,
+                ["message"] = $"'{name}' installed from {providerId}"
+            };
+        }
+
+        public static JObject HandleReady()
+        {
+            var library = LoadLibrary();
+            return new JObject
+            {
+                ["success"] = true,
+                ["ready_assets"] = new JArray(library),
+                ["count"] = library.Count
+            };
+        }
+
+        private static List<JObject> LoadLibrary()
+        {
+            if (!File.Exists(LibraryFile)) return new List<JObject>();
+            var json = File.ReadAllText(LibraryFile);
+            return JsonConvert.DeserializeObject<List<JObject>>(json) ?? new List<JObject>();
+        }
+
+        private static void SaveLibrary(List<JObject> library)
+        {
+            File.WriteAllText(LibraryFile, JsonConvert.SerializeObject(library, Formatting.Indented));
+        }
+
+        private static JObject Error(string msg) => new JObject { ["success"] = false, ["error"] = msg };
+    }
+}

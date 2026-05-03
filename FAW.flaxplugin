@@ -1,0 +1,24 @@
+{
+  "Name": "FAW",
+  "Version": "1.0.0",
+  "Description": "Modular asset pipeline with HTTP/JSON-RPC. Providers, lanes, categories, library.",
+  "Author": "Flax Game Factory",
+  "AuthorUrl": "",
+  "Homepage": "",
+  "RepositoryUrl": "",
+  "License": "MIT",
+  "Category": "Pipeline",
+  "IsAlpha": false,
+  "EditorPlugin": false,
+  "GamePlugin": true,
+  "SupportedPlatforms": [
+    "Windows",
+    "Linux",
+    "Mac"
+  ],
+  "MinEngineVersion": "1.9.0",
+  "References": [
+    "System.Net.Http",
+    "Newtonsoft.Json"
+  ]
+}

@@ -1,0 +1,1 @@
+"""AssetBoy package."""

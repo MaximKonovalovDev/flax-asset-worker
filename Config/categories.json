@@ -1,0 +1,38 @@
+{
+  "texture": {
+    "primary": "polyhaven",
+    "fallbacks": ["kenney", "fab"]
+  },
+  "model": {
+    "primary": "polyhaven",
+    "fallbacks": ["kenney", "fab", "mixamo"]
+  },
+  "audio": {
+    "primary": "kenney",
+    "fallbacks": ["freesound", "fab"]
+  },
+  "animation": {
+    "primary": "mixamo",
+    "fallbacks": ["fab"]
+  },
+  "material": {
+    "primary": "polyhaven",
+    "fallbacks": ["fab"]
+  },
+  "hdr": {
+    "primary": "polyhaven",
+    "fallbacks": []
+  },
+  "sprite": {
+    "primary": "kenney",
+    "fallbacks": ["fab"]
+  },
+  "font": {
+    "primary": "kenney",
+    "fallbacks": ["fab"]
+  },
+  "vfx": {
+    "primary": "kenney",
+    "fallbacks": ["fab"]
+  }
+}

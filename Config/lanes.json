@@ -1,0 +1,28 @@
+{
+  "lanes": [
+    {
+      "id": "quick-import",
+      "name": "Quick Import",
+      "description": "Download → Validate → Import. Fastest path.",
+      "steps": ["download", "validate", "import"],
+      "timeout_seconds": 120,
+      "retry_count": 1
+    },
+    {
+      "id": "full-pipeline",
+      "name": "Full Pipeline",
+      "description": "Download → Validate → Optimize → Convert → Import → Cleanup",
+      "steps": ["download", "validate", "optimize", "convert", "import", "cleanup"],
+      "timeout_seconds": 600,
+      "retry_count": 2
+    },
+    {
+      "id": "batch-process",
+      "name": "Batch Process",
+      "description": "Download multiple → Validate all → Import all",
+      "steps": ["download", "validate", "import"],
+      "timeout_seconds": 1800,
+      "retry_count": 1
+    }
+  ]
+}

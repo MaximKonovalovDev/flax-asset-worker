@@ -1,0 +1,32 @@
+{
+  "polyhaven": {
+    "enabled": true,
+    "timeout_seconds": 120,
+    "base_url": "https://api.polyhaven.com"
+  },
+  "kenney": {
+    "enabled": true,
+    "timeout_seconds": 120,
+    "base_url": "https://kenney.nl"
+  },
+  "fab": {
+    "enabled": false,
+    "timeout_seconds": 300,
+    "base_url": "https://www.fab.com"
+  },
+  "epic": {
+    "enabled": false,
+    "timeout_seconds": 300,
+    "base_url": "https://www.epicgames.com"
+  },
+  "mixamo": {
+    "enabled": false,
+    "timeout_seconds": 300,
+    "base_url": "https://www.mixamo.com"
+  },
+  "freesound": {
+    "enabled": false,
+    "timeout_seconds": 120,
+    "base_url": "https://freesound.org"
+  }
+}

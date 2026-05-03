@@ -1,0 +1,42 @@
+# Build output
+bin/
+obj/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# IDE files
+.vs/
+.vscode/
+*.swp
+*.swo
+*~
+
+# NuGet
+packages/
+*.nupkg
+
+# Test results
+TestResults/
+*.trx
+*.coverage
+
+# Temp files
+*.tmp
+*.log
+Cache/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+.env
+venv/
+.venv/
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
