@@ -1,6 +1,13 @@
-# FAW
+# flax-asset-worker
 
 Modular asset pipeline plugin for Flax Engine. C# hub (HTTP server on :8790) + Python worker lane.
+
+> **Renamed 2026-05-06:** previously published as `diklaaltman91-ux/faw`;
+> now lives at `flax-game-studio/flax-asset-worker` alongside the
+> `flax-mcp` monorepo and its sister plugins. The repo is intentionally
+> kept separate from the monorepo because it runs out-of-process and
+> ships a Python sidecar - see `flax-mcp/AGENTS.md` and ADR 013 for the
+> rationale.
 
 ## Architecture
 
