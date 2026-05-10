@@ -1,0 +1,75 @@
+# Python sidecar dependencies — reconstructed 2026-05-10
+# from import scan of all 80 .py files in this package.
+#
+# Install:
+#   python -m venv .venv
+#   .venv\Scripts\Activate.ps1
+#   python -m pip install -r requirements.txt
+#   python -m playwright install chromium
+#
+# Tested Python: 3.11 (see ../../.python-version).
+# Tested OS:     Windows 11 (some deps require Windows for win32crypt).
+#
+# After install, smoke-test:
+#   python -m assetboy.cli --help
+#   python -m assetboy.worker_server      # starts HTTP on :8766
+#   python -m assetboy.bridge             # smoke-tests C# server on :8790
+
+# ──────────────────────────────────────────────────────────────────────
+# HTTP clients & stealth browser
+# ──────────────────────────────────────────────────────────────────────
+requests>=2.32.0
+httpx>=0.27.0
+curl_cffi>=0.7.0          # Cloudflare-bypassing HTTP client (used by fab_hybrid.py)
+
+# ──────────────────────────────────────────────────────────────────────
+# Browser automation (Fab, Mixamo, Unity Asset Store auth flows)
+# ──────────────────────────────────────────────────────────────────────
+nodriver>=0.38             # Undetected Chrome driver (5 providers use this)
+playwright>=1.45.0         # Playwright (Mixamo, Unity Hub, FreeSound)
+
+# ──────────────────────────────────────────────────────────────────────
+# Crypto / Windows-cookie decrypt (Chrome cookies for shared profile)
+# ──────────────────────────────────────────────────────────────────────
+cryptography>=42.0.0
+pywin32>=306;            sys_platform == "win32"   # provides win32crypt
+
+# ──────────────────────────────────────────────────────────────────────
+# Image / asset handling
+# ──────────────────────────────────────────────────────────────────────
+Pillow>=10.0.0             # imported as PIL (thumbnails, format conversion)
+
+# ──────────────────────────────────────────────────────────────────────
+# AI generation (LOCAL on RTX 3050 6GB — optional)
+# ──────────────────────────────────────────────────────────────────────
+# Uncomment ONLY if you intend to run local AI generation. Heavy install.
+# torch>=2.4.0+cu121         # CUDA 12.1 wheels — install via:
+#                            #   pip install torch --index-url https://download.pytorch.org/whl/cu121
+
+# ──────────────────────────────────────────────────────────────────────
+# AI generation (REMOTE / Colab — optional)
+# ──────────────────────────────────────────────────────────────────────
+# trellis                    # Microsoft TRELLIS image-to-3D (Colab T4 lane)
+# hunyuan3d2                 # Tencent Hunyuan3D-2 (Colab lane)
+# These are not on PyPI; install from upstream when running execution/animationgpt_runner.py
+
+# ──────────────────────────────────────────────────────────────────────
+# TTS (animal calls / dialogue — optional)
+# ──────────────────────────────────────────────────────────────────────
+edge-tts>=6.1.0            # Microsoft Edge TTS (free, Azure voices)
+
+# ──────────────────────────────────────────────────────────────────────
+# Local AI binaries (NOT installed via pip; documented for awareness)
+# ──────────────────────────────────────────────────────────────────────
+# sdcli                      — sd.cpp CUDA wrapper (local Stable Diffusion on 3050)
+#                              Install per https://github.com/leejet/stable-diffusion.cpp
+# local_listing              — internal helper module (in-package)
+#
+# ──────────────────────────────────────────────────────────────────────
+# What's NOT in requirements (intentionally — runs as separate processes)
+# ──────────────────────────────────────────────────────────────────────
+# - Blender                 — invoked as `blender --background --python …`
+# - ComfyUI                 — invoked over HTTP on :8188
+# - Unity Editor            — invoked headless via unity_runner.py subprocess
+# - Legendary CLI           — Heroic launcher; subprocess from legendary_bridge.py
+# - UEVaultManager          — subprocess from epic_vault.py

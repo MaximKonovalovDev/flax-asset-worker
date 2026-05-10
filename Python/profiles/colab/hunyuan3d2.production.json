@@ -1,0 +1,58 @@
+{
+  "adapter_id": "hunyuan3d2",
+  "asset_kind": "weapon",
+  "cleanup_profile": "weapon_or_prop_v1",
+  "display_name": "Hunyuan3D-2 Production",
+  "access_surface": "Linux or Colab notebook (T4/L4) using the official Hunyuan3D-2 stack",
+  "export_targets": [
+    "glb",
+    "fbx"
+  ],
+  "lane": "3d",
+  "model_name": "Hunyuan3D-2",
+  "official_url": "https://github.com/Tencent-Hunyuan/Hunyuan3D-2",
+  "profile_id": "hunyuan3d2.production",
+  "prompt_guidance": [
+    "Bias toward grounded historical proportions instead of dramatic concept-art silhouettes.",
+    "Keep prompts focused on one asset family per job so review can reject or accept quickly.",
+    "Ask for clean materials and hard-surface readability that survive Blender cleanup.",
+    "For larger scenes, describe one modular component per prompt (pillar, arch, wall segment) instead of an entire city.",
+    "When reference images exist, run a multi-view pre-pass (front/back/left/right/top/bottom) and feed Hunyuan3D-2-MV to avoid hallucinated backs."
+  ],
+  "provenance_notes": [
+    "Capture the Colab notebook link or session note used for the run.",
+    "Record prompt, negative prompt, seed, and output filenames before publish.",
+    "Attach the Blender cleanup profile used after generation."
+  ],
+  "review_checklist": [
+    "Silhouette reads as Roman equipment at gameplay distance.",
+    "Mesh can survive simple cleanup without heroic manual repair.",
+    "Export set includes GLB for review and FBX fallback for Flax-side intake.",
+    "If this is a modular piece, it snaps cleanly with other modules after cleanup."
+  ],
+  "setup_steps": [
+    "Prefer a Linux or Colab runtime because the official stack is Linux-first.",
+    "Clone the official repository, install the pinned requirements, and use the official Gradio or API path instead of a random fork.",
+    "On free Colab (T4), start with Hunyuan3D-2 Mini or Turbo and pass --low_vram_mode to avoid OOM.",
+    "Use the full Hunyuan3D-2 model only on L4/A100-class GPUs when the Mini/Turbo output is not sufficient.",
+    "If you have multiple views, prefer the multi-view pipeline for cleaner geometry.",
+    "Optional: pre-clean references in ComfyUI (background removal + depth ControlNet) before the multi-view pass."
+  ],
+  "progression_steps": [
+    "Start from one clean reference image or one narrow asset prompt, not a broad pack concept.",
+    "Reject bad silhouette or proportion results before you spend time on texture or Blender cleanup.",
+    "Promote only the strongest mesh into Blender cleanup, then export GLB first and FBX as fallback.",
+    "For city-scale needs, generate a small kit of modular pieces and assemble the scene in Blender or Flax.",
+    "If runtime slows down, switch to hunyuan3d-dit-v2-mini-turbo for fast iterations, then rerun the best prompt on full model when GPU budget allows.",
+    "Bake textures or vertex colors to PBR maps in Blender after Quadriflow remesh; keep the bake and cleanup noted in provenance."
+  ],
+  "runbook": [
+    "Generate 2-3 variants, reject weak silhouettes early, and only clean the strongest pass.",
+    "Run Blender MCP normalization before any reviewed payload is copied into publish/flax_intake.",
+    "Keep rejected generations out of the final payload folder.",
+    "Full-scene generation (HunyuanWorld) is Pro-only; free-tier workflows should stay modular.",
+    "For multi-view, use Zero123++ or SyncDreamer to create consistent 6-view renders, then feed Hunyuan3D-2-MV.",
+    "Post-process in ComfyUI-Hunyuan3D wrapper if masking or remeshing is needed before Blender cleanup."
+  ],
+  "runtime_class": "long"
+}

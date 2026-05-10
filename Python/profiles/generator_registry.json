@@ -1,0 +1,53 @@
+{
+  "schema_version": "2026-04-17.generator_registry.v1",
+  "providers": [
+    {
+      "adapter_id": "step1x3d",
+      "display_name": "Step1X-3D",
+      "model_family": "stepfun-ai/Step1X-3D",
+      "license": "Apache-2.0",
+      "default_objective_rank": {
+        "open_experiment": 1,
+        "text_first": 2,
+        "high_fidelity_eval": 2
+      },
+      "notes": "Primary open research lane with strong controllability trajectory."
+    },
+    {
+      "adapter_id": "topiaxl",
+      "display_name": "3DTopia-XL",
+      "model_family": "3DTopia/3DTopia-XL",
+      "license": "Apache-2.0",
+      "default_objective_rank": {
+        "open_experiment": 2,
+        "text_first": 1,
+        "high_fidelity_eval": 3
+      },
+      "notes": "Strong text-first generation lane for prompt-driven props."
+    },
+    {
+      "adapter_id": "hunyuan3d2",
+      "display_name": "Hunyuan3D-2",
+      "model_family": "Tencent-Hunyuan/Hunyuan3D-2.x",
+      "license": "Tencent Hunyuan Community License",
+      "default_objective_rank": {
+        "open_experiment": 4,
+        "text_first": 4,
+        "high_fidelity_eval": 1
+      },
+      "notes": "Use for internal or evaluation-heavy runs due license constraints."
+    },
+    {
+      "adapter_id": "trellis",
+      "display_name": "TRELLIS",
+      "model_family": "TRELLIS",
+      "license": "Varies by deployment",
+      "default_objective_rank": {
+        "open_experiment": 3,
+        "text_first": 3,
+        "high_fidelity_eval": 4
+      },
+      "notes": "Fallback lane when silhouette/topology stability is the blocker."
+    }
+  ]
+}

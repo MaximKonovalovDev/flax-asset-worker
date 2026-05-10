@@ -1,0 +1,28 @@
+{
+  "description": "Example MCP server entries for one or two Colab accounts with isolated token caches.",
+  "note": "Each account uses a different HOME path so mcp-server-colab-exec stores token.json separately.",
+  "servers": [
+    {
+      "name": "colab_exec_primary",
+      "command": "py",
+      "args": [
+        "-m",
+        "mcp_server_colab_exec.server"
+      ],
+      "env": {
+        "HOME": "C:\\Users\\me\\.assetboy\\colab_primary"
+      }
+    },
+    {
+      "name": "colab_exec_secondary",
+      "command": "py",
+      "args": [
+        "-m",
+        "mcp_server_colab_exec.server"
+      ],
+      "env": {
+        "HOME": "C:\\Users\\me\\.assetboy\\colab_secondary"
+      }
+    }
+  ]
+}

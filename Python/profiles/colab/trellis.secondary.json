@@ -1,0 +1,46 @@
+{
+  "adapter_id": "trellis",
+  "asset_kind": "weapon",
+  "cleanup_profile": "secondary_generator_retry_v1",
+  "display_name": "TRELLIS Secondary",
+  "access_surface": "Linux or Colab notebook with a 16GB-class GPU target",
+  "export_targets": [
+    "glb",
+    "fbx"
+  ],
+  "lane": "3d",
+  "model_name": "TRELLIS",
+  "official_url": "https://github.com/microsoft/TRELLIS",
+  "profile_id": "trellis.secondary",
+  "prompt_guidance": [
+    "Use TRELLIS only when the primary Hunyuan pass cannot land silhouette or topology.",
+    "Keep source references and prompt deltas documented so retries stay comparable.",
+    "Do not expand TRELLIS use into the default lane while the Hunyuan-first policy stands."
+  ],
+  "provenance_notes": [
+    "Record why the Hunyuan pass failed before switching to TRELLIS.",
+    "Capture any reference images or conditioning notes used for the TRELLIS run.",
+    "Keep retry lineage attached to the same pack provenance."
+  ],
+  "review_checklist": [
+    "Retry output clearly improves over the rejected primary pass.",
+    "Topology and naming can be normalized with the same Blender cleanup profile.",
+    "The final payload still lands in the same reviewed publish target."
+  ],
+  "setup_steps": [
+    "Use a Linux or Colab environment because the official setup is Linux-only and expects a 16GB-class GPU.",
+    "Clone the official repository with submodules and run the repo setup path instead of hand-assembling dependencies.",
+    "Favor the image-conditioned path first because the official project states that image-to-3D is more mature than text-to-3D."
+  ],
+  "progression_steps": [
+    "Enter TRELLIS only after naming the Hunyuan failure mode that you are trying to fix.",
+    "Keep the retry focused on one asset and compare it against the same acceptance bar, not a lower one.",
+    "Export the improved result, run the same Blender cleanup, and preserve the retry lineage in provenance."
+  ],
+  "runbook": [
+    "Use only after a specific Hunyuan failure mode is identified.",
+    "Compare TRELLIS output against the same acceptance bar, not a lower one.",
+    "Archive prompt diffs in the pack provenance."
+  ],
+  "runtime_class": "long"
+}

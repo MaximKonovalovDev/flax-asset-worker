@@ -1,0 +1,46 @@
+{
+  "adapter_id": "animationgpt",
+  "asset_kind": "animation",
+  "cleanup_profile": "animation_clip_review_v1",
+  "display_name": "AnimationGPT Pilot",
+  "access_surface": "Linux notebook or local environment layered on top of MotionGPT tooling",
+  "export_targets": [
+    "fbx",
+    "glb"
+  ],
+  "lane": "animation",
+  "model_name": "AnimationGPT",
+  "official_url": "https://github.com/fyyakaxyy/AnimationGPT",
+  "profile_id": "animationgpt.pilot",
+  "prompt_guidance": [
+    "Only target explicit combat gaps that manual sources could not cover.",
+    "Keep prompts short and clip-specific so pilot results are easy to evaluate.",
+    "Focus on baseline timing, contact pose, and readability over variety."
+  ],
+  "provenance_notes": [
+    "Mark the run as pilot-only in provenance.",
+    "Record clip intent, estimated length, seed, and any retargeting notes.",
+    "Capture the exact reason manual animation sources were insufficient."
+  ],
+  "review_checklist": [
+    "Clip solves a concrete combat gap instead of creating a speculative library.",
+    "Timing and pose readability are good enough for first-fight combat proof.",
+    "Animation export remains isolated until reviewed and accepted."
+  ],
+  "setup_steps": [
+    "Treat AnimationGPT as a pilot stack because the public repo is a thin layer over MotionGPT, not a polished asset tool.",
+    "Use the documented Python 3.10 and MotionGPT-based environment before trying to run the demo pipeline.",
+    "Plan for a conversion step from raw motion outputs into a reviewable animation format before Blender cleanup or retargeting."
+  ],
+  "progression_steps": [
+    "Only open this lane after Mixamo or other manual sources leave a specific combat gap.",
+    "Generate one clip intention at a time, convert it, retarget it, and test it in a minimal combat slice immediately.",
+    "If cleanup or retarget cost is too high, stop the pilot and go back to manual animation sourcing."
+  ],
+  "runbook": [
+    "Use only when Mixamo/manual clips leave a clear gameplay gap.",
+    "Review in a minimal combat slice before adding more generated animation work.",
+    "Do not treat pilot results as a finished shared animation baseline without review."
+  ],
+  "runtime_class": "long"
+}
