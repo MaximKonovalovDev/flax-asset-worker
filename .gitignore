@@ -27,6 +27,10 @@ TestResults/
 *.log
 Cache/
 
+# Canary state (artifacts; per-machine, no git)
+state/
+.pytest_cache/
+
 # Python
 __pycache__/
 *.py[cod]
