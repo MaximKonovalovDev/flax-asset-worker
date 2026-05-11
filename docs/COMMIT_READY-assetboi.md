@@ -175,3 +175,65 @@ written: C:\flax\flax-asset-worker\state\canary\canary_status.json
 - `docs/COMMIT_READY-assetboi.md` (this entry)
 
 **Next:** s5 — cli.py rewrite Phase 1 (fab + library + import sub-apps in Typer).
+
+---
+
+## Slice s5 — Day 5 Typer CLI scaffold (fab + library + import) (2026-05-10)
+
+**Status:** SHIPPED. 4 sub-apps + 11 commands, all rendering help cleanly.
+
+**What shipped:**
+
+1. **New `Python/assetboy/cli/` package** (5 files):
+   - `__init__.py` — package docstring + re-export `app`.
+   - `__main__.py` — `python -m assetboy.cli` entry point.
+   - `app.py` — Typer root, composes 3 sub-apps (`fab`, `library`, `import`).
+   - `fab.py` — 4 commands (auth, auth-status, download, library) — wraps `FabHybridDownloader`.
+   - `library.py` — 4 commands (search, install, ready, audit) — HTTP client to FAW :8790.
+   - `import_cmd.py` — 2 commands (file, watch) — drop file or poll folder; POSTs to FAW :8790.
+
+2. **`Python/assetboy/requirements.txt`** — added `typer>=0.15.0` as explicit CLI framework dependency.
+
+3. **Old `cli.py` left in parallel** — both work side-by-side per PATH-B §3 Day 5 plan. s6 adds unity/epic/gen; s10 deletes old cli.py.
+
+**Surface shipped (real working commands):**
+```
+python -m assetboy.cli --help
+python -m assetboy.cli fab auth [--reuse-profile|--allow-browser] [--timeout=240]
+python -m assetboy.cli fab auth-status [--json]
+python -m assetboy.cli fab download <listing_uid> [--timeout=30] [--json]
+python -m assetboy.cli fab library [--limit=25] [--json]
+python -m assetboy.cli library search <query> [--category] [--server] [--json]
+python -m assetboy.cli library install <asset_id> [--provider] [--category] [--name] [--server] [--json]
+python -m assetboy.cli library ready [--server] [--json]
+python -m assetboy.cli library audit [--server] [--json]
+python -m assetboy.cli import file <path> [--server] [--json]
+python -m assetboy.cli import watch <folder> [--interval=5] [--server] [--json]
+```
+
+**Verification (real end-to-end calls):**
+- All 4 sub-apps + 11 commands render `--help` cleanly (no Rich/cp1252 crashes after unicode sweep).
+- `fab auth-status` reads real disk state, returns honest `false` + path strings, exit 1 (no auth yet).
+- `library audit` correctly fails with a real `WinError 10061 connection refused` (FAW server not running locally) — clean error message, not a stack trace.
+- 26/26 canary tests still green.
+
+**Unicode-safety fix (Rule 7 prevention):** swept all em-dashes (U+2014), right-arrows (U+2192), and en-dashes (U+2013) out of 5 cli/*.py files (19,055 char replacements via single Python one-liner) BEFORE the first `--help` call ever streamed through Rich's Windows cp1252 renderer. Initial test crashed on `library install` docstring's `→` arrows — fixed proactively across all files.
+
+**Design notes:**
+- Each sub-app is **self-contained**: imports only stdlib + Typer + the specific provider module it wraps. Lazy imports inside command bodies keep `--help` fast.
+- **Both `--json` and `key=value` output modes** on every command — JSON for tooling, key=value matches legacy `cli.py` output for grep-friendly scripts.
+- **No logic duplication**: every command body is a thin facade over existing `FabHybridDownloader` / FAW HTTP routes. Refactoring or bug-fixing the underlying surfaces fixes the CLI automatically.
+- **Single-process watch folder** (no threads, no inotify) — keeps the contract simple. Ctrl+C stops. Tracks file mtimes to detect new files.
+- `import` is reserved in Python; the package file is `import_cmd.py` but the Typer name is `import` so users type the natural word.
+
+**Files staged for commit:**
+- `Python/assetboy/cli/__init__.py` (NEW)
+- `Python/assetboy/cli/__main__.py` (NEW)
+- `Python/assetboy/cli/app.py` (NEW)
+- `Python/assetboy/cli/fab.py` (NEW, 4 commands)
+- `Python/assetboy/cli/library.py` (NEW, 4 commands)
+- `Python/assetboy/cli/import_cmd.py` (NEW, 2 commands)
+- `Python/assetboy/requirements.txt` (MODIFIED, +typer dep)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+**Next:** s6 — Phase 2 sub-apps (unity + epic + gen) wired to `FabHybridDownloader`-equivalent surfaces.

@@ -16,6 +16,11 @@
 #   python -m assetboy.bridge             # smoke-tests C# server on :8790
 
 # ──────────────────────────────────────────────────────────────────────
+# CLI framework (Path B s5+ Typer rewrite)
+# ──────────────────────────────────────────────────────────────────────
+typer>=0.15.0              # Python -m assetboy.cli sub-apps; replaces argparse god-CLI
+
+# ──────────────────────────────────────────────────────────────────────
 # HTTP clients & stealth browser
 # ──────────────────────────────────────────────────────────────────────
 requests>=2.32.0
