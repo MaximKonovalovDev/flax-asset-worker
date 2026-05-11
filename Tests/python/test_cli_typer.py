@@ -331,6 +331,66 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["objects_skipped_non_pd"], 2)
         self.assertTrue(data["ok"])
 
+    # ----------------------------------------------------------------- #
+    # gen wikimedia fetch (v1.10.s27)
+    # ----------------------------------------------------------------- #
+
+    def test_wikimedia_fetch_help_renders(self) -> None:
+        result = self.runner.invoke(
+            self.app, ["gen", "wikimedia", "fetch", "--help"]
+        )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Wikimedia", result.stdout)
+        self.assertIn("CC", result.stdout)
+
+    def test_wikimedia_fetch_dry_run_no_matches_exits_zero(self) -> None:
+        from unittest.mock import patch
+        from assetboy.execution.wikimedia_runner import WikimediaResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = WikimediaResult(
+                pack_id="T", query="zzz", output_dir=Path(tmp),
+                files_matched=0, ok=True, error="no_matches",
+            )
+            with patch(
+                "assetboy.execution.wikimedia_runner.run_wikimedia_batch",
+                return_value=fake,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "wikimedia", "fetch", "--query", "zzz", "--dry-run"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("gen_wikimedia_matched=0", result.stdout)
+        self.assertIn("no_matches", result.stdout)
+
+    def test_wikimedia_fetch_json_output_shape(self) -> None:
+        from unittest.mock import patch
+        from assetboy.execution.wikimedia_runner import WikimediaResult
+        import tempfile, json as _json
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = WikimediaResult(
+                pack_id="P", query="q", output_dir=Path(tmp),
+                files_matched=10, files_accepted_license=4,
+                files_downloaded=4, files_skipped_restricted=6, ok=True,
+            )
+            with patch(
+                "assetboy.execution.wikimedia_runner.run_wikimedia_batch",
+                return_value=fake,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "wikimedia", "fetch", "--query", "q", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["pack_id"], "P")
+        self.assertEqual(data["files_downloaded"], 4)
+        self.assertEqual(data["files_skipped_restricted"], 6)
+        self.assertTrue(data["ok"])
+
     def test_comfy_submit_workflow_help_renders(self) -> None:
         result = self.runner.invoke(
             self.app, ["gen", "comfyui", "submit-workflow", "--help"]

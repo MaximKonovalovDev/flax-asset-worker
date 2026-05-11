@@ -46,10 +46,17 @@ met_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
 )
+wikimedia_app = typer.Typer(
+    name="wikimedia",
+    help="Wikimedia Commons CC-licensed media fetcher.",
+    add_completion=False,
+    no_args_is_help=True,
+)
 
 app.add_typer(comfy_app, name="comfyui")
 app.add_typer(sd_app, name="sd")
 app.add_typer(met_app, name="met-museum")
+app.add_typer(wikimedia_app, name="wikimedia")
 
 
 # --------------------------------------------------------------------------- #
@@ -816,6 +823,109 @@ def met_fetch_cmd(
             print(f"gen_met_museum_manifest={result.manifest_path}")
         if result.error:
             print(f"gen_met_museum_note={result.error}")
+
+    if not result.ok:
+        raise typer.Exit(code=1)
+
+
+# --------------------------------------------------------------------------- #
+# gen wikimedia fetch  (v1.10.s27)
+# --------------------------------------------------------------------------- #
+
+@wikimedia_app.command("fetch")
+def wikimedia_fetch_cmd(
+    query: Annotated[
+        str, typer.Option("--query", "-q", help="Free-text search term."),
+    ],
+    count: Annotated[
+        int, typer.Option("--count", "-n", help="Max CC-licensed files to download."),
+    ] = 6,
+    pack_id: Annotated[
+        str,
+        typer.Option("--pack-id", help="Pack id for output dir (default: derived from query)."),
+    ] = "",
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            help="Override output dir (default: <manual_drop>/wikimedia/<pack_id>/).",
+        ),
+    ] = Path(""),
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Plan only; skip binary image downloads."),
+    ] = False,
+    json_out: Annotated[
+        bool, typer.Option("--json", help="Emit JSON output."),
+    ] = False,
+) -> None:
+    """Fetch CC-licensed images from Wikimedia Commons (Path B v1.10.s27).
+
+    Wikimedia Commons hosts ~100M media files. This command searches the
+    File: namespace, filters to CC-BY / CC-BY-SA / CC0 / Public Domain only
+    (restrictive licenses are skipped), and downloads up to --count images
+    along with a JSON manifest (titles, license, artist HTML, dimensions).
+
+    Examples:
+      assetboy gen wikimedia fetch -q "roman fresco" -n 4
+      assetboy gen wikimedia fetch -q "medieval stone wall texture" -n 8
+      assetboy gen wikimedia fetch -q "japanese ukiyo-e" --dry-run
+
+    Output: <manual_drop>/wikimedia/<pack_id>/ contains image files plus
+    wikimedia_manifest.json with per-file license + attribution data.
+    """
+    from assetboy.execution.wikimedia_runner import run_wikimedia_batch
+
+    out_dir_arg: Path | None = output_dir if str(output_dir) else None
+    pack_id_arg: str | None = pack_id if pack_id else None
+
+    try:
+        result = run_wikimedia_batch(
+            query=query,
+            pack_id=pack_id_arg,
+            count=count,
+            output_dir=out_dir_arg,
+            dry_run=dry_run,
+        )
+    except Exception as exc:
+        msg = f"wikimedia_runner_crashed: {exc}"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_wikimedia_error={msg}")
+        raise typer.Exit(code=1)
+
+    summary = {
+        "ok": result.ok,
+        "pack_id": result.pack_id,
+        "query": result.query,
+        "output_dir": str(result.output_dir),
+        "files_matched": result.files_matched,
+        "files_accepted_license": result.files_accepted_license,
+        "files_downloaded": result.files_downloaded,
+        "files_skipped_restricted": result.files_skipped_restricted,
+        "files_failed": result.files_failed,
+        "downloaded_paths": [str(p) for p in result.downloaded_paths],
+        "manifest_path": str(result.manifest_path) if result.manifest_path else None,
+        "dry_run": result.dry_run,
+        "error": result.error,
+    }
+
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"gen_wikimedia_pack_id={result.pack_id}")
+        print(f"gen_wikimedia_query={result.query!r}")
+        print(f"gen_wikimedia_matched={result.files_matched}")
+        print(f"gen_wikimedia_downloaded={result.files_downloaded}")
+        print(f"gen_wikimedia_skipped_restricted={result.files_skipped_restricted}")
+        print(f"gen_wikimedia_failed={result.files_failed}")
+        print(f"gen_wikimedia_output_dir={result.output_dir}")
+        if result.manifest_path:
+            print(f"gen_wikimedia_manifest={result.manifest_path}")
+        if result.error:
+            print(f"gen_wikimedia_note={result.error}")
 
     if not result.ok:
         raise typer.Exit(code=1)
