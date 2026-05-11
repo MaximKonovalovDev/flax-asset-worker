@@ -1,6 +1,6 @@
 # HEARTBEAT — assetboi (operator hibernation read-back)
 
-> **Last update:** 2026-05-11 (mid-turn, **109 commits + 62 tags shipped this turn**, origin verified)
+> **Last update:** 2026-05-11 (mid-turn, **116 commits + 64 tags shipped this turn**, origin verified)
 > **Repo:** `flax-asset-worker` (this repo; assetboi commits freely here)
 > **Loop status:** **NEVER-STOP ACTIVE** per BOSS Rule 3
 
@@ -50,7 +50,21 @@ Plus v1.11.10+ batch additions:
   - v1.11.11 — docs/RELEASE_NOTES_v1.10_v1.11.md (canonical R1A doc)
   - v1.11.12 — HTTP POST /api/v1/providers/list-gen (C# clients enumerate R1A)
   - v1.11.13 — scripts/setup-r1a-keys.ps1 (interactive PowerShell key setup)
-  - v1.11.14 — recipe genre/theme/style/tags metadata fields (v1.12 discovery prep) FAW now has fetcher commands for:
+  - v1.11.14 — recipe genre/theme/style/tags metadata fields
+  - v1.11.15 — pack list-recipes --filter <field>:<value> consumes metadata
+  - v1.11.16 — docs/_INDEX.md master navigation hub
+  - v1.11.17 — opt-in live-API smoke tests (FAW_RUN_LIVE_TESTS=1)
+
+All 5 shipped recipes annotated with discovery metadata.
+All 5 no-key R1A providers covered by opt-in live smoke tests.
+
+Reading order for next AI session:
+  1. THIS DOC (you're here, 3min)
+  2. docs/_INDEX.md (2min navigation hub)
+  3. docs/RELEASE_NOTES_v1.10_v1.11.md (8min R1A wave canonical ref)
+  4. docs/RECIPE_SCHEMA.md (5min recipe authoring ref)
+  5. docs/SETUP.md §5.5 (2min env-key setup)
+Total ~20min to be productive on the R1A wave. FAW now has fetcher commands for:
 
 ```
 NO-KEY (always works):
