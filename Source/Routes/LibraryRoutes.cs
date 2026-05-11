@@ -1,6 +1,9 @@
+using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Text;
 using System.Threading.Tasks;
 using FlaxEngine;
 using Newtonsoft.Json;
@@ -158,6 +161,51 @@ namespace FAW.Routes
         private static void SaveLibrary(List<JObject> library)
         {
             File.WriteAllText(LibraryFile, JsonConvert.SerializeObject(library, Formatting.Indented));
+        }
+
+        /// <summary>
+        /// v1.12.s76 — R1A operator readiness dashboard via subprocess.
+        /// </summary>
+        public static async Task<JObject> HandleR1aStatusAsync()
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "python",
+                    Arguments = "-m assetboy.cli library r1a-status --json",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8,
+                };
+                var proc = new Process { StartInfo = psi };
+                proc.Start();
+                var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+                var stderrTask = proc.StandardError.ReadToEndAsync();
+                if (!proc.WaitForExit(15000))
+                {
+                    try { proc.Kill(); } catch { }
+                    return Error("timeout: library r1a-status took > 15s");
+                }
+                var stdout = await stdoutTask;
+                var stderr = await stderrTask;
+                if (proc.ExitCode != 0)
+                {
+                    return Error($"r1a_status_failed: exit={proc.ExitCode} stderr={stderr}");
+                }
+                JObject parsed;
+                try { parsed = JObject.Parse(stdout); }
+                catch (Exception jx) { return Error($"r1a_status_unparseable: {jx.Message}"); }
+                parsed["success"] = true;
+                return parsed;
+            }
+            catch (Exception exc)
+            {
+                return Error($"r1a_status_crashed: {exc.Message}");
+            }
         }
 
         private static JObject Error(string msg) => new JObject { ["success"] = false, ["error"] = msg };

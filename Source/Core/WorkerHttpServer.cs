@@ -125,6 +125,11 @@ namespace FAW.Core
                 {
                     result = LibraryRoutes.HandleReady();
                 }
+                else if (path == "/api/v1/library/r1a-status" && method == "POST")
+                {
+                    // v1.12.s76 — R1A operator readiness dashboard.
+                    result = await LibraryRoutes.HandleR1aStatusAsync();
+                }
                 else if (path.StartsWith("/api/v1/library/asset/") && method == "GET")
                 {
                     // v1.6.s2: single-asset metadata lookup
