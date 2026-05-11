@@ -199,6 +199,47 @@ class PexelsPhotoRunnerTests(unittest.TestCase):
         self.assertIn("HTTP 401", result.error or "")
 
 
+class PexelsRetryIntegrationTests(unittest.TestCase):
+    """v1.12.s67: verify _authed_get_json now retries 429s."""
+
+    def setUp(self) -> None:
+        from assetboy.execution import pexels_runner
+        self.mod = pexels_runner
+
+    def test_search_retries_on_429_then_succeeds(self) -> None:
+        """Pexels /search responding 429 once -> retry -> 200 returns parsed JSON."""
+        call_count = {"n": 0}
+
+        def fake_urlopen(req, *a, **kw):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise urllib.error.HTTPError(
+                    url="x", code=429, msg="Too Many",
+                    hdrs=None, fp=None,  # type: ignore[arg-type]
+                )
+            return _json_response({"photos": [{"id": 1}]})
+
+        with patch.object(self.mod.urllib.request, "urlopen", side_effect=fake_urlopen):
+            with patch("assetboy.execution._http_retry.time.sleep"):
+                photos = self.mod.search_pexels_photos("x", api_key="k")
+        self.assertEqual(call_count["n"], 2)  # 1 initial 429 + 1 retry success
+        self.assertEqual(len(photos), 1)
+
+    def test_search_retries_exhaust_re_raises(self) -> None:
+        """All retries return 429 -> final HTTPError propagates."""
+        def always_429(*a, **kw):
+            raise urllib.error.HTTPError(
+                url="x", code=429, msg="Too Many",
+                hdrs=None, fp=None,  # type: ignore[arg-type]
+            )
+
+        with patch.object(self.mod.urllib.request, "urlopen", side_effect=always_429):
+            with patch("assetboy.execution._http_retry.time.sleep"):
+                with self.assertRaises(urllib.error.HTTPError) as ctx:
+                    self.mod.search_pexels_photos("x", api_key="k")
+        self.assertEqual(ctx.exception.code, 429)
+
+
 class PexelsVideoRunnerTests(unittest.TestCase):
     def setUp(self) -> None:
         from assetboy.execution import pexels_runner
