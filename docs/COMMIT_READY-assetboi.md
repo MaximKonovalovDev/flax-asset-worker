@@ -1499,3 +1499,72 @@ Net gain: +3 tests, +110 lines production code (the s11.1 driver), -10 lines stu
 5. pack_pipeline picks them up like any other `source_dir`.
 
 **Next:** s11.1 for Stable Audio Open Small + local sd.cpp, OR new sandbox recipe (1-pack quick-iter), OR fold s2.6 cleanup into a smaller v1.4 polish slice. Continue the loop.
+
+---
+
+## Slice v1.3.3.s11.1-local-image — sd.cpp / local_image driver (2026-05-11)
+
+**Status:** SHIPPED. **220 passed, 1 skipped, 0 failed** (was 217).
+
+**What shipped:**
+
+### 1. `_drive_local_image` in `acquisition_router.py` (~90 lines)
+
+Wires `local_image_runner.run_local_image_batch` (sd.cpp CUDA wrapper, RTX 3050 6GB target) into the generator lane. Same recipe contract as the ComfyUI driver — `prompts: [...]` list with per-prompt overrides.
+
+**Recipe contract:**
+```yaml
+- id: SHARED_GEN_TEX_UI_ICONS
+  acquisition_method: generator
+  provider: local_image     # or sd.cpp (alias)
+  prompts:
+    - id: ui_icon_sword
+      text: "minimalist sword icon, white on transparent"
+      count: 6                 # optional; default 6
+      width: 512               # optional; default 512 (SD 1.5 native)
+      height: 512
+      steps: 20
+      cfg: 7.0
+      model_path: "..."        # optional override
+```
+
+**Driver behavior:** mirrors `_drive_comfyui` (validates prompts, iterates per-prompt, aggregates results, ok=True if ≥1 batch succeeded). Defaults tuned for SD 1.5 on 6GB VRAM (512×512, 20 steps).
+
+### 2. Provider aliasing: `sd.cpp` routes to same driver
+
+The dispatch tuple `("local_image", "sd.cpp")` both call `_drive_local_image`. Recipe authors can use either name; same behavior.
+
+### 3. `stable_audio_open_small` provider — explicit TBD error
+
+Replaced the generic "TBD_in_s11.1" string with a clear "stable_audio_open_small_driver_TBD (recipes can use this provider once sd-runner-style driver lands in v1.4)" — operators get an honest "this is queued, not silently broken" message.
+
+### 4. Three new tests in `test_acquisition_router.py`
+
+- `test_generator_local_image_with_prompts_calls_runner` — mocks `run_local_image_batch`; verifies count + width passthrough.
+- `test_generator_sd_cpp_alias_routes_to_local_image` — `provider: sd.cpp` invokes the same runner as `provider: local_image`.
+- `test_generator_stable_audio_still_TBD` — verifies the explicit TBD message.
+
+### Verification
+
+```
+=== full test suite ===
+220 passed, 1 skipped in 4.09s
+(was 217 at v1.3.2)
+```
+
+### Files staged for commit
+
+- `Python/assetboy/workflows/acquisition_router.py` (MODIFIED, +95 lines `_drive_local_image` + 5-line dispatch tweak)
+- `Tests/python/test_acquisition_router.py` (MODIFIED, +3 tests)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+### s11.1 progress (3 of 4 generator providers wired)
+
+| Provider | Driver | Status |
+|---|---|---|
+| `comfyui` | `_drive_comfyui` | ✅ v1.3.2 |
+| `local_image` / `sd.cpp` | `_drive_local_image` | ✅ v1.3.3 (this) |
+| `stable_audio_open_small` | TBD | ⏳ v1.4 |
+| Other (midjourney etc.) | n/a | clean error |
+
+**Next:** stable_audio_open_small driver (needs an audio-runner module; doesn't exist yet — would be a new ~150 LOC `execution/stable_audio_runner.py`), OR new sandbox recipe variants for quick iteration, OR v1.4 tag + HEARTBEAT refresh. Continue.

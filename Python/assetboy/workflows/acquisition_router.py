@@ -477,10 +477,14 @@ def _acquire_generator(
     if provider == "comfyui":
         return _drive_comfyui(pack, pack_id=pack_id, out_dir=out_dir)
 
-    if provider in ("stable_audio_open_small", "local_image", "sd.cpp"):
+    if provider in ("local_image", "sd.cpp"):
+        return _drive_local_image(pack, pack_id=pack_id, out_dir=out_dir)
+
+    if provider == "stable_audio_open_small":
         return AcquisitionResult(
             ok=False, method="generator", provider=provider,
-            error=f"generator_provider_TBD_in_s11.1: {provider}",
+            error="stable_audio_open_small_driver_TBD (recipes can use this "
+                  "provider once sd-runner-style driver lands in v1.4)",
         )
 
     return AcquisitionResult(
@@ -601,6 +605,96 @@ def _drive_comfyui(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> Acqu
         source_dir=out_dir,
         notes=(
             f"comfyui generated {len(results)} output(s) "
+            f"from {len(prompts)} prompt(s) -> {out_dir}"
+            + (f"; warnings: {len(errors)}" if errors else "")
+        ),
+    )
+
+
+def _drive_local_image(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
+    """Drive local_image_runner.run_local_image_batch (sd.cpp CUDA wrapper).
+
+    Path B s11.1 (2026-05-11): wires local Stable Diffusion via sd.cpp.
+    Target hardware: RTX 3050 6GB (SD 1.5 fine-tunes; SDXL via GGUF q4).
+
+    Recipe shape:
+      provider: local_image     (or sd.cpp -- both alias to this driver)
+      acquisition_method: generator
+      prompts:
+        - id: <preset_id>
+          text: "your text-to-image prompt"
+          count: 6               # optional; default 6
+          width: 512             # optional; default 512 (SD 1.5 native)
+          height: 512
+          steps: 20
+          cfg: 7.0
+          model_path: "..."      # optional override
+    """
+    try:
+        from assetboy.execution.local_image_runner import run_local_image_batch
+    except ImportError as exc:
+        return AcquisitionResult(
+            ok=False, method="generator", provider="local_image",
+            error=f"import_failed: {exc}",
+        )
+
+    prompts = pack.get("prompts") or []
+    if not prompts:
+        return AcquisitionResult(
+            ok=False, method="generator", provider="local_image",
+            error="no_prompts_in_pack",
+        )
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    results = []
+    errors = []
+    for prompt_entry in prompts:
+        if isinstance(prompt_entry, str):
+            prompt_text = prompt_entry
+            count, width, height, steps, cfg = 6, 512, 512, 20, 7.0
+            model_path = None
+        elif isinstance(prompt_entry, dict):
+            prompt_text = str(prompt_entry.get("text") or prompt_entry.get("prompt") or "")
+            count = int(prompt_entry.get("count", 6))
+            width = int(prompt_entry.get("width", 512))
+            height = int(prompt_entry.get("height", 512))
+            steps = int(prompt_entry.get("steps", 20))
+            cfg = float(prompt_entry.get("cfg", 7.0))
+            model_path = prompt_entry.get("model_path")
+        else:
+            continue
+        if not prompt_text:
+            errors.append("empty_prompt_text")
+            continue
+
+        try:
+            batch_result = run_local_image_batch(
+                pack_id=pack_id,
+                prompt=prompt_text,
+                count=count,
+                width=width,
+                height=height,
+                steps=steps,
+                cfg=cfg,
+                model_path=model_path,
+                output_dir=out_dir,
+            )
+            results.append(batch_result)
+        except Exception as exc:
+            errors.append(f"{prompt_text[:40]}: {exc}")
+
+    if not results:
+        return AcquisitionResult(
+            ok=False, method="generator", provider="local_image",
+            error=f"all_prompts_failed: {'; '.join(errors)[:200]}",
+        )
+
+    return AcquisitionResult(
+        ok=True, method="generator", provider="local_image",
+        source_dir=out_dir,
+        notes=(
+            f"local_image generated {len(results)} batch(es) "
             f"from {len(prompts)} prompt(s) -> {out_dir}"
             + (f"; warnings: {len(errors)}" if errors else "")
         ),

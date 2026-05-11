@@ -336,6 +336,82 @@ class AcquisitionRouterTests(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertIn("no_prompts_in_pack", result.error)
 
+    def test_generator_local_image_with_prompts_calls_runner(self) -> None:
+        """When local_image provider used, run_local_image_batch is called."""
+        fake_batch = type("FakeBatch", (), {"outputs": ["out.png"], "error": None})()
+        with TemporaryDirectory() as tmp_dir:
+            with patch.dict(
+                "os.environ", {"ASSETBOY_FLAX_REPO_ROOT": tmp_dir}, clear=False
+            ):
+                with patch(
+                    "assetboy.execution.local_image_runner.run_local_image_batch",
+                    return_value=fake_batch,
+                ) as mock_run:
+                    result = self.acquire_source_dir(
+                        {
+                            "id": "TP_GEN_SD",
+                            "acquisition_method": "generator",
+                            "provider": "local_image",
+                            "prompts": [
+                                {"id": "p1", "text": "stone wall", "count": 3, "width": 512},
+                            ],
+                        },
+                        {"recipe": {"game": "test"}},
+                        dry_run=False,
+                    )
+
+        self.assertTrue(result.ok, f"expected ok, got: {result.error}")
+        self.assertEqual(mock_run.call_count, 1)
+        kw = mock_run.call_args.kwargs
+        self.assertEqual(kw["prompt"], "stone wall")
+        self.assertEqual(kw["count"], 3)
+        self.assertEqual(kw["width"], 512)
+
+    def test_generator_sd_cpp_alias_routes_to_local_image(self) -> None:
+        """provider: sd.cpp should route to the same driver as provider: local_image."""
+        fake_batch = type("FakeBatch", (), {"outputs": ["out.png"]})()
+        with TemporaryDirectory() as tmp_dir:
+            with patch.dict(
+                "os.environ", {"ASSETBOY_FLAX_REPO_ROOT": tmp_dir}, clear=False
+            ):
+                with patch(
+                    "assetboy.execution.local_image_runner.run_local_image_batch",
+                    return_value=fake_batch,
+                ) as mock_run:
+                    result = self.acquire_source_dir(
+                        {
+                            "id": "TP_GEN_SDCPP",
+                            "acquisition_method": "generator",
+                            "provider": "sd.cpp",
+                            "prompts": ["test prompt"],
+                        },
+                        {"recipe": {"game": "test"}},
+                        dry_run=False,
+                    )
+
+        self.assertTrue(result.ok)
+        self.assertEqual(mock_run.call_count, 1)
+
+    def test_generator_stable_audio_still_TBD(self) -> None:
+        """stable_audio_open_small driver is queued for v1.4; returns clean error."""
+        with TemporaryDirectory() as tmp_dir:
+            with patch.dict(
+                "os.environ", {"ASSETBOY_FLAX_REPO_ROOT": tmp_dir}, clear=False
+            ):
+                result = self.acquire_source_dir(
+                    {
+                        "id": "TP_GEN_SA",
+                        "acquisition_method": "generator",
+                        "provider": "stable_audio_open_small",
+                        "prompts": ["forest dawn ambience"],
+                    },
+                    {"recipe": {"game": "test"}},
+                    dry_run=False,
+                )
+
+        self.assertFalse(result.ok)
+        self.assertIn("stable_audio_open_small_driver_TBD", result.error)
+
     def test_generator_comfyui_string_prompts_also_work(self) -> None:
         """Recipes can supply prompts as plain strings (not dicts)."""
         with TemporaryDirectory() as tmp_dir:
