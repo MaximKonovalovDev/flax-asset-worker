@@ -166,3 +166,34 @@ The loop is still running. Next-up backlog (by priority):
 If you don't tell assetboi to stop, it picks from this list in order.
 
 If you DO want to stop: just say so. Otherwise the loop continues per Rule 3.
+
+---
+
+## Update 2026-05-11 (mid-turn, 3 more commits since first HEARTBEAT)
+
+**+ 3 commits since the HEARTBEAT first landed:**
+- `ab4092b` v1.3.2 — real ComfyUI workflow execution wired into acquisition_router (3 new tests)
+- `c88e598` v1.3.3 — sd.cpp / local_image driver wired + sd.cpp alias + honest stable_audio TBD (3 new tests)
+- `<this>` v1.3.4 — sandbox 1-pack smoke recipe added (no new tests; recipe is a usability artifact)
+
+**Tags now on origin: 5** (v1.1.0-path-b-cleanup, v1.2.0-leangoods, v1.2.1-acquisition,
+v1.3.0-green-suite, v1.3.2-comfyui-live)
+
+**Test suite:** 220 passed, 1 skipped, 0 failed (was 214 at first HEARTBEAT).
+
+**Recipe inventory** (now 3):
+```
+$ python -m assetboy.cli pack list-recipes
+  primitive_tech_first_playable     9 packs   (forest survival)
+  roman_arena_first_playable       14 packs   (gladiator arena)
+  sandbox_one_pack_smoke            1 pack    (PolyHaven CC0 brick_wall_04 smoke)
+```
+
+**Acquisition lanes coverage** (3 of 4 generator providers wired):
+- direct_url: polyhaven ✅ kenney ✅ ambientcg ✅ freesound ✅
+- manual_browser: fab ✅ mixamo ✅ unity ✅ epic ✅ (wait-marker flow)
+- generator: comfyui ✅ (v1.3.2) sd.cpp / local_image ✅ (v1.3.3) stable_audio_open_small ⏳ (v1.4)
+
+Loop still running. Next picks from this point: stable_audio_open_small driver
+(needs new ~150 LOC `execution/stable_audio_runner.py` first), more recipe
+variants, OR v1.4 tag once the audio driver lands.

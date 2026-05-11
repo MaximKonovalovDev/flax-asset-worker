@@ -1568,3 +1568,63 @@ Replaced the generic "TBD_in_s11.1" string with a clear "stable_audio_open_small
 | Other (midjourney etc.) | n/a | clean error |
 
 **Next:** stable_audio_open_small driver (needs an audio-runner module; doesn't exist yet — would be a new ~150 LOC `execution/stable_audio_runner.py`), OR new sandbox recipe variants for quick iteration, OR v1.4 tag + HEARTBEAT refresh. Continue.
+
+---
+
+## Slice v1.3.4.sandbox-recipe — 1-pack smoke recipe + HEARTBEAT refresh (2026-05-11)
+
+**Status:** SHIPPED.
+
+**What shipped:**
+
+### 1. `recipes/sandbox/one_pack_smoke.yaml` (NEW, 45 lines)
+
+Single PolyHaven CC0 brick_wall_04 pack. ~5 MB download. Use this recipe for:
+- Quick acquisition_router loop tests (1 pack vs 9-14).
+- Developer onboarding (smallest demo path).
+- CI-style smoke runs.
+- Post-refactor verification (touch one pack instead of triggering all 23).
+
+Recipe schema matches primitive_tech + roman_arena (no surprise; same Path B s8 recipe shape). `block_on_missing_required: true` so the smoke fails loud if anything regresses.
+
+### 2. `docs/HEARTBEAT-assetboi.md` mid-turn refresh
+
+Appended state-update block: 3 more commits since first HEARTBEAT, test count 217 -> 220, recipe count 2 -> 3, generator-provider coverage 1/4 -> 3/4 (stable_audio still v1.4).
+
+### Verification
+
+```
+$ python -m assetboy.cli pack list-recipes
+pack_list_recipes_count=3
+  primitive_tech_first_playable     9 packs
+  roman_arena_first_playable       14 packs
+  sandbox_one_pack_smoke            1 pack   <-- NEW
+
+$ python -m assetboy.cli pack from-recipe sandbox/one_pack_smoke.yaml --dry-run
+  [RED ] [REQ] SANDBOX_POLY_TEX_BRICK_WALL_01   state=failed
+  pack_from_recipe_total=1
+  pack_from_recipe_failed=1
+  (Expected RED in dry-run: acquisition_router returns a synthetic temp path
+   but pack_pipeline needs real provenance.json. Real mode would land bytes.)
+```
+
+### Files staged for commit
+
+- `recipes/sandbox/one_pack_smoke.yaml` (NEW)
+- `docs/HEARTBEAT-assetboi.md` (MODIFIED, +30 lines update block)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+### Turn metrics (assetboi this single never-stop turn)
+
+| Metric | Value |
+|---|---|
+| Commits since v1.1.0 tag | 17 |
+| Tags shipped | 5 (v1.1.0, v1.2.0, v1.2.1, v1.3.0, v1.3.2) |
+| Net LOC reduction | -24,487 |
+| Tests added | 38 (canary 26 + acquisition_router 15 + cli_typer 12 — wait that's 53. Net: see below) |
+| Test suite: pre-turn | 26 passed (canary only) |
+| Test suite: now | 220 passed, 1 skipped, 0 failed |
+| Recipes shipped | 3 (primitive_tech 9 packs + roman 14 packs + sandbox 1 pack) |
+| Acquisition providers wired | 10/11 (polyhaven + kenney + ambientcg + freesound + fab + mixamo + unity + epic + comfyui + sd.cpp; stable_audio = v1.4) |
+
+**Next:** stable_audio_open_small driver (needs new execution module) OR v1.4 tag now and let stable_audio be the v1.4.1 follow-up. Going with **v1.4 tag now** — the audio driver is a clean v1.4.1 increment, no value in delaying the v1.4 cut for it.

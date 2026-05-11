@@ -1,0 +1,61 @@
+# Sandbox 1-pack smoke recipe — for quick acquisition_router loop tests.
+# ============================================================================
+# Path B v1.3.4 (2026-05-11). Single PolyHaven CC0 texture pack, no auth,
+# fastest path through the pipeline. Use this to verify:
+#
+#   - python -m assetboy.cli pack list-recipes
+#       (should show 3 recipes now: primitive_tech, roman_arena, sandbox)
+#
+#   - python -m assetboy.cli pack from-recipe sandbox/one_pack_smoke.yaml --dry-run
+#       (should print OK / WAIT / RED honestly without network)
+#
+#   - python -m assetboy.cli pack from-recipe sandbox/one_pack_smoke.yaml
+#       (real network: hits PolyHaven REST + writes job spec + lands in inbox/)
+#
+# Use for CI-style smoke verification, developer onboarding, and after any
+# acquisition_router refactor (poke the router with one pack instead of 9-14).
+# ============================================================================
+
+recipe:
+  id: sandbox_one_pack_smoke
+  schema_version: "2026-05-10.recipe.v1"
+  game: sandbox
+  description: |
+    1-pack PolyHaven smoke test (CC0, no auth, ~5MB download).
+    Use for fast iteration on acquisition_router / pack_pipeline.
+  output_folder: "Content/Sandbox/OnePackSmoke"
+
+packs:
+
+  - id: SANDBOX_POLY_TEX_BRICK_WALL_01
+    category: texture
+    asset_kind: surface_pbr
+    provider: polyhaven
+    acquisition_method: direct_url
+    license:
+      kind: cc0
+      commercial_ok: true
+      attribution_required: false
+    assets:
+      - asset_id: brick_wall_04           # tiny, fast, CC0
+    cleanup:
+      mode: skip
+    flax_import:
+      target_subfolder: "Sandbox/Materials"
+      resolution_default: 2048
+    gate:
+      required: true
+      reason: "sole pack in sandbox; failure = pipeline broken"
+
+gates:
+  required_pack_ids:
+    - SANDBOX_POLY_TEX_BRICK_WALL_01
+  optional_pack_ids: []
+  block_on_missing_required: true
+
+vfx:
+  particles_needed: []
+  notes: "No VFX in sandbox smoke."
+
+scene_setup:
+  notes: "No scene; just verifying asset acquisition + import pipeline."
