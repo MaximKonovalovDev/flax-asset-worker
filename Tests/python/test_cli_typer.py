@@ -1087,6 +1087,69 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("crashed", wm["error"])
 
     # ----------------------------------------------------------------- #
+    # pack manifest-stats (v1.12.s72)
+    # ----------------------------------------------------------------- #
+
+    def test_pack_manifest_stats_help_renders(self) -> None:
+        result = self.runner.invoke(self.app, ["pack", "manifest-stats", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("manifest", result.stdout.lower())
+        self.assertIn("R1A", result.stdout)
+
+    def test_pack_manifest_stats_aggregates_from_synthetic_manifests(self) -> None:
+        """Write 2 synthetic manifests to a tempdir; verify aggregation."""
+        import tempfile, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            # Synthetic Met Museum manifest.
+            (tmp_p / "met_museum").mkdir()
+            (tmp_p / "met_museum" / "met_museum_manifest.json").write_text(
+                _json.dumps({
+                    "source": "met_museum",
+                    "objects_downloaded": 3,
+                    "objects_skipped_non_pd": 2,
+                    "objects_failed": 0,
+                    "entries": [
+                        {"bytes": 1000}, {"bytes": 2000}, {"bytes": 3000},
+                    ],
+                }),
+                encoding="utf-8",
+            )
+            # Synthetic Wikimedia manifest in deeper subdir.
+            (tmp_p / "wikimedia" / "pack_x").mkdir(parents=True)
+            (tmp_p / "wikimedia" / "pack_x" / "wikimedia_manifest.json").write_text(
+                _json.dumps({
+                    "source": "wikimedia_commons",
+                    "files_downloaded": 5,
+                    "files_skipped_restricted": 7,
+                    "files_failed": 1,
+                    "entries": [{"bytes": 500}, {"bytes": 1500}],
+                }),
+                encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "manifest-stats", "--root", str(tmp_p), "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["manifests_scanned"], 2)
+        self.assertEqual(data["sources_seen"], 2)
+        self.assertEqual(data["total_downloaded"], 3 + 5)
+        self.assertEqual(data["total_skipped"], 2 + 7)
+        self.assertEqual(data["total_failed"], 0 + 1)
+        self.assertEqual(data["total_bytes"], 1000 + 2000 + 3000 + 500 + 1500)
+        self.assertIn("met_museum", data["by_source"])
+        self.assertIn("wikimedia_commons", data["by_source"])
+
+    def test_pack_manifest_stats_missing_root_exits_1(self) -> None:
+        result = self.runner.invoke(
+            self.app, ["pack", "manifest-stats", "--root", "C:/nonexistent/path/xyz"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("root_dir_not_found", result.stdout)
+
+    # ----------------------------------------------------------------- #
     # gen bench-fanout (v1.12.s70)
     # ----------------------------------------------------------------- #
 

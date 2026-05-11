@@ -1458,5 +1458,137 @@ def run_pack_cmd(
         raise typer.Exit(code=1)
 
 
+# --------------------------------------------------------------------------- #
+# pack manifest-stats  (v1.12.s72)
+# --------------------------------------------------------------------------- #
+
+@app.command("manifest-stats")
+def manifest_stats_cmd(
+    root_dir: Annotated[
+        Path,
+        typer.Option(
+            "--root",
+            help="Directory to scan for *_manifest.json files (default: manual_drop_dir).",
+        ),
+    ] = Path(""),
+    json_out: Annotated[
+        bool, typer.Option("--json", help="Emit JSON output."),
+    ] = False,
+) -> None:
+    """Aggregate stats across all R1A manifests on disk (Path B v1.12.s72).
+
+    Walks `<manual_drop>/<provider>/<pack_id>/<provider>_manifest.json` files
+    written by R1A runners and reports:
+      - per-provider download/skip/fail counts
+      - total bytes (sum of `bytes` fields in manifest entries)
+      - manifests scanned + by-source breakdown
+
+    Useful for tracking how much R1A scouting has actually landed on disk.
+
+    Examples:
+      assetboy pack manifest-stats
+      assetboy pack manifest-stats --root C:/some/other/path
+      assetboy pack manifest-stats --json
+    """
+    from assetboy.execution.comfyui_runner import manual_drop_dir
+
+    scan_root = root_dir if str(root_dir) else manual_drop_dir()
+    if not scan_root.exists():
+        msg = f"root_dir_not_found: {scan_root}"
+        if json_out:
+            json.dump({"error": msg, "root": str(scan_root)}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_manifest_stats_error={msg}")
+        raise typer.Exit(code=1)
+
+    # Find every *_manifest.json under scan_root (any depth).
+    manifests = sorted(scan_root.rglob("*_manifest.json"))
+
+    per_source: dict[str, dict] = {}
+    total_downloaded = 0
+    total_failed = 0
+    total_skipped = 0
+    total_bytes = 0
+
+    for mf in manifests:
+        try:
+            doc = json.loads(mf.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        src = str(doc.get("source", "unknown"))
+        bucket = per_source.setdefault(src, {
+            "manifests": 0,
+            "downloaded": 0,
+            "skipped": 0,
+            "failed": 0,
+            "bytes": 0,
+        })
+        bucket["manifests"] += 1
+
+        # Different runners use slightly different count fields; sum the ones we know.
+        for k in ("objects_downloaded", "files_downloaded", "items_downloaded",
+                  "cards_downloaded", "icons_downloaded", "tracks_downloaded",
+                  "photos_downloaded", "games_downloaded"):
+            v = doc.get(k)
+            if isinstance(v, int):
+                bucket["downloaded"] += v
+                total_downloaded += v
+        for k in ("objects_skipped_non_pd", "files_skipped_restricted",
+                  "items_skipped_restricted", "icons_skipped_restricted",
+                  "tracks_skipped_restricted"):
+            v = doc.get(k)
+            if isinstance(v, int):
+                bucket["skipped"] += v
+                total_skipped += v
+        for k in ("objects_failed", "files_failed", "items_failed",
+                  "cards_failed", "icons_failed", "tracks_failed",
+                  "photos_failed", "games_failed"):
+            v = doc.get(k)
+            if isinstance(v, int):
+                bucket["failed"] += v
+                total_failed += v
+
+        # Sum per-entry bytes if present.
+        for entry in (doc.get("entries") or []):
+            if isinstance(entry, dict):
+                b = entry.get("bytes")
+                if isinstance(b, int):
+                    bucket["bytes"] += b
+                    total_bytes += b
+
+    summary = {
+        "root": str(scan_root),
+        "manifests_scanned": len(manifests),
+        "sources_seen": len(per_source),
+        "total_downloaded": total_downloaded,
+        "total_skipped": total_skipped,
+        "total_failed": total_failed,
+        "total_bytes": total_bytes,
+        "by_source": per_source,
+    }
+
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"pack_manifest_stats_root={scan_root}")
+        print(f"pack_manifest_stats_manifests_scanned={len(manifests)}")
+        print(f"pack_manifest_stats_sources_seen={len(per_source)}")
+        print(f"pack_manifest_stats_total_downloaded={total_downloaded}")
+        print(f"pack_manifest_stats_total_skipped={total_skipped}")
+        print(f"pack_manifest_stats_total_failed={total_failed}")
+        print(f"pack_manifest_stats_total_bytes={total_bytes}")
+        if per_source:
+            print()
+            for src, b in sorted(per_source.items()):
+                print(
+                    f"  {src:24s} manifests={b['manifests']:3d}  "
+                    f"downloaded={b['downloaded']:5d}  "
+                    f"skipped={b['skipped']:4d}  "
+                    f"failed={b['failed']:3d}  bytes={b['bytes']:>12d}"
+                )
+
+
 if __name__ == "__main__":
     app()
