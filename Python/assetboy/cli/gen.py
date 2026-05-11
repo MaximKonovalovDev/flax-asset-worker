@@ -52,11 +52,18 @@ wikimedia_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
 )
+archive_app = typer.Typer(
+    name="archive-org",
+    help="Internet Archive (archive.org) CC/PD media fetcher.",
+    add_completion=False,
+    no_args_is_help=True,
+)
 
 app.add_typer(comfy_app, name="comfyui")
 app.add_typer(sd_app, name="sd")
 app.add_typer(met_app, name="met-museum")
 app.add_typer(wikimedia_app, name="wikimedia")
+app.add_typer(archive_app, name="archive-org")
 
 
 # --------------------------------------------------------------------------- #
@@ -926,6 +933,122 @@ def wikimedia_fetch_cmd(
             print(f"gen_wikimedia_manifest={result.manifest_path}")
         if result.error:
             print(f"gen_wikimedia_note={result.error}")
+
+    if not result.ok:
+        raise typer.Exit(code=1)
+
+
+# --------------------------------------------------------------------------- #
+# gen archive-org fetch  (v1.10.s28)
+# --------------------------------------------------------------------------- #
+
+@archive_app.command("fetch")
+def archive_fetch_cmd(
+    query: Annotated[
+        str,
+        typer.Option(
+            "--query", "-q",
+            help="Lucene-ish query (e.g. 'subject:roman' or 'creator:nasa').",
+        ),
+    ],
+    mediatype: Annotated[
+        str,
+        typer.Option(
+            "--mediatype",
+            help="Restrict to one mediatype: image | audio | movies | texts.",
+        ),
+    ] = "",
+    count: Annotated[
+        int, typer.Option("--count", "-n", help="Max CC/PD items to download."),
+    ] = 4,
+    pack_id: Annotated[
+        str,
+        typer.Option("--pack-id", help="Pack id for output dir."),
+    ] = "",
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            help="Override output dir (default: <manual_drop>/archive_org/<pack_id>/).",
+        ),
+    ] = Path(""),
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Plan only; skip binary downloads."),
+    ] = False,
+    json_out: Annotated[
+        bool, typer.Option("--json", help="Emit JSON output."),
+    ] = False,
+) -> None:
+    """Fetch CC/PD media from the Internet Archive (Path B v1.10.s28).
+
+    archive.org hosts ~50M+ items. This command runs advancedsearch.php,
+    filters to items with CC-BY / CC-BY-SA / CC0 / Public Domain licenseurl,
+    picks one preview-quality file per item, and downloads up to --count
+    files along with a JSON manifest.
+
+    Examples:
+      assetboy gen archive-org fetch -q "subject:roman" --mediatype image -n 4
+      assetboy gen archive-org fetch -q "creator:NASA" --mediatype image -n 8
+      assetboy gen archive-org fetch -q "ambient field recording" --mediatype audio -n 6
+
+    Output: <manual_drop>/archive_org/<pack_id>/ contains the downloaded files
+    plus archive_org_manifest.json with per-item identifiers + license URLs.
+    """
+    from assetboy.execution.archive_org_runner import run_archive_org_batch
+
+    out_dir_arg: Path | None = output_dir if str(output_dir) else None
+    pack_id_arg: str | None = pack_id if pack_id else None
+    mediatype_arg: str | None = mediatype.strip().lower() if mediatype.strip() else None
+
+    try:
+        result = run_archive_org_batch(
+            query=query,
+            mediatype=mediatype_arg,
+            pack_id=pack_id_arg,
+            count=count,
+            output_dir=out_dir_arg,
+            dry_run=dry_run,
+        )
+    except Exception as exc:
+        msg = f"archive_org_runner_crashed: {exc}"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_archive_org_error={msg}")
+        raise typer.Exit(code=1)
+
+    summary = {
+        "ok": result.ok,
+        "pack_id": result.pack_id,
+        "query": result.query,
+        "output_dir": str(result.output_dir),
+        "items_matched": result.items_matched,
+        "items_accepted_license": result.items_accepted_license,
+        "items_downloaded": result.items_downloaded,
+        "items_skipped_restricted": result.items_skipped_restricted,
+        "items_failed": result.items_failed,
+        "downloaded_paths": [str(p) for p in result.downloaded_paths],
+        "manifest_path": str(result.manifest_path) if result.manifest_path else None,
+        "dry_run": result.dry_run,
+        "error": result.error,
+    }
+
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"gen_archive_org_pack_id={result.pack_id}")
+        print(f"gen_archive_org_query={result.query!r}")
+        print(f"gen_archive_org_matched={result.items_matched}")
+        print(f"gen_archive_org_downloaded={result.items_downloaded}")
+        print(f"gen_archive_org_skipped_restricted={result.items_skipped_restricted}")
+        print(f"gen_archive_org_failed={result.items_failed}")
+        print(f"gen_archive_org_output_dir={result.output_dir}")
+        if result.manifest_path:
+            print(f"gen_archive_org_manifest={result.manifest_path}")
+        if result.error:
+            print(f"gen_archive_org_note={result.error}")
 
     if not result.ok:
         raise typer.Exit(code=1)

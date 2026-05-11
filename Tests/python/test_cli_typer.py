@@ -391,6 +391,66 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["files_skipped_restricted"], 6)
         self.assertTrue(data["ok"])
 
+    # ----------------------------------------------------------------- #
+    # gen archive-org fetch (v1.10.s28)
+    # ----------------------------------------------------------------- #
+
+    def test_archive_org_fetch_help_renders(self) -> None:
+        result = self.runner.invoke(
+            self.app, ["gen", "archive-org", "fetch", "--help"]
+        )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("archive.org", result.stdout.lower())
+        self.assertIn("CC", result.stdout)
+
+    def test_archive_org_fetch_dry_run_no_matches_exits_zero(self) -> None:
+        from unittest.mock import patch
+        from assetboy.execution.archive_org_runner import ArchiveOrgResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = ArchiveOrgResult(
+                pack_id="T", query="zzz", output_dir=Path(tmp),
+                items_matched=0, ok=True, error="no_matches",
+            )
+            with patch(
+                "assetboy.execution.archive_org_runner.run_archive_org_batch",
+                return_value=fake,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "archive-org", "fetch", "--query", "zzz", "--dry-run"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("gen_archive_org_matched=0", result.stdout)
+        self.assertIn("no_matches", result.stdout)
+
+    def test_archive_org_fetch_json_output_shape(self) -> None:
+        from unittest.mock import patch
+        from assetboy.execution.archive_org_runner import ArchiveOrgResult
+        import tempfile, json as _json
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = ArchiveOrgResult(
+                pack_id="P", query="q", output_dir=Path(tmp),
+                items_matched=8, items_accepted_license=3,
+                items_downloaded=3, items_skipped_restricted=5, ok=True,
+            )
+            with patch(
+                "assetboy.execution.archive_org_runner.run_archive_org_batch",
+                return_value=fake,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "archive-org", "fetch", "--query", "q", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["pack_id"], "P")
+        self.assertEqual(data["items_downloaded"], 3)
+        self.assertEqual(data["items_skipped_restricted"], 5)
+        self.assertTrue(data["ok"])
+
     def test_comfy_submit_workflow_help_renders(self) -> None:
         result = self.runner.invoke(
             self.app, ["gen", "comfyui", "submit-workflow", "--help"]
