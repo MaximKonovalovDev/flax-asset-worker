@@ -1,6 +1,49 @@
 # FAW Roadmap
 
-## ✅ Done (v1.0.0)
+## Path B refactor — SHIPPED 2026-05-10 (v1.1.0)
+
+The original v1.0 roadmap below is preserved for historical context. After
+the honest review in `docs/research/FAW-HONEST-REVIEW-AND-PATHS-2026-05-10.md`
+the operator chose Path B (provider-first, no workflow layer).
+
+### Shipped slices (s1-s9)
+
+| Slice | Commit | What shipped |
+|---|---|---|
+| s1 | `16fc55d` | `Python/assetboy/canary.py` — weekly external-API smoke test (PolyHaven + Fab + Epic + Unity Hub + ComfyUI) + 26 unit tests |
+| s2 | `a7fb86c` | 16 YAML data parks (`assetboy/data/*.yaml`) + delete orphan `tts_runner.py` |
+| s3 | `7b30892` | Quixel scanner extracted from `library_map.py` to `providers/quixel_scanner.py` (296 LOC moved, re-exports preserved for back-compat) |
+| s4 | `fb2117f` | `AcquisitionMethod` canonical alias for `ProviderLane` (disambiguates from C# `ILane`); bulk rename deferred |
+| s5 | `8d2f16d` | Typer CLI Phase 1: `cli/` package + 3 sub-apps (fab + library + import; 11 commands) |
+| s6 | `00760fc` | Typer CLI Phase 2: 3 more sub-apps (unity + epic + gen; 22 commands total across 6 sub-apps) |
+| s7 | `4b74e7f` | `pack_pipeline.py` Stage enum + `STAGE_HANDLERS` dispatch shim (additive; legacy body preserved with its 10 tests; mechanical extraction deferred to s10.5) |
+| s8 | `fbb23ba` | `recipes/primitive_tech/first_playable.yaml` (9 packs) + `pack` sub-app (`list-recipes`/`from-recipe`/`status`; 25 commands total) |
+| s9 | `0181202` | `recipes/roman/first_playable.yaml` (14 packs ported from `data/roman_first_playable_specs.yaml`) |
+
+### Slice log
+
+Full per-slice details in `docs/COMMIT_READY-assetboi.md`.
+
+### Deferred slices (post-Path B v1.1)
+
+- **s2.5** — strip `cli.py` DEAD-imports + 26 lazy-handler blocks. Depends on s10.5 (mechanical pack_pipeline extraction must come first).
+- **s2.6** — rewire KEEP files to drop dead-bridge deps so 21 DEAD files can finally be deleted: `provider_readiness.py`, `library_map.py`, `epic_vault.py`, `unity_runner.py`, `unreal_runner.py`, `browser_automation.py`, `freesound_runner.py`, `pack_pipeline.py` (via flax_wrapper).
+- **s10.5** — mechanical extraction of `pack_pipeline.execute_prepare_pack` legacy body into the 5 `STAGE_HANDLERS` functions; v1 -> v2 ledger compatibility tests; then delete legacy `cli.py`.
+- **s11** — pre-pack acquisition router that maps recipe `acquisition_method` (`direct_url` / `manual_browser` / `generator`) to a `source_dir` before `execute_prepare_pack_dispatched` is called. Today recipes correctly load but their packs go RED because there's no source_dir; s11 closes the loop.
+
+### What you can do today
+
+- Weekly canary: `python -m assetboy.canary` — reports per-probe OK/RED + writes `state/canary/canary_status.json`.
+- Browse recipes: `python -m assetboy.cli pack list-recipes`.
+- Dry-run a recipe: `python -m assetboy.cli pack from-recipe primitive_tech/first_playable.yaml --dry-run`.
+- Inspect Fab auth: `python -m assetboy.cli fab auth-status`.
+- Inspect Epic vault: `python -m assetboy.cli epic status`.
+- Health-check the C# server: `python -m assetboy.cli library audit`.
+- Run AI gen status: `python -m assetboy.cli gen comfyui status`.
+
+---
+
+## ✅ Done (v1.0.0 — pre-Path B baseline)
 
 ### C# Plugin
 - [x] `AssetWorkerPlugin.cs` — GamePlugin entry point

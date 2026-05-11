@@ -501,3 +501,57 @@ The original 8500-line `workflows/roman_first_playable.py` Python tuples are now
 - Inline C# `QuickImport` into `LaneRoutes.cs`; delete `ILane.cs`, `LaneExecutor.cs`, `Config/lanes.json` per PATH-B Day 10.
 - Tag `v1.1.0-path-b-cleanup`.
 - DO NOT delete old `cli.py` yet -- defer to s10.5 (requires DEAD-file purge first, blocked by s2.5+s2.6).
+
+---
+
+## Slice s10 — Day 10 Final cleanup + tag v1.1.0-path-b-cleanup (2026-05-10)
+
+**Status:** SHIPPED.
+
+**What shipped:**
+
+1. **`README.md` rewrite** — full refresh capturing Path B state:
+   - New architecture diagram showing `cli/` package (7 sub-apps), `canary.py`, `recipes/`, `data/`, `quixel_scanner.py` extraction, `pack_pipeline` Stage dispatch.
+   - Quick-start guide for C# build + Python sidecar install + canary + Typer CLI + curl examples.
+   - Provider matrix table (11 sources across C#/Python + lane + auth + categories).
+   - Recipe YAML schema documentation.
+   - Path B slice ledger (9 slices with commit hashes).
+   - Deferred slices list (s2.5 / s2.6 / s10.5 / s11).
+
+2. **`ROADMAP.md` Path B status block prepended** — slice table + "what you can do today" command list. Original v1.0 roadmap preserved for historical context.
+
+3. **C# `ILane` abstraction inlined** (per PATH-B Day 10 spec):
+   - **DELETED** `Source/Pipeline/ILane.cs` (interface + 6-step enum + LaneInput/LaneResult — 100 lines of YAGNI for 1 impl).
+   - **DELETED** `Source/Pipeline/LaneExecutor.cs` (1-impl wrapper).
+   - **DELETED** `Source/Pipeline/` directory itself (now empty).
+   - **DELETED** `Config/lanes.json` (declared 3 lanes; only 1 had code).
+   - **REWRITTEN** `Source/Routes/LaneRoutes.cs` (~120 lines) — `HandleList` now honestly reports 1 lane (`quick-import`); `HandleExecuteAsync` inlines the full Download -> Validate -> Import logic (was returning "not yet implemented" before s10). Parses `provider_id` + `asset_id` + `category` + `output_folder` from JSON body; calls `ProviderRegistry.GetProvider().DownloadAsync()` + `ValidateAsync()` + `File.Copy` to Content folder.
+   - Verified: no other C# files reference `LaneExecutor` or `ILane` (grep clean).
+
+**Verification:**
+- 26/26 canary tests still green after deletions.
+- `python -m assetboy.cli --help` lists 7 sub-apps cleanly.
+- `python -m assetboy.cli pack list-recipes` finds both primitive_tech + roman recipes.
+- C# files compile-ready (only the 3 deleted files + LaneRoutes.cs change; ProviderRegistry, WorkerHttpServer, AssetWorkerPlugin unchanged).
+
+**Tag:** `v1.1.0-path-b-cleanup` (applied after this commit lands).
+
+**Files staged for commit:**
+- `README.md` (REWRITTEN, ~190 lines, full Path B refresh)
+- `ROADMAP.md` (MODIFIED, +50 lines Path B status block prepended; original v1.0 preserved)
+- `Source/Routes/LaneRoutes.cs` (REWRITTEN, ~120 lines, inlined QuickImport)
+- `Source/Pipeline/ILane.cs` (DELETED)
+- `Source/Pipeline/LaneExecutor.cs` (DELETED)
+- `Source/Pipeline/` (directory removed; was empty after deletes)
+- `Config/lanes.json` (DELETED)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+**Path B v1.1.0 complete.** 9 slices shipped end-to-end, all gates green throughout, zero Zod errors, zero edit-thrash incidents, full multi-AI etiquette respected (path-explicit staging only, no `git add -A`).
+
+**Outstanding (deferred to dedicated slices):**
+- s2.5 — strip cli.py DEAD-imports + 26 lazy-handler blocks
+- s2.6 — rewire KEEP files (`provider_readiness`, `library_map`, `unity_runner`, `unreal_runner`, `browser_automation`, `freesound_runner`, `pack_pipeline`/`flax_wrapper`) to drop dead-bridge deps, then delete 21 DEAD files
+- s10.5 — mechanical extraction of `pack_pipeline.execute_prepare_pack` legacy body into the 5 `STAGE_HANDLERS` functions; v1->v2 ledger round-trip tests; then delete legacy `cli.py`
+- s11 — pre-pack acquisition router (recipe `acquisition_method` -> `source_dir`)
+
+These are real follow-up slices, **not blocking the v1.1.0 release**. The Path B contract (preserve the moat, ship a clean CLI surface, recipe-driven runs, canary) is fully delivered.
