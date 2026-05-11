@@ -12,7 +12,7 @@ and a weekly external-API canary.
 > **Path B refactors 2026-05-10 → 2026-05-11:** slim-down + Typer rewrite
 > + acquisition router + 4 generator drivers + C# server endpoints +
 > contract regression tests. Net code reduction: **-24,487 LOC** (from
-> ~50k to ~25k). Test growth: 26 → 238 passing. See
+> ~50k to ~25k). Test growth: 26 → 242 passing. See
 > `docs/COMMIT_READY-assetboi.md` for full slice log + `docs/HEARTBEAT-assetboi.md`
 > for operator hibernation summary.
 
