@@ -82,6 +82,12 @@ pixabay_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
 )
+rawg_app = typer.Typer(
+    name="rawg",
+    help="RAWG.io game DB (covers + screenshots; reference-only; requires RAWG_API_KEY env).",
+    add_completion=False,
+    no_args_is_help=True,
+)
 
 app.add_typer(comfy_app, name="comfyui")
 app.add_typer(sd_app, name="sd")
@@ -92,6 +98,7 @@ app.add_typer(scryfall_app, name="scryfall")
 app.add_typer(iconify_app, name="iconify")
 app.add_typer(pexels_app, name="pexels")
 app.add_typer(pixabay_app, name="pixabay")
+app.add_typer(rawg_app, name="rawg")
 
 
 # --------------------------------------------------------------------------- #
@@ -1625,6 +1632,107 @@ def pixabay_videos_cmd(
             print(f"gen_pixabay_videos_manifest={result.manifest_path}")
         if result.error:
             print(f"gen_pixabay_videos_note={result.error}")
+
+    if not result.ok:
+        raise typer.Exit(code=1)
+
+
+# --------------------------------------------------------------------------- #
+# gen rawg games  (v1.10.s33)
+# --------------------------------------------------------------------------- #
+
+@rawg_app.command("games")
+def rawg_games_cmd(
+    query: Annotated[str, typer.Option("--query", "-q", help="Game name or theme.")],
+    count: Annotated[int, typer.Option("--count", "-n")] = 6,
+    genres: Annotated[
+        str,
+        typer.Option(
+            "--genres",
+            help="Comma-separated genre slugs (e.g. 'roguelike,strategy').",
+        ),
+    ] = "",
+    max_screenshots: Annotated[
+        int,
+        typer.Option(
+            "--max-screenshots",
+            help="Cap short_screenshots per game (default 3; 0 to skip).",
+        ),
+    ] = 3,
+    pack_id: Annotated[str, typer.Option("--pack-id")] = "",
+    output_dir: Annotated[Path, typer.Option("--output-dir")] = Path(""),
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Fetch game covers + screenshots from RAWG.io (Path B v1.10.s33).
+
+    REFERENCE-ONLY USE. RAWG images are copyrighted by game publishers.
+    Acceptable: mood boards, genre studies, design analysis, ComfyUI
+    img2img seeds destined for transformative output.
+    NOT acceptable: redistribution, inclusion in shipped games.
+
+    Requires RAWG_API_KEY env (free signup at rawg.io/apidocs; 20K req/month).
+
+    Examples:
+      assetboy gen rawg games -q "roguelike" -n 6
+      assetboy gen rawg games -q "tactics" --genres "strategy,role-playing-games-rpg" -n 4
+      assetboy gen rawg games -q "metroidvania" --max-screenshots 5 -n 4
+    """
+    from assetboy.execution.rawg_runner import run_rawg_games_batch
+
+    out_dir_arg: Path | None = output_dir if str(output_dir) else None
+    pack_id_arg: str | None = pack_id if pack_id else None
+    genres_arg: str | None = genres if genres.strip() else None
+    include_shots = max_screenshots > 0
+
+    try:
+        result = run_rawg_games_batch(
+            query=query, pack_id=pack_id_arg, count=count,
+            include_screenshots=include_shots,
+            max_screenshots_per_game=max_screenshots,
+            genres=genres_arg,
+            output_dir=out_dir_arg, dry_run=dry_run,
+        )
+    except Exception as exc:
+        msg = f"rawg_runner_crashed: {exc}"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_rawg_error={msg}")
+        raise typer.Exit(code=1)
+
+    summary = {
+        "ok": result.ok,
+        "pack_id": result.pack_id,
+        "query": result.query,
+        "output_dir": str(result.output_dir),
+        "games_matched": result.games_matched,
+        "games_downloaded": result.games_downloaded,
+        "screenshots_downloaded": result.screenshots_downloaded,
+        "games_failed": result.games_failed,
+        "downloaded_paths": [str(p) for p in result.downloaded_paths],
+        "manifest_path": str(result.manifest_path) if result.manifest_path else None,
+        "dry_run": result.dry_run,
+        "error": result.error,
+    }
+
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"gen_rawg_pack_id={result.pack_id}")
+        print(f"gen_rawg_query={result.query!r}")
+        print(f"gen_rawg_matched={result.games_matched}")
+        print(f"gen_rawg_games_downloaded={result.games_downloaded}")
+        print(f"gen_rawg_screenshots_downloaded={result.screenshots_downloaded}")
+        print(f"gen_rawg_failed={result.games_failed}")
+        print(f"gen_rawg_output_dir={result.output_dir}")
+        print("gen_rawg_USE_POLICY=reference-only_not_for_redistribution")
+        if result.manifest_path:
+            print(f"gen_rawg_manifest={result.manifest_path}")
+        if result.error:
+            print(f"gen_rawg_note={result.error}")
 
     if not result.ok:
         raise typer.Exit(code=1)

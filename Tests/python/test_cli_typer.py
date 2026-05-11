@@ -670,6 +670,72 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["kind"], "videos")
         self.assertEqual(data["items_downloaded"], 2)
 
+    # ----------------------------------------------------------------- #
+    # gen rawg games (v1.10.s33)
+    # ----------------------------------------------------------------- #
+
+    def test_rawg_games_help_renders(self) -> None:
+        result = self.runner.invoke(self.app, ["gen", "rawg", "games", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("RAWG", result.stdout)
+        self.assertIn("REFERENCE", result.stdout)
+        self.assertIn("RAWG_API_KEY", result.stdout)
+
+    def test_rawg_games_missing_api_key_exits_1(self) -> None:
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("RAWG_API_KEY", None)
+            result = self.runner.invoke(
+                self.app, ["gen", "rawg", "games", "--query", "x", "--dry-run"],
+            )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("missing_api_key", result.stdout)
+
+    def test_rawg_games_json_output_shape(self) -> None:
+        from unittest.mock import patch
+        from assetboy.execution.rawg_runner import RawgResult
+        import tempfile, json as _json
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = RawgResult(
+                pack_id="P", query="q", output_dir=Path(tmp),
+                games_matched=3, games_downloaded=3,
+                screenshots_downloaded=9, ok=True,
+            )
+            with patch(
+                "assetboy.execution.rawg_runner.run_rawg_games_batch",
+                return_value=fake,
+            ):
+                result = self.runner.invoke(
+                    self.app, ["gen", "rawg", "games", "--query", "q", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["games_downloaded"], 3)
+        self.assertEqual(data["screenshots_downloaded"], 9)
+
+    def test_rawg_games_stdout_shows_use_policy(self) -> None:
+        """Plain-text output must include USE_POLICY banner so operator sees it."""
+        from unittest.mock import patch
+        from assetboy.execution.rawg_runner import RawgResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = RawgResult(
+                pack_id="P", query="q", output_dir=Path(tmp),
+                games_matched=1, games_downloaded=1, ok=True,
+            )
+            with patch(
+                "assetboy.execution.rawg_runner.run_rawg_games_batch",
+                return_value=fake,
+            ):
+                result = self.runner.invoke(
+                    self.app, ["gen", "rawg", "games", "--query", "q"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("USE_POLICY", result.stdout)
+
     def test_comfy_submit_workflow_help_renders(self) -> None:
         result = self.runner.invoke(
             self.app, ["gen", "comfyui", "submit-workflow", "--help"]
