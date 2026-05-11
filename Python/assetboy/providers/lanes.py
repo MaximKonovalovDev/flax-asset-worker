@@ -450,6 +450,137 @@ SOURCE_ADAPTERS: dict[str, SourceAdapter] = {
         source_strategy="Use Mixamo browser animation pulls for combat and locomotion clips.",
         notes="Record the exact animation ids and export settings in provenance.",
     ),
+    # v1.11.s40 — R1A public-API providers registered as DIRECT_URL lane adapters
+    # (they fetch over HTTP, no manual browser session, no AI generator).
+    "met_museum_api": SourceAdapter(
+        adapter_id="met_museum_api",
+        lane=ProviderLane.DIRECT_URL,
+        display_name="Met Museum Open Access (CC0)",
+        source_strategy=(
+            "HTTP GET against collectionapi.metmuseum.org; filter "
+            "isPublicDomain=true; download primaryImage URL."
+        ),
+        notes=(
+            "No API key. CC0 public domain only. Use `gen met-museum fetch`. "
+            "Ideal for reference plates + ComfyUI img2img seeds."
+        ),
+    ),
+    "wikimedia_commons_api": SourceAdapter(
+        adapter_id="wikimedia_commons_api",
+        lane=ProviderLane.DIRECT_URL,
+        display_name="Wikimedia Commons (CC0/CC-BY/CC-BY-SA/PD)",
+        source_strategy=(
+            "MediaWiki Action API /search ns=6 + imageinfo lookup; "
+            "filter via LicenseShortName SPDX-substring allowlist."
+        ),
+        notes=(
+            "No API key. Mixed CC license; attribution required for CC-BY/SA. "
+            "Use `gen wikimedia fetch`."
+        ),
+    ),
+    "archive_org_api": SourceAdapter(
+        adapter_id="archive_org_api",
+        lane=ProviderLane.DIRECT_URL,
+        display_name="Internet Archive (CC/PD per item)",
+        source_strategy=(
+            "advancedsearch.php + /metadata/{id} + /download/{id}/{file}; "
+            "filter by licenseurl CC allowlist + per-mediatype format gate."
+        ),
+        notes=(
+            "No API key. CC-BY / CC-BY-SA / CC0 / PD only. Use "
+            "`gen archive-org fetch`."
+        ),
+    ),
+    "scryfall_api": SourceAdapter(
+        adapter_id="scryfall_api",
+        lane=ProviderLane.DIRECT_URL,
+        display_name="Scryfall MTG Cards (CC-BY-SA-4.0)",
+        source_strategy=(
+            "GET /cards/search?unique=art; pick image_uris variant + download."
+        ),
+        notes=(
+            "No API key. CC-BY-SA-4.0 attribution to Wizards + artist required. "
+            "Use `gen scryfall fetch`."
+        ),
+    ),
+    "iconify_api": SourceAdapter(
+        adapter_id="iconify_api",
+        lane=ProviderLane.DIRECT_URL,
+        display_name="Iconify Open-Source Icons (MIT/Apache/CC0/OFL)",
+        source_strategy=(
+            "GET /search?query=... + /collections (license metadata) + "
+            "/<prefix>/<name>.svg (single icon)."
+        ),
+        notes=(
+            "No API key. 150+ icon sets; SPDX-allowlist filtered. "
+            "Use `gen iconify fetch`."
+        ),
+    ),
+    "pexels_api": SourceAdapter(
+        adapter_id="pexels_api",
+        lane=ProviderLane.DIRECT_URL,
+        display_name="Pexels Stock Photos+Videos (Pexels License)",
+        source_strategy=(
+            "GET /v1/search (photos) + /videos/search; "
+            "Authorization header with API key. Best-quality variant pick."
+        ),
+        notes=(
+            "PEXELS_API_KEY env required (free 20k/mo). Free personal+commercial; "
+            "attribution appreciated. Use `gen pexels photos|videos`."
+        ),
+    ),
+    "pixabay_api": SourceAdapter(
+        adapter_id="pixabay_api",
+        lane=ProviderLane.DIRECT_URL,
+        display_name="Pixabay CC0-Equivalent (photos+vectors+videos)",
+        source_strategy=(
+            "GET /api/?key=...&image_type={photo|illustration|vector|all} OR "
+            "/api/videos/?key=...; variant fallback chain on photos."
+        ),
+        notes=(
+            "PIXABAY_API_KEY env required (free, generous). CC0-equivalent, "
+            "no attribution. Use `gen pixabay photos|videos`."
+        ),
+    ),
+    "unsplash_api": SourceAdapter(
+        adapter_id="unsplash_api",
+        lane=ProviderLane.DIRECT_URL,
+        display_name="Unsplash Stock Photos (Unsplash License)",
+        source_strategy=(
+            "GET /search/photos with Authorization: Client-ID; "
+            "auto-ping /photos/<id>/download for analytics."
+        ),
+        notes=(
+            "UNSPLASH_ACCESS_KEY env required (free 50/hr demo). Free "
+            "personal+commercial; attribution appreciated. Use `gen unsplash photos`."
+        ),
+    ),
+    "rawg_api": SourceAdapter(
+        adapter_id="rawg_api",
+        lane=ProviderLane.DIRECT_URL,
+        display_name="RAWG.io Game DB (REFERENCE-ONLY)",
+        source_strategy=(
+            "GET /games?search=... + per-game cover + short_screenshots."
+        ),
+        notes=(
+            "RAWG_API_KEY env required (free 20k/mo). Images are "
+            "publisher-copyrighted: REFERENCE/RESEARCH ONLY, no redistribution. "
+            "Use `gen rawg games`."
+        ),
+    ),
+    "jamendo_api": SourceAdapter(
+        adapter_id="jamendo_api",
+        lane=ProviderLane.DIRECT_URL,
+        display_name="Jamendo CC Music Tracks",
+        source_strategy=(
+            "GET /v3.0/tracks?search=...&include=licenses+musicinfo; "
+            "filter to CC-BY/CC-BY-SA (commercial-OK + derivative-OK)."
+        ),
+        notes=(
+            "JAMENDO_CLIENT_ID env required (free). Default rejects -NC/-ND; "
+            "operator can broaden with --allow-restrictive. Use `gen jamendo tracks`."
+        ),
+    ),
 }
 
 GENERATOR_OBJECTIVE_MATRIX: dict[str, tuple[str, ...]] = {
