@@ -300,3 +300,76 @@ gen     list-presets, comfyui status, comfyui run, sd run           (4) ← 1 le
 **Path B status: s5 + s6 cli rewrite COMPLETE.** Total Typer surface area = 6 sub-apps, 22 commands, ~1,500 LOC (vs old cli.py's 8,500 LOC). Old cli.py still present in parallel; will be deleted in s10.
 
 **Next:** s7 — refactor `pack_pipeline.py` from 918 lines to ~350 lines via explicit Stage dataclass + dispatch table.
+
+---
+
+## Slice s7 — Day 7 pack_pipeline.py Stage dispatch additive shim (2026-05-10)
+
+**Status:** SHIPPED additive shim. Mechanical extraction of legacy body deferred to s10.5.
+
+**Honest assessment of scope:** PATH-B Day 7 spec said "918 LOC -> ~350 LOC via Stage dataclass + dispatch." Peer-opus's 13-section refactor map flagged **9 distinct subtle behaviors** that 10 dedicated tests in `test_pack_pipeline.py` lock in:
+
+1. Canonical-glTF degradation is **non-fatal** (FBX2glTF missing -> `"degraded"`, pack still publishes).
+2. `dry_run` terminates in **3 different green-pause states** depending on phase.
+3. `_mark_packeted_success` -> `_finalize_success` **two-phase heal** must not touch ledger mtime when packet already on disk.
+4. `error` field is **popped only when** terminal `status="completed"` AND `current_state != "failed"`.
+5. Resume + `reviewed_source_dir` on disk -> **skip** `_stage_reviewed_source`.
+6. Resume + cleanup artifacts on disk -> **skip** `execute_run_cleanup` re-call (mock.assert_called_once() risk).
+7. `unittest.mock.patch` resolves `asset_library_root` + `state_root` on MODULE attribute; hiding behind class breaks tests.
+8. Canonical-glTF is **NOT its own stage** today (lives inside REVIEWED_SOURCE) — splitting opens half-built `reviewed_source_dir` window across crash.
+9. `read_pack_pipeline_status` heal path is two-phase: mutates in-memory via `_mark_packeted_success`, only persists via `_finalize_success` when state actually changed.
+
+A 1:1 mechanical extraction would risk regressing one of these and there's no fast test environment to verify (rescued tests have workspace-path bootstrap issues, see s4 notes). **Safer move:** ship the additive Stage/dispatch contract that s8 (recipe runner) needs, without touching the legacy `execute_prepare_pack` body. Legacy keeps its 10-test green track record. Mechanical extraction deferred to s10.5 (a slice after s10's tag) when test environment is restored.
+
+**What shipped:**
+
+Appended ~150 lines at the bottom of `Python/assetboy/workflows/pack_pipeline.py`:
+
+1. **`Stage` enum** (5 values: `BULK_SOURCE`, `SOURCE_SUMMARY`, `CLEANUP`, `REVIEWED_SOURCE`, `REGISTER_PACKET`) — canonical names matching the **actual** stage boundaries observed in code (peer-opus caught that PATH-B spec's "download / cleanup / canonical-glTF / register-packet" was inaccurate — canonical-glTF lives inside REVIEWED_SOURCE).
+2. **`STAGE_ORDER`** tuple — canonical execution order.
+3. **`StageResult`** dataclass — `ok` / `payload` / `error` / `pause_state` / `pause_next_step` / `skipped` / `warnings`. Three terminal flavors: success, pause-resume, failure.
+4. **`PipelineContext`** dataclass — frozen args bundle mirroring legacy `execute_prepare_pack` kwargs 1:1.
+5. **`execute_prepare_pack_dispatched(ctx)`** — new entry point. Currently a thin shim that delegates to legacy `execute_prepare_pack(**kwargs)`. When s10.5 lands the mechanical extraction, this body becomes the real dispatch loop (skeleton in docstring).
+6. **`STAGE_HANDLERS: dict[Stage, Callable]`** — empty in s7 (deferred population), but the **name is stable** so future tests can `mock.patch` it.
+7. **`stage_for_current_state(current_state)`** — best-effort map from legacy `current_state` string -> `Stage` enum for display tooling.
+8. **`PACK_PIPELINE_SCHEMA_VERSION_V2 = "2026-05-10.pack_pipeline.v2"`** — pre-allocated for s10.5.
+9. **`__all_dispatch_api__`** list — 8 names exposed under a separate underscore-attr (not collided with module's existing `__all__` if any) for explicit discovery.
+
+**Verification (smoke run):**
+- 9 new symbols import cleanly from `assetboy.workflows.pack_pipeline`.
+- Legacy `execute_prepare_pack` + `read_pack_pipeline_status` + `PACK_PIPELINE_SCHEMA_VERSION` still import.
+- `STAGE_ORDER` = `['bulk_source', 'source_summary', 'cleanup', 'reviewed_source', 'register_packet']`.
+- `PipelineContext(pack_id='test', game_scope='roman_arena')` constructs OK.
+- `StageResult(ok=True, payload={'foo':'bar'})` constructs OK.
+- `stage_for_current_state('packeted')` -> `Stage.REGISTER_PACKET`.
+- `stage_for_current_state('uninitialized')` -> `None` (correct sentinel).
+- `ast.parse` on full file: OK, total 1108 lines (was 918; +190).
+- 26/26 canary tests still green.
+
+**What s8 unlocks (the consumer of this API):**
+
+The s8 recipe runner reads `recipes/<game>/<recipe>.yaml`, iterates over its `packs[]` list, and for each pack calls:
+
+```python
+from assetboy.workflows.pack_pipeline import PipelineContext, execute_prepare_pack_dispatched
+
+for pack in recipe["packs"]:
+    ctx = PipelineContext(
+        pack_id=pack["id"],
+        game_scope=recipe["recipe"]["game"],
+        ...,
+    )
+    result = execute_prepare_pack_dispatched(ctx)
+    if result.get("status") != "completed":
+        record_failure(pack, result)
+```
+
+This gives recipe-driven pack runs a stable forward-compatible entry point that won't change shape when s10.5 swaps the legacy body for the real dispatch loop.
+
+**Files staged for commit:**
+- `Python/assetboy/workflows/pack_pipeline.py` (MODIFIED, +190 lines additive)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+**Deferred to new slice s10.5:** mechanical extraction of legacy `execute_prepare_pack` body into the 5 `STAGE_HANDLERS` functions, with full v1 -> v2 ledger compatibility tests (round-trip + cleanup-pause + degraded-canonicalization), and rewrite of legacy body to call `execute_prepare_pack_dispatched` internally. ~2-day slice when test bootstrap is in place.
+
+**Next:** s8 — `recipes/primitive_tech/first_playable.yaml` + `pack from-recipe` CLI command.

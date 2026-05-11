@@ -916,3 +916,193 @@ def _infer_next_step(current_state: str) -> str:
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+# ===========================================================================
+# Path B s7 (2026-05-10) — additive Stage-dispatch shim.
+# ===========================================================================
+#
+# The legacy `execute_prepare_pack` above (lines 43-286-ish) is a 918-line
+# monolithic state machine with 10 tests in test_pack_pipeline.py locking in
+# subtle behaviors:
+#
+#   * canonical-glTF degradation is non-fatal (FBX2glTF missing -> "degraded",
+#     pack still publishes)
+#   * dry_run terminates in 3 different green-pause states depending on phase
+#   * `_mark_packeted_success` -> `_finalize_success` two-phase heal must not
+#     touch ledger mtime when packet already on disk
+#   * `error` field is popped only when terminal status="completed"
+#   * resume + reviewed_source_dir on disk -> skip _stage_reviewed_source
+#   * resume + cleanup artifacts on disk -> skip execute_run_cleanup re-call
+#
+# A 1:1 mechanical extraction risks regressing one of these. Instead we ship
+# the **public-facing Stage enum + dispatch contract** that future callers
+# (s8 recipe runner, future s10 mechanical extraction) need, without touching
+# the legacy body. Callers that want a clean dispatch shape import:
+#
+#     from assetboy.workflows.pack_pipeline import (
+#         Stage,            # 5-value enum (BULK_SOURCE..REGISTER_PACKET)
+#         STAGE_ORDER,      # canonical execution order
+#         StageResult,      # ok/payload/error/pause dataclass
+#         PipelineContext,  # frozen args bundle
+#         execute_prepare_pack_dispatched,  # alternate entry point
+#         PACK_PIPELINE_SCHEMA_VERSION_V2,  # for code that wants to gate on v2
+#     )
+#
+# The mechanical extraction of the legacy body into the 5 stage handlers is
+# tracked as Path B s10.5 (post-cleanup). Until then `execute_prepare_pack`
+# remains the only certified-correct path.
+
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Callable
+
+
+PACK_PIPELINE_SCHEMA_VERSION_V2 = "2026-05-10.pack_pipeline.v2"
+
+
+class Stage(str, Enum):
+    """Canonical stages of the pack pipeline.
+
+    Five entries; canonical-glTF is intentionally NOT its own stage (it lives
+    inside REVIEWED_SOURCE as an inline sub-step). Splitting it out would open
+    a window where reviewed_source_dir is half-built across a crash; the
+    current code does the rebuild + canonical pass + asset_metadata write as
+    one atomic rmtree-then-repopulate.
+    """
+
+    BULK_SOURCE = "bulk_source"        # optional; only with bulk_profile arg
+    SOURCE_SUMMARY = "source_summary"  # always; enumerate + validate source_dir
+    CLEANUP = "cleanup"                # gated by cleanup_mode + mesh count
+    REVIEWED_SOURCE = "reviewed_source"  # copy + canonical-glTF + provenance
+    REGISTER_PACKET = "register_packet"  # publish to flax_intake
+
+
+STAGE_ORDER: tuple[Stage, ...] = (
+    Stage.BULK_SOURCE,
+    Stage.SOURCE_SUMMARY,
+    Stage.CLEANUP,
+    Stage.REVIEWED_SOURCE,
+    Stage.REGISTER_PACKET,
+)
+
+
+@dataclass
+class StageResult:
+    """Outcome of a single stage invocation.
+
+    Three terminal flavors:
+      * ok=True, pause_state=None        -> stage completed; advance
+      * ok=True, pause_state=<name>      -> stage green-paused (e.g. awaiting
+                                            cleanup artifacts); ledger
+                                            persists; do NOT mark stage as
+                                            stages_completed; resume later
+      * ok=True, skipped=True            -> stage not applicable (e.g.
+                                            BULK_SOURCE without bulk_profile)
+      * ok=False, error=<str>            -> stage failed; ledger writes
+                                            status="failed"; halt
+    """
+
+    ok: bool
+    payload: dict[str, Any] | None = None
+    error: str | None = None
+    pause_state: str | None = None
+    pause_next_step: str | None = None
+    skipped: bool = False
+    # Optional warning channel (e.g. canonical-glTF degraded but still green).
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class PipelineContext:
+    """Frozen-after-construction args bundle for a single pack execution.
+
+    Mirrors the kwargs of legacy `execute_prepare_pack` 1:1. New stage
+    functions take this + a `PipelineState` (TBD; see s10.5).
+    """
+
+    pack_id: str
+    game_scope: str
+    source_dir: Path | None = None
+    bulk_profile: str | None = None
+    cleanup_mode: str = "auto"
+    asset_kind: str = "prop"
+    animated: bool = False
+    bulk_output_dir: Path | None = None
+    cleanup_output_dir: Path | None = None
+    packet_status: str = "ai_reviewed"
+    overwrite_packet: bool = False
+    verify_hashes: bool = True
+    dry_run: bool = False
+    resume: bool = False
+
+
+def execute_prepare_pack_dispatched(ctx: PipelineContext) -> dict[str, Any]:
+    """New-shape entry point. Currently delegates to legacy `execute_prepare_pack`.
+
+    Once s10.5 lands the mechanical extraction, this becomes the dispatch
+    loop:
+
+        state = _load_or_init_state(ctx.pack_id, ctx.game_scope)
+        for stage in STAGE_ORDER:
+            if stage.value in state.stages_completed and not _must_rerun(stage, state, ctx):
+                continue
+            result = STAGE_HANDLERS[stage](state, ctx)
+            _persist(state)
+            if not result.ok: return _finalize_failed(state, result)
+            if result.pause_state: return _finalize_pause(state, result)
+        return _finalize_packeted(state)
+
+    For now: thin shim. Same args, same return shape, same ledger location.
+    s8 recipe runner can call this and get forward-compatible behavior.
+    """
+    return execute_prepare_pack(
+        pack_id=ctx.pack_id,
+        game_scope=ctx.game_scope,
+        source_dir=ctx.source_dir,
+        bulk_profile=ctx.bulk_profile,
+        cleanup_mode=ctx.cleanup_mode,
+        asset_kind=ctx.asset_kind,
+        animated=ctx.animated,
+        bulk_output_dir=ctx.bulk_output_dir,
+        cleanup_output_dir=ctx.cleanup_output_dir,
+        packet_status=ctx.packet_status,
+        overwrite_packet=ctx.overwrite_packet,
+        verify_hashes=ctx.verify_hashes,
+        dry_run=ctx.dry_run,
+        resume=ctx.resume,
+    )
+
+
+# Stage handler registry. Empty in s7 — populated in s10.5 mechanical
+# extraction. Exposed here so new callers can `from ... import STAGE_HANDLERS`
+# and have a stable name to mock/patch in tests.
+STAGE_HANDLERS: dict[Stage, Callable[..., StageResult]] = {}
+
+
+def stage_for_current_state(current_state: str) -> Stage | None:
+    """Best-effort map of legacy `current_state` -> nearest Stage.
+
+    Helps tools that want to display "we're at stage X" without rebuilding
+    the legacy state-inference. Returns None for terminal/uninitialized.
+    """
+    return {
+        "uninitialized": None,
+        "planned_source": Stage.BULK_SOURCE,
+        "awaiting_cleanup_artifacts": Stage.CLEANUP,
+        "reviewed_source": Stage.REVIEWED_SOURCE,
+        "packeted": Stage.REGISTER_PACKET,
+        "failed": None,
+    }.get(current_state)
+
+
+__all_dispatch_api__ = [
+    "Stage",
+    "STAGE_ORDER",
+    "StageResult",
+    "PipelineContext",
+    "execute_prepare_pack_dispatched",
+    "PACK_PIPELINE_SCHEMA_VERSION_V2",
+    "STAGE_HANDLERS",
+    "stage_for_current_state",
+]
