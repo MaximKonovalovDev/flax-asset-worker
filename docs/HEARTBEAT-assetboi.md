@@ -229,6 +229,60 @@ Loop continues per Rule 3. No pause.
 
 ---
 
+## Update 2026-05-11 (rev 6 — v1.6 4/5 slices shipped after BOSS resume)
+
+**BOSS resumed the loop at "loop forever in flax-asset-worker repo" with
+goal: write 5 new FAW v1.6 slices and ship one (or more).**
+
+**Shipped 4 of 5 v1.6 slices** in the resumed loop:
+
+| Slice | Tag | What |
+|---|---|---|
+| **s5** | `v1.6.0-recipe-validator` | Recipe schema validator + `pack validate` CLI; 27 tests |
+| **s1** | `v1.6.1-inline-recipes` | `pack from-recipe` 3-mode source (path/stdin/`--inline-yaml`); unlocks facade |
+| **s3** | `v1.6.2-pack-audit` | `pack audit` CLI + `GET /api/v1/packs/audit` HTTP; ledger inventory |
+| **s2** | `v1.6.3-asset-lookup` | `library asset <id>` CLI + `GET /api/v1/library/asset/{id}` HTTP |
+
+Only **s4** (Quaternius + OpenGameArt direct_url providers) remains in
+the v1.6 backlog. Honest cost: ~2-3 hours for Quaternius alone (CC0 ZIP
+flow, similar to Kenney's 403-line runner). OGA needs HTML scraping +
+per-asset license parsing, more involved. **Deferred to a future
+session, not blocking.**
+
+**Cumulative final-state metrics:**
+
+| Metric | Value |
+|---|---|
+| Commits this turn (since `0b1ad7d` baseline) | **51** |
+| Tags on origin | **15** |
+| Test suite | **285 passed, 1 skipped, 0 failed** |
+| Net LOC reduction | **-24,487** (~50k → ~25k) |
+| Recipes shipped | 4 (primitive_tech, roman, sandbox/one_pack, sandbox/generator) |
+| Acquisition providers wired | 11 (4 direct_url + 4 manual_browser + 3 generator with aliases) |
+| HTTP endpoints | 11 |
+| Typer sub-apps | 7 (fab, library, import, unity, epic, gen, pack) |
+| Typer commands | 27 |
+| Docs shipped | 7 (README, ROADMAP, SETUP, COMMIT_READY, PATH_B_DAY11_PLAN, MONOREPO_FACADE_DESIGN, HEARTBEAT) |
+
+**What the flax-mcp facade can now do (unlocked by v1.6.0-v1.6.3):**
+
+1. **Send recipe content inline** via `recipe_yaml_text` body field
+   (v1.6.s1) — no on-disk recipe dependency for the facade.
+2. **Inventory all pack runs** via `GET /api/v1/packs/audit` — dashboard
+   data for "show me all pack runs across all games."
+3. **Look up single asset metadata** via `GET /api/v1/library/asset/{id}`
+   — facade can inspect license/provenance/file path of any installed
+   asset.
+4. **Validate recipes server-side** by calling `python -m assetboy.cli
+   pack validate <path> --json` as a pre-flight check before the
+   facade fires `pack from-recipe`.
+
+**Path B v1.6 contract is now complete in this repo. The remaining work
+(monorepo facade MCP atomics) lives in `flax-mcp/plugins/flax-asset-worker/`
+and is Lane E broker scope.**
+
+---
+
 ## Update 2026-05-11 (rev 5 — operator-wake-up read-once consolidation)
 
 > **If you're reading this as the operator waking up after hibernation:**
