@@ -25,6 +25,14 @@ recipe:
     Use for fast iteration on acquisition_router / pack_pipeline.
   output_folder: "Content/Sandbox/OnePackSmoke"
 
+  # v1.11.14 discovery metadata
+  genre: smoke_test
+  tags:
+    - smoke-test
+    - cc0-only
+    - single-pack
+    - polyhaven
+
 packs:
 
   - id: SANDBOX_POLY_TEX_BRICK_WALL_01

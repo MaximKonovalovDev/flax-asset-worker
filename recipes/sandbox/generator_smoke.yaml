@@ -23,6 +23,13 @@ recipe:
     full game recipe.
   output_folder: "Content/Sandbox/GeneratorSmoke"
 
+  # v1.11.14 discovery metadata
+  genre: smoke_test
+  tags:
+    - smoke-test
+    - generator-lane
+    - ai-generated
+
 packs:
 
   # ------------------------------------------------------------------

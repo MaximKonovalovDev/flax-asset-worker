@@ -10,6 +10,20 @@ recipe:
   output_folder: Content/Recipes/RomanArena_FirstPlayable
   ported_from: Python/assetboy/data/roman_first_playable_specs.yaml
   ported_at_utc: '2026-05-10T00:00:00Z'
+
+  # v1.11.14 discovery metadata
+  genre: action_combat
+  theme:
+    - ancient_rome
+    - gladiator
+    - historical
+  style:
+    - realistic_pbr
+  tags:
+    - first-playable
+    - arena
+    - characters
+    - vertical-slice
 packs:
 - id: RA_PACK_CHR_CORE_SLICE_01
   category: character_base

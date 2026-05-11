@@ -23,6 +23,20 @@ recipe:
     through night. Forest exterior only; no dungeons, no NPCs (yet).
   flax_project_default: "C:/flax/flax-mcp/Project/TestGame"
   output_folder: "Content/Recipes/PrimitiveTech_FirstPlayable"
+
+  # v1.11.14 discovery metadata
+  genre: survival
+  theme:
+    - prehistoric
+    - stone_age
+    - wilderness
+  style:
+    - realistic_pbr
+  tags:
+    - first-playable
+    - forest
+    - cc0-only
+    - vertical-slice
   perf_target:
     visible_lod0_trees: 100
     foliage_cull_m: 80
