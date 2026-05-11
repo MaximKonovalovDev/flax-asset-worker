@@ -171,6 +171,75 @@ Auth via Playwright + Adobe login is needed for Mixamo flows. Browser flow
 is handled by the standalone `mixamo_auth.py` provider; covered by tests
 but full E2E setup is your call.
 
+### 5.5 Public-API providers (env-var keys, all FREE) — v1.10+ R1A
+
+Five providers from the R1A public-API integration require API keys.
+All have generous free tiers. Set the env var in your shell (PowerShell:
+`$env:NAME = "value"` for the session, or User Variables for permanent).
+
+| Provider | Env var | Free tier | Signup link |
+|---|---|---|---|
+| **Pexels** (photos + videos) | `PEXELS_API_KEY` | 200/hr, 20k/mo | https://www.pexels.com/api/new/ |
+| **Pixabay** (photos + vectors + videos) | `PIXABAY_API_KEY` | 100/min, unlimited | https://pixabay.com/api/docs/ |
+| **Unsplash** (photos) | `UNSPLASH_ACCESS_KEY` | 50/hr demo mode | https://unsplash.com/developers |
+| **RAWG.io** (game DB) | `RAWG_API_KEY` | 20k req/mo | https://rawg.io/apidocs |
+| **Jamendo** (CC music) | `JAMENDO_CLIENT_ID` | typically unlimited | https://developer.jamendo.com/ |
+
+The remaining FIVE R1A providers need NO key:
+
+| Provider | License | Notes |
+|---|---|---|
+| **Met Museum** | CC0 | Open Access works only |
+| **Wikimedia Commons** | CC0/CC-BY/CC-BY-SA/PD | License-filtered automatically |
+| **Archive.org** | CC/PD per item | License-filtered automatically |
+| **Scryfall** | CC-BY-SA-4.0 | MTG card art; attribution to WotC + artist |
+| **Iconify** | MIT/Apache/CC0/OFL | 150+ icon sets, SPDX-filtered |
+
+#### Quick scout commands (after setting keys)
+
+```powershell
+# No-key providers (always works):
+python -m assetboy.cli gen all-no-key --query "stone wall" --count 2 --dry-run
+
+# Key-required providers (skips missing-key ones gracefully):
+python -m assetboy.cli gen all-key --query "fire" --count 2 --dry-run
+
+# All key providers + video providers (Pexels+Pixabay video):
+python -m assetboy.cli gen all-key --query "fire" --include-video --dry-run
+```
+
+#### Single-provider commands
+
+```powershell
+# Free no-key:
+python -m assetboy.cli gen met-museum fetch --query "roman fresco" -n 4
+python -m assetboy.cli gen wikimedia fetch --query "stone wall texture" -n 6
+python -m assetboy.cli gen archive-org fetch --query "subject:roman" --mediatype image -n 4
+python -m assetboy.cli gen scryfall fetch --query "type:dragon" --variant art_crop -n 8
+python -m assetboy.cli gen iconify fetch --query "sword" --width 64 -n 20
+
+# Key required:
+python -m assetboy.cli gen pexels photos --query "stone" -n 4
+python -m assetboy.cli gen pexels videos --query "fire" --max-height 1080 -n 2
+python -m assetboy.cli gen pixabay photos --query "leaf" --image-type vector -n 8
+python -m assetboy.cli gen pixabay videos --query "rain" --variant medium -n 4
+python -m assetboy.cli gen unsplash photos --query "fog forest" --orientation landscape -n 6
+python -m assetboy.cli gen rawg games --query "roguelike" --max-screenshots 3 -n 4
+python -m assetboy.cli gen jamendo tracks --query "ambient cinematic" -n 3
+```
+
+#### License/attribution notes
+
+- **Attribution-FREE** (most permissive): Met, Wikimedia (CC0 items),
+  Pexels, Pixabay (CC0-equivalent), Unsplash, Iconify CC0/Unlicense sets.
+- **Attribution-REQUIRED**: Wikimedia CC-BY/SA items, Archive.org CC-BY,
+  Scryfall (credit Wizards of the Coast + per-card artist), Iconify
+  CC-BY/SA/GPL sets, Jamendo CC-BY/SA tracks.
+  All runners capture artist/license data in their JSON manifests for
+  downstream credit handling.
+- **Reference-ONLY** (do NOT redistribute): RAWG images (publisher-copyrighted).
+  The CLI prints a USE_POLICY banner and the manifest carries `use_policy_notice`.
+
 ---
 
 ## 6. Configure generators (for the generator lane)
