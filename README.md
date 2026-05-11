@@ -55,6 +55,17 @@ python -m assetboy.cli gen jamendo tracks -q "ambient cinematic" -n 3
 
 # End-to-end recipe smoke (5 no-key providers in one recipe):
 python -m assetboy.cli pack from-recipe sandbox/r1a_smoke.yaml --dry-run
+
+# Interactive API key setup (free signup links + state display):
+pwsh ./scripts/setup-r1a-keys.ps1
+
+# Discover recipes by metadata (v1.11.14+):
+python -m assetboy.cli pack list-recipes --filter tags:smoke-test
+python -m assetboy.cli pack list-recipes --filter genre:survival
+python -m assetboy.cli pack list-recipes --filter theme:fantasy --filter style:mixed
+
+# Catalog ALL gen providers (R1A + ComfyUI + sd) with env-key state:
+python -m assetboy.cli gen list-providers
 ```
 
 ---
