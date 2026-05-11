@@ -8,9 +8,35 @@ from assetboy.library.paths import download_queue_csv, manual_drop_pack_dir, pub
 
 
 class ProviderLane(str, Enum):
+    """Acquisition method for getting bytes from a provider.
+
+    Three values:
+        DIRECT_URL       — open URL, download file, done. CC0 sources mostly.
+        MANUAL_BROWSER   — operator clicks through a browser-gated UI; we stage
+                           the result. Used for Fab, Epic vault, etc.
+        GENERATOR        — AI/Colab/local-SD generates the asset; we stage
+                           the output with provenance.
+
+    NOTE on naming: This enum is also exported under the more accurate name
+    ``AcquisitionMethod`` (see alias below) — these are the same enum, two
+    names. The original name ``ProviderLane`` collides semantically with C#-side
+    ``ILane`` (a 6-step pipeline). Python ``ProviderLane`` is "how do we GET the
+    bytes"; C# ``ILane`` is "what do we DO with bytes". They don't conflict
+    logically but the name overload was confusing for ~1 year.
+
+    Per Path B s4 (2026-05-10): both names work. Bulk rename to
+    ``AcquisitionMethod`` only happens in a future slice once cli.py rewrite
+    settles (s5/s6). New code should prefer ``AcquisitionMethod``.
+    """
+
     DIRECT_URL = "direct_url"
     MANUAL_BROWSER = "manual_browser"
     GENERATOR = "generator"
+
+
+# Canonical alias — preferred name in new code.
+# ``AcquisitionMethod is ProviderLane`` holds True (same class object, no copy).
+AcquisitionMethod = ProviderLane
 
 
 _LANE_ALIASES: dict[str, ProviderLane] = {

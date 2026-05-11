@@ -13,7 +13,13 @@ from assetboy.providers.legendary_bridge import (
     install_legendary_asset,
     list_legendary_ue_assets,
 )
-from assetboy.providers.lanes import LANE_POLICIES, ProviderLane, SourceAdapter, adapters_for_lane
+from assetboy.providers.lanes import (
+    LANE_POLICIES,
+    AcquisitionMethod,  # canonical alias; same enum as ProviderLane
+    ProviderLane,
+    SourceAdapter,
+    adapters_for_lane,
+)
 from assetboy.providers.marketplace_ops import ClaimMethod, emit_marketplace_claim_job
 from assetboy.providers.provider_readiness import build_provider_readiness_report, render_provider_readiness_report
 from assetboy.providers.runbooks import build_provider_runbook_payload, provider_runbook_ids, render_provider_runbook
@@ -21,6 +27,7 @@ from assetboy.providers.unity_runner import emit_unity_export_runner, list_unity
 from assetboy.providers.unreal_runner import emit_unreal_export_runner, list_unreal_installations
 
 __all__ = [
+    "AcquisitionMethod",  # canonical name (alias of ProviderLane)
     "ProviderLane",
     "SourceAdapter",
     "LANE_POLICIES",
