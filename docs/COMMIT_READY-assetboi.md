@@ -935,3 +935,110 @@ All of these go to delete when cli_legacy goes in s10.5. The blender_runner refe
 - `docs/COMMIT_READY-assetboi.md` (this entry)
 
 **Next:** s2.5b — strip 33 DEAD imports inside cli_legacy.py so the file at least loads (defers actual delete to s10.5 which does mechanical pack_pipeline body extract first).
+
+---
+
+## Slice s2.6e — Day 11 delete 9 more DEAD workflows + rewire blender_runner (-3075 LOC) (2026-05-11)
+
+**Status:** SHIPPED.
+
+**Pivot decision:** instead of s2.5b (cosmetic — strip cli_legacy imports of files we've already deleted), do the higher-leverage s2.6 final pass: delete the 9 DEAD workflow files. The blocker was `execution/blender_runner.py:22` importing from `roman_first_playable.py` — rewire that to read from parked YAML, then everything unblocks.
+
+**What shipped:**
+
+### 1. Rewired `execution/blender_runner.py` to load Roman specs from parked YAML
+
+- **Removed import** line 22: `from assetboy.workflows.roman_first_playable import get_roman_first_playable_spec, roman_first_playable_specs`
+- **Added module-level shim classes** (~90 LOC):
+  - `_LaneValue` — lightweight stand-in for `ProviderLane` enum (only `.value` attribute access needed)
+  - `_RomanSpecShim` — dataclass with the 8 fields blender_runner actually reads (`pack_id`, `roman_category`, `blender_required`, `asset_kind`, `animated`, `bootstrap_lane` (with `.value`), `source_adapter`, `fallback_adapters`)
+  - `_CACHED_ROMAN_SPECS` module-level cache
+- **Replacement functions:**
+  - `roman_first_playable_specs() -> tuple[_RomanSpecShim, ...]` — reads `assetboy/data/roman_first_playable_specs.yaml` (s2 parked extraction), tolerant of missing PyYAML / missing file / parse errors. Returns 14 specs (11 main + 3 default-only).
+  - `get_roman_first_playable_spec(pack_id) -> _RomanSpecShim | None` — linear scan lookup.
+- **Behavior preserved:** the 2 callsites at lines 295/297 in `run_roman_blender_cleanup_wave()` still work — spec.pack_id, spec.bootstrap_lane.value, spec.fallback_adapters, etc. all resolve identically.
+
+### 2. Deleted 5 truly-orphaned workflow examples (no importers anywhere except cli_legacy which is itself broken)
+
+| File | Lines |
+|---|---|
+| `workflows/pack_family_plan.py` | 384 |
+| `workflows/execution_kit.py` | 355 |
+| `workflows/audio_examples.py` | 102 |
+| `workflows/category_examples.py` | 231 |
+| `workflows/cleanup_examples.py` | 224 |
+| **Subtotal** | **1,296** |
+
+### 3. Cleaned `workflows/__init__.py` re-exports
+
+- **Removed** lines 5-13: imports of `roman_launchers`, `roman_source_presets`, `roman_blockers`.
+- **Removed** lines 22-30 in `__all__`: `RomanLauncherManifestArtifacts`, `emit_roman_launcher_manifest`, `RomanSourcePresetArtifacts`, `emit_roman_source_presets`, `RomanBlockerPlan`, `build_summary_markdown`, `format_planned_blockers`, `plan_roman_blockers`, `write_plan_outputs`.
+- **Kept** `gate_report` + `pack_pipeline` re-exports.
+- File shrunk from 31 lines to 19 lines.
+
+### 4. Deleted 4 Roman workflow files (now reachable for deletion after rewires)
+
+| File | Lines |
+|---|---|
+| `workflows/roman_first_playable.py` | 776 |
+| `workflows/roman_blockers.py` | 355 |
+| `workflows/roman_launchers.py` | 279 |
+| `workflows/roman_source_presets.py` | 369 |
+| **Subtotal** | **1,779** |
+
+**Total this slice: -3,075 LOC deleted (1,296 + 1,779) + ~90 LOC added (blender_runner YAML shim).**
+
+### Verification
+
+```
+=== blender_runner imports + YAML load ===
+blender_runner imports OK
+roman_first_playable_specs() returned 14 entries
+first spec: pack_id=RA_PACK_CHR_CORE_SLICE_01, roman_category=characters,
+            blender_required=True, bootstrap_lane.value=manual_browser
+get_roman_first_playable_spec lookup OK: RA_PACK_CHR_CORE_SLICE_01
+
+=== all KEEP modules import after 9 deletes ===
+all KEEP modules import OK
+
+=== canary tests ===
+26 passed in 2.27s
+
+=== CLI 7 sub-apps ===
+python -m assetboy.cli --help    -> 7 sub-apps cleanly
+
+=== pack list-recipes ===
+primitive_tech (9 packs) + roman_arena (14 packs) -> both loadable
+
+=== file count remaining ===
+69 Python files (~929 KB), down from ~90 files pre-Path-B
+```
+
+### Path B v1.2 cumulative progress (6 commits this turn since v1.1.0 tag)
+
+| Commit | What | Net LOC |
+|---|---|---|
+| `588c901` s2.6a | provider_readiness rewire | -8 / +90 |
+| `928b252` s2.6b | __init__ + browser_automation + freesound playwright neuter | -27 / +99 |
+| `94e501e` s2.6c | flax_wrapper drop 10 deads + stub bulk | **-362** |
+| `c5839e3` s2.6d | bulk delete 13 DEAD files | **-6,176** |
+| `<this>` s2.6e | delete 9 more workflows + blender_runner rewire | **-3,075** |
+
+**Total v1.2 net code reduction: -9,549 lines so far.** Plus -8,495 pending when cli_legacy goes in s10.5.
+
+### Files staged for commit
+
+- `Python/assetboy/execution/blender_runner.py` (MODIFIED, +90 lines YAML shim, -1 import)
+- `Python/assetboy/workflows/__init__.py` (REWRITTEN, 31 -> 19 lines)
+- `Python/assetboy/workflows/pack_family_plan.py` (DELETED, 384)
+- `Python/assetboy/workflows/execution_kit.py` (DELETED, 355)
+- `Python/assetboy/workflows/audio_examples.py` (DELETED, 102)
+- `Python/assetboy/workflows/category_examples.py` (DELETED, 231)
+- `Python/assetboy/workflows/cleanup_examples.py` (DELETED, 224)
+- `Python/assetboy/workflows/roman_first_playable.py` (DELETED, 776)
+- `Python/assetboy/workflows/roman_blockers.py` (DELETED, 355)
+- `Python/assetboy/workflows/roman_launchers.py` (DELETED, 279)
+- `Python/assetboy/workflows/roman_source_presets.py` (DELETED, 369)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+**Next:** s10.5 — mechanical pack_pipeline body extract + delete cli_legacy.py. After that v1.2 polish + tag v1.2.0.

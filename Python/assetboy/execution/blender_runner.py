@@ -19,7 +19,96 @@ from typing import Sequence
 
 from assetboy.cleanup.blender_mcp import CleanupPlan, build_cleanup_plan
 from assetboy.library.paths import generated_output_root, manual_drop_dir, publish_payload_dir
-from assetboy.workflows.roman_first_playable import get_roman_first_playable_spec, roman_first_playable_specs
+
+# ---------------------------------------------------------------------------
+# Path B s2.6e (2026-05-11): Roman specs loaded from parked YAML instead of
+# importing from workflows/roman_first_playable.py (DEAD-pending; goes in s10.5).
+# The legacy Python module had a RomanFirstPlayableSpec dataclass with 23
+# fields + a bootstrap_lane: ProviderLane enum. We only need 8 fields here.
+# ---------------------------------------------------------------------------
+
+
+class _LaneValue:
+    """Lightweight stand-in for ProviderLane enum (.value attribute access)."""
+    __slots__ = ("value",)
+    def __init__(self, value: str) -> None:
+        self.value = value
+
+
+@dataclass
+class _RomanSpecShim:
+    """Subset of the legacy RomanFirstPlayableSpec used by blender_runner.
+
+    Built from `data/roman_first_playable_specs.yaml` (Path B s2 extract).
+    Exposes only the 8 fields blender_runner reads:
+      pack_id, roman_category, blender_required, asset_kind, animated,
+      bootstrap_lane (with .value), source_adapter, fallback_adapters.
+    """
+    pack_id: str
+    roman_category: str
+    blender_required: bool
+    asset_kind: str
+    animated: bool
+    bootstrap_lane: _LaneValue
+    source_adapter: str
+    fallback_adapters: tuple[str, ...] = ()
+
+
+_CACHED_ROMAN_SPECS: tuple[_RomanSpecShim, ...] | None = None
+
+
+def roman_first_playable_specs() -> tuple[_RomanSpecShim, ...]:
+    """Load Roman specs from parked YAML; cached on first call."""
+    global _CACHED_ROMAN_SPECS
+    if _CACHED_ROMAN_SPECS is not None:
+        return _CACHED_ROMAN_SPECS
+    try:
+        import yaml
+    except ImportError:
+        _CACHED_ROMAN_SPECS = ()
+        return _CACHED_ROMAN_SPECS
+    yaml_path = (
+        Path(__file__).resolve().parent.parent
+        / "data"
+        / "roman_first_playable_specs.yaml"
+    )
+    if not yaml_path.exists():
+        _CACHED_ROMAN_SPECS = ()
+        return _CACHED_ROMAN_SPECS
+    try:
+        doc = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        _CACHED_ROMAN_SPECS = ()
+        return _CACHED_ROMAN_SPECS
+    data = (doc.get("data") or {})
+    raw_specs = list(data.get("main_specs") or []) + list(data.get("default_only_specs") or [])
+    specs: list[_RomanSpecShim] = []
+    for entry in raw_specs:
+        if not isinstance(entry, dict):
+            continue
+        lane_raw = str(entry.get("bootstrap_lane") or "manual_browser")
+        specs.append(
+            _RomanSpecShim(
+                pack_id=str(entry.get("pack_id", "")),
+                roman_category=str(entry.get("roman_category", "")),
+                blender_required=bool(entry.get("blender_required", False)),
+                asset_kind=str(entry.get("asset_kind", "prop")),
+                animated=bool(entry.get("animated", False)),
+                bootstrap_lane=_LaneValue(lane_raw),
+                source_adapter=str(entry.get("source_adapter", "")),
+                fallback_adapters=tuple(str(x) for x in (entry.get("fallback_adapters") or [])),
+            )
+        )
+    _CACHED_ROMAN_SPECS = tuple(specs)
+    return _CACHED_ROMAN_SPECS
+
+
+def get_roman_first_playable_spec(pack_id: str) -> _RomanSpecShim | None:
+    """Look up a single spec by pack_id. Returns None if not found."""
+    for spec in roman_first_playable_specs():
+        if spec.pack_id == pack_id:
+            return spec
+    return None
 
 
 @dataclass
