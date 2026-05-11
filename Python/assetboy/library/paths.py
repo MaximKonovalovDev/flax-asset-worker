@@ -23,12 +23,24 @@ def _workspace_config(current_file: str | Path | None = None) -> dict[str, objec
 
 
 def project_root(current_file: str | Path | None = None) -> Path:
-    """Resolve the target Flax workspace root for the vendored asset factory."""
+    """Resolve the target Flax workspace root for the vendored asset factory.
+
+    Lookup order (Path B v1.3 — added self-hosting fallback 2026-05-11):
+      1. ``ASSETBOY_FLAX_REPO_ROOT`` env var override.
+      2. ``flax_repo_root`` key in ``assetboy.workspace.json`` next to the package.
+      3. Parent-directory probe: if any parent has ``GameProjectFlax/`` AND
+         ``AGENTS.md``, use that (game-factory layout).
+      4. **Self-hosting fallback** (NEW): use ``assetboy_root()`` itself as
+         the workspace. The standalone flax-asset-worker repo is its own
+         project; artifacts land under ``<repo>/artifacts/...``.
+
+    Never raises. Code that needs to enforce "configured workspace required"
+    can check ``is_workspace_configured()`` before calling this.
+    """
     override = os.getenv("ASSETBOY_FLAX_REPO_ROOT", "").strip()
     if override:
         return Path(override).resolve()
 
-    config_path = _workspace_config_path(current_file)
     data = _workspace_config(current_file)
     configured = str(data.get("flax_repo_root", "")).strip()
     if configured:
@@ -42,12 +54,30 @@ def project_root(current_file: str | Path | None = None) -> Path:
         if (candidate / "GameProjectFlax").exists() and (candidate / "AGENTS.md").exists():
             return candidate.resolve()
 
-    raise FileNotFoundError(
-        "The vendored asset factory could not resolve the Flax workspace root. "
-        f"Checked ASSETBOY_FLAX_REPO_ROOT, `{config_path}`, and parent candidates `{', '.join(str(path) for path in candidates)}`. "
-        f"Set ASSETBOY_FLAX_REPO_ROOT or create `{config_path.name}` with "
-        "{\"flax_repo_root\": \"C:\\\\path\\\\to\\\\flax repo\"}."
-    )
+    # Self-hosting fallback: standalone FAW repo is its own workspace.
+    return app_root.resolve()
+
+
+def is_workspace_configured(current_file: str | Path | None = None) -> bool:
+    """Return True if a real Flax workspace (env / json / discovered) is set.
+
+    Returns False when we're using the self-hosting fallback. Useful for
+    code paths that want to gate "real-mode" behavior (e.g. acquisition
+    router's non-dry-run path).
+    """
+    if os.getenv("ASSETBOY_FLAX_REPO_ROOT", "").strip():
+        return True
+    data = _workspace_config(current_file)
+    if str(data.get("flax_repo_root", "")).strip():
+        return True
+    app_root = assetboy_root(current_file)
+    candidates = [app_root.parent]
+    if app_root.parent.parent != app_root.parent:
+        candidates.append(app_root.parent.parent)
+    for candidate in candidates:
+        if (candidate / "GameProjectFlax").exists() and (candidate / "AGENTS.md").exists():
+            return True
+    return False
 
 
 def asset_library_root(repo_root: str | Path | None = None) -> Path:

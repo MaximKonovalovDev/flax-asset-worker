@@ -23,19 +23,25 @@ class WorkspacePathTests(unittest.TestCase):
                 with patch.dict("os.environ", {"ASSETBOY_FLAX_REPO_ROOT": ""}, clear=False):
                     self.assertEqual(paths.project_root(), repo_root.resolve())
 
-    def test_project_root_error_mentions_workspace_json_path(self) -> None:
+    def test_project_root_falls_back_to_assetboy_root_when_no_workspace(self) -> None:
+        """Path B v1.3 (2026-05-11): project_root no longer raises when
+        nothing is configured; it self-hosts at assetboy_root() instead.
+
+        Old contract (game-factory era): FileNotFoundError mentioning
+        ``assetboy.workspace.json``. Standalone FAW doesn't need a
+        workspace config to function — its own repo IS the workspace.
+        """
         with TemporaryDirectory() as temp_dir:
             app_root = Path(temp_dir) / "AssetBoy"
             app_root.mkdir(parents=True, exist_ok=True)
 
             with patch.object(paths, "assetboy_root", return_value=app_root):
                 with patch.dict("os.environ", {"ASSETBOY_FLAX_REPO_ROOT": ""}, clear=False):
-                    with self.assertRaises(FileNotFoundError) as context:
-                        paths.project_root()
-
-        message = str(context.exception)
-        self.assertIn("assetboy.workspace.json", message)
-        self.assertIn(str(app_root / "assetboy.workspace.json"), message)
+                    # No longer raises -- returns assetboy_root() itself.
+                    result = paths.project_root()
+                    self.assertEqual(result, app_root.resolve())
+                    # is_workspace_configured() correctly reports False here.
+                    self.assertFalse(paths.is_workspace_configured())
 
     def test_asset_library_root_uses_workspace_json_override_when_env_is_missing(self) -> None:
         with TemporaryDirectory() as temp_dir:
