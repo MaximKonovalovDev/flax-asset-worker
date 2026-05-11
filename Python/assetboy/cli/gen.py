@@ -76,6 +76,12 @@ pexels_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
 )
+pixabay_app = typer.Typer(
+    name="pixabay",
+    help="Pixabay CC0-equivalent photos + videos + vectors (requires PIXABAY_API_KEY env).",
+    add_completion=False,
+    no_args_is_help=True,
+)
 
 app.add_typer(comfy_app, name="comfyui")
 app.add_typer(sd_app, name="sd")
@@ -85,6 +91,7 @@ app.add_typer(archive_app, name="archive-org")
 app.add_typer(scryfall_app, name="scryfall")
 app.add_typer(iconify_app, name="iconify")
 app.add_typer(pexels_app, name="pexels")
+app.add_typer(pixabay_app, name="pixabay")
 
 
 # --------------------------------------------------------------------------- #
@@ -1461,6 +1468,163 @@ def pexels_videos_cmd(
             print(f"gen_pexels_videos_manifest={result.manifest_path}")
         if result.error:
             print(f"gen_pexels_videos_note={result.error}")
+
+    if not result.ok:
+        raise typer.Exit(code=1)
+
+
+# --------------------------------------------------------------------------- #
+# gen pixabay photos / videos  (v1.10.s32)
+# --------------------------------------------------------------------------- #
+
+@pixabay_app.command("photos")
+def pixabay_photos_cmd(
+    query: Annotated[str, typer.Option("--query", "-q")],
+    count: Annotated[int, typer.Option("--count", "-n")] = 6,
+    image_type: Annotated[
+        str,
+        typer.Option(
+            "--image-type",
+            help="photo | illustration | vector | all (default: photo).",
+        ),
+    ] = "photo",
+    variant: Annotated[
+        str,
+        typer.Option(
+            "--variant",
+            help="URL key: largeImageURL | fullHDURL | imageURL | webformatURL | previewURL.",
+        ),
+    ] = "largeImageURL",
+    pack_id: Annotated[str, typer.Option("--pack-id")] = "",
+    output_dir: Annotated[Path, typer.Option("--output-dir")] = Path(""),
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Fetch CC0-equivalent photos/illustrations/vectors from Pixabay.
+
+    Pixabay Content License = CC0-equivalent (free personal+commercial, no attrib).
+    Requires PIXABAY_API_KEY env (free signup at pixabay.com/api/docs/).
+
+    Examples:
+      assetboy gen pixabay photos -q "stone wall" -n 6
+      assetboy gen pixabay photos -q "fantasy castle" --image-type illustration -n 4
+      assetboy gen pixabay photos -q "leaf" --image-type vector -n 8
+    """
+    from assetboy.execution.pixabay_runner import run_pixabay_photo_batch
+
+    out_dir_arg: Path | None = output_dir if str(output_dir) else None
+    pack_id_arg: str | None = pack_id if pack_id else None
+
+    try:
+        result = run_pixabay_photo_batch(
+            query=query, pack_id=pack_id_arg, count=count,
+            image_type=image_type, variant=variant,
+            output_dir=out_dir_arg, dry_run=dry_run,
+        )
+    except Exception as exc:
+        msg = f"pixabay_runner_crashed: {exc}"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_pixabay_photos_error={msg}")
+        raise typer.Exit(code=1)
+
+    summary = {
+        "ok": result.ok, "kind": "photos",
+        "pack_id": result.pack_id, "query": result.query,
+        "output_dir": str(result.output_dir),
+        "items_matched": result.items_matched,
+        "items_downloaded": result.items_downloaded,
+        "items_failed": result.items_failed,
+        "downloaded_paths": [str(p) for p in result.downloaded_paths],
+        "manifest_path": str(result.manifest_path) if result.manifest_path else None,
+        "dry_run": result.dry_run,
+        "error": result.error,
+    }
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"gen_pixabay_photos_pack_id={result.pack_id}")
+        print(f"gen_pixabay_photos_matched={result.items_matched}")
+        print(f"gen_pixabay_photos_downloaded={result.items_downloaded}")
+        print(f"gen_pixabay_photos_failed={result.items_failed}")
+        print(f"gen_pixabay_photos_output_dir={result.output_dir}")
+        if result.manifest_path:
+            print(f"gen_pixabay_photos_manifest={result.manifest_path}")
+        if result.error:
+            print(f"gen_pixabay_photos_note={result.error}")
+
+    if not result.ok:
+        raise typer.Exit(code=1)
+
+
+@pixabay_app.command("videos")
+def pixabay_videos_cmd(
+    query: Annotated[str, typer.Option("--query", "-q")],
+    count: Annotated[int, typer.Option("--count", "-n")] = 3,
+    variant: Annotated[
+        str,
+        typer.Option("--variant", help="large (1920x1080) | medium (1280x720, default) | small | tiny."),
+    ] = "medium",
+    pack_id: Annotated[str, typer.Option("--pack-id")] = "",
+    output_dir: Annotated[Path, typer.Option("--output-dir")] = Path(""),
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Fetch CC0-equivalent stock videos from Pixabay.
+
+    Requires PIXABAY_API_KEY. Twin to 'gen pexels videos' for redundancy.
+
+    Examples:
+      assetboy gen pixabay videos -q "fire" -n 2 --variant large
+      assetboy gen pixabay videos -q "rain" --variant medium -n 4
+    """
+    from assetboy.execution.pixabay_runner import run_pixabay_video_batch
+
+    out_dir_arg: Path | None = output_dir if str(output_dir) else None
+    pack_id_arg: str | None = pack_id if pack_id else None
+
+    try:
+        result = run_pixabay_video_batch(
+            query=query, pack_id=pack_id_arg, count=count, variant=variant,
+            output_dir=out_dir_arg, dry_run=dry_run,
+        )
+    except Exception as exc:
+        msg = f"pixabay_runner_crashed: {exc}"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_pixabay_videos_error={msg}")
+        raise typer.Exit(code=1)
+
+    summary = {
+        "ok": result.ok, "kind": "videos",
+        "pack_id": result.pack_id, "query": result.query,
+        "output_dir": str(result.output_dir),
+        "items_matched": result.items_matched,
+        "items_downloaded": result.items_downloaded,
+        "items_failed": result.items_failed,
+        "downloaded_paths": [str(p) for p in result.downloaded_paths],
+        "manifest_path": str(result.manifest_path) if result.manifest_path else None,
+        "dry_run": result.dry_run,
+        "error": result.error,
+    }
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"gen_pixabay_videos_pack_id={result.pack_id}")
+        print(f"gen_pixabay_videos_matched={result.items_matched}")
+        print(f"gen_pixabay_videos_downloaded={result.items_downloaded}")
+        print(f"gen_pixabay_videos_failed={result.items_failed}")
+        print(f"gen_pixabay_videos_output_dir={result.output_dir}")
+        if result.manifest_path:
+            print(f"gen_pixabay_videos_manifest={result.manifest_path}")
+        if result.error:
+            print(f"gen_pixabay_videos_note={result.error}")
 
     if not result.ok:
         raise typer.Exit(code=1)
