@@ -31,6 +31,14 @@ Cache/
 state/
 .pytest_cache/
 
+# Asset library + downloaded/generated content (per-machine, no git)
+# Lands under workspace root by default; ignore at repo root too in case
+# someone runs in self-hosting fallback mode (Path B v1.3+).
+artifacts/
+
+# Fab/Mixamo/Unity Hub auth state (per-user, no git, never share)
+.private/
+
 # Python
 __pycache__/
 *.py[cod]
