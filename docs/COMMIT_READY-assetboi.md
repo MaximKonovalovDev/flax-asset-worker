@@ -1352,3 +1352,84 @@ Effectively went from "26 of N tests pass" (canary only) to **"190 / 190 + 1 hon
 **Path B v1.2-v1.3 cumulative reduction:** -24,487 LOC (-21,442 at v1.2.1 + -3,045 this slice). From ~50k LOC pre-Path-B to ~25k LOC at v1.3.
 
 **Next:** s10.5b mechanical pack_pipeline body extract OR s11.1 ComfyUI/Stable Audio real integration OR tag v1.3.0. Continue.
+
+---
+
+## Slice v1.3.1.integration-tests — acquisition_router + Typer CLI smoke (2026-05-11)
+
+**Status:** SHIPPED. **214 passed, 1 skipped, 0 failed.**
+
+**Why this slice (Rule 3 pivot):** s10.5b (mechanical pack_pipeline body extract) was queued but its value is largely cosmetic — pack_pipeline already works via legacy body + the s7 Stage dispatch shim handles new callers. Refactoring 918 lines with 9 subtle behaviors locked in by 10 dedicated tests is high-risk-low-reward. Honest reframe: **build regression catchers for the v1.2/v1.3 deliverables instead**. acquisition_router (s11) and Typer CLI (s5/s6/s8) are net-new code with zero dedicated tests so far — that's the real coverage gap.
+
+**What shipped:**
+
+### 1. `Tests/python/test_acquisition_router.py` (NEW, 220 lines, 12 tests)
+
+12 integration tests covering the 3-lane router:
+
+**Public surface:**
+- `test_supported_methods_are_the_three_canonical_lanes` — verifies `SUPPORTED_METHODS == {"direct_url", "manual_browser", "generator"}`.
+- `test_unknown_method_returns_clean_error` — `acquisition_method="magic"` -> `ok=False`, error contains "unknown_method".
+- `test_missing_method_treated_as_unknown` — pack without `acquisition_method` field -> same error path.
+
+**direct_url lane:**
+- `test_direct_url_dry_run_polyhaven_returns_ok` — full pack + dry_run -> `ok=True`, `source_dir` set, `provider="polyhaven"`.
+- `test_direct_url_dry_run_kenney_returns_ok` — same for kenney.
+- `test_direct_url_unsupported_provider_returns_clean_error` — unknown provider -> `ok=False` with helpful message.
+
+**manual_browser lane (most thorough — 3 tests):**
+- `test_manual_browser_dry_run_returns_ok_with_drop_dir` — dry_run path.
+- `test_manual_browser_real_mode_emits_wait_marker` — uses `TemporaryDirectory` + `ASSETBOY_FLAX_REPO_ROOT` override. Verifies `.manual_browser_wait.json` file is created with correct JSON shape (pack_id, provider, method, operator_instructions).
+- `test_manual_browser_returns_ok_when_files_already_dropped` — first call emits marker (awaiting_manual=True); operator drops a file; second call returns `ok=True` with "manual drop complete" note.
+
+**generator lane:**
+- `test_generator_dry_run_returns_ok` — dry_run path.
+- `test_generator_comfyui_not_running_returns_clean_error` — patches `is_comfyui_running` to False -> clean `comfyui_not_running` error.
+- `test_generator_unsupported_provider_returns_error` — `provider="midjourney"` -> clean `unsupported_generator_provider` error.
+
+### 2. `Tests/python/test_cli_typer.py` (NEW, 110 lines, 12 tests)
+
+12 smoke tests covering the Typer CLI surface via `typer.testing.CliRunner`:
+
+**Root + 7 sub-apps:**
+- `test_root_help_shows_all_seven_sub_apps` — verifies fab/library/import/unity/epic/gen/pack are all listed.
+- `test_<sub_app>_sub_app_help_renders` (7 tests) — each sub-app's `--help` exits 0 and lists its commands.
+
+**Nested sub-app structure:**
+- `test_gen_comfyui_nested_help_renders` — `gen comfyui --help` shows `status`, `run`.
+- `test_gen_sd_nested_help_renders` — `gen sd --help` shows `run`.
+
+**Real (no-network) calls:**
+- `test_pack_list_recipes_runs_without_crash` — runs `pack list-recipes` end-to-end (YAML loader + recipe enumeration); verifies primitive_tech / roman_arena appear in stdout.
+- `test_fab_auth_status_runs_without_crash` — runs `fab auth-status` (disk-only read of FabHybridDownloader state); accepts exit 0 OR 1 as non-crash.
+
+### Verification
+
+```
+24/24 new tests pass:
+  Tests/python/test_acquisition_router.py: 12 passed
+  Tests/python/test_cli_typer.py: 12 passed
+
+Full test suite: 214 passed, 1 skipped, 0 failed (in 7.46s)
+                 (was: 190 passed, 1 skipped, 0 failed at v1.3.0)
+```
+
+### Coverage gains
+
+| Area | Pre-v1.3.1 | Post-v1.3.1 |
+|---|---|---|
+| acquisition_router (s11) | 0 tests | 12 tests |
+| Typer CLI (s5/s6/s8) | 0 tests | 12 tests |
+| canary (s1) | 26 tests | 26 tests |
+| paths (s0+v1.3) | 7 tests | 7 tests |
+| **Total dedicated v1.2-era code** | **33** | **57** |
+
+Path B v1.2/v1.3 net-new code (canary + cli/* + acquisition_router + paths fallback) now has **57 dedicated tests** + the 157 other inherited-and-still-green tests.
+
+### Files staged for commit
+
+- `Tests/python/test_acquisition_router.py` (NEW, 220 lines, 12 tests)
+- `Tests/python/test_cli_typer.py` (NEW, 110 lines, 12 tests)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+**Next:** s11.1 (real generator integration — ComfyUI workflow exec + Stable Audio Open Small + sd.cpp UI prompt batches), OR a HEARTBEAT summary doc for the operator's read-back when they wake up. Continue.
