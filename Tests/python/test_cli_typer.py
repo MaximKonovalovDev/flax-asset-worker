@@ -736,6 +736,51 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertIn("USE_POLICY", result.stdout)
 
+    # ----------------------------------------------------------------- #
+    # gen jamendo tracks (v1.10.s34)
+    # ----------------------------------------------------------------- #
+
+    def test_jamendo_tracks_help_renders(self) -> None:
+        result = self.runner.invoke(self.app, ["gen", "jamendo", "tracks", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Jamendo", result.stdout)
+        self.assertIn("CC", result.stdout)
+        self.assertIn("JAMENDO_CLIENT_ID", result.stdout)
+
+    def test_jamendo_tracks_missing_client_id_exits_1(self) -> None:
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("JAMENDO_CLIENT_ID", None)
+            result = self.runner.invoke(
+                self.app, ["gen", "jamendo", "tracks", "--query", "x", "--dry-run"],
+            )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("missing_client_id", result.stdout)
+
+    def test_jamendo_tracks_json_output_shape(self) -> None:
+        from unittest.mock import patch
+        from assetboy.execution.jamendo_runner import JamendoResult
+        import tempfile, json as _json
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = JamendoResult(
+                pack_id="P", query="q", output_dir=Path(tmp),
+                tracks_matched=5, tracks_accepted_license=3,
+                tracks_downloaded=3, tracks_skipped_restricted=2, ok=True,
+            )
+            with patch(
+                "assetboy.execution.jamendo_runner.run_jamendo_tracks_batch",
+                return_value=fake,
+            ):
+                result = self.runner.invoke(
+                    self.app, ["gen", "jamendo", "tracks", "--query", "q", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["tracks_downloaded"], 3)
+        self.assertEqual(data["tracks_skipped_restricted"], 2)
+
     def test_comfy_submit_workflow_help_renders(self) -> None:
         result = self.runner.invoke(
             self.app, ["gen", "comfyui", "submit-workflow", "--help"]
