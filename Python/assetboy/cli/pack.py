@@ -1471,6 +1471,17 @@ def manifest_stats_cmd(
             help="Directory to scan for *_manifest.json files (default: manual_drop_dir).",
         ),
     ] = Path(""),
+    source_filter: Annotated[
+        str,
+        typer.Option(
+            "--source",
+            help=(
+                "v1.12.s77: filter to one source only (e.g. 'met_museum',"
+                " 'wikimedia_commons', 'iconify'). Substring-match on the"
+                " manifest 'source' field."
+            ),
+        ),
+    ] = "",
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -1511,12 +1522,17 @@ def manifest_stats_cmd(
     total_skipped = 0
     total_bytes = 0
 
+    norm_filter = source_filter.strip().lower() if source_filter else ""
+
     for mf in manifests:
         try:
             doc = json.loads(mf.read_text(encoding="utf-8"))
         except Exception:
             continue
         src = str(doc.get("source", "unknown"))
+        # v1.12.s77 — source filter (substring, case-insensitive).
+        if norm_filter and norm_filter not in src.lower():
+            continue
         bucket = per_source.setdefault(src, {
             "manifests": 0,
             "downloaded": 0,
@@ -1560,6 +1576,8 @@ def manifest_stats_cmd(
     summary = {
         "root": str(scan_root),
         "manifests_scanned": len(manifests),
+        "manifests_after_filter": sum(b["manifests"] for b in per_source.values()),
+        "source_filter": norm_filter or None,
         "sources_seen": len(per_source),
         "total_downloaded": total_downloaded,
         "total_skipped": total_skipped,

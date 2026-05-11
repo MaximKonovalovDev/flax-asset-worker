@@ -1142,6 +1142,45 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("met_museum", data["by_source"])
         self.assertIn("wikimedia_commons", data["by_source"])
 
+    def test_pack_manifest_stats_source_filter_scopes_results(self) -> None:
+        """v1.12.s77: --source met_museum filters out other sources."""
+        import tempfile, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "met").mkdir()
+            (tmp_p / "met" / "met_museum_manifest.json").write_text(
+                _json.dumps({
+                    "source": "met_museum",
+                    "objects_downloaded": 5,
+                    "entries": [{"bytes": 1000}],
+                }), encoding="utf-8",
+            )
+            (tmp_p / "wm").mkdir()
+            (tmp_p / "wm" / "wikimedia_manifest.json").write_text(
+                _json.dumps({
+                    "source": "wikimedia_commons",
+                    "files_downloaded": 99,
+                    "entries": [{"bytes": 9999}],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "manifest-stats",
+                 "--root", str(tmp_p),
+                 "--source", "met_museum",
+                 "--json"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout.strip())
+        # 2 manifests scanned but only 1 met_museum kept.
+        self.assertEqual(data["manifests_scanned"], 2)
+        self.assertEqual(data["manifests_after_filter"], 1)
+        self.assertEqual(data["sources_seen"], 1)
+        self.assertEqual(data["total_downloaded"], 5)  # WM's 99 excluded
+        self.assertIn("met_museum", data["by_source"])
+        self.assertNotIn("wikimedia_commons", data["by_source"])
+        self.assertEqual(data["source_filter"], "met_museum")
+
     def test_pack_manifest_stats_missing_root_exits_1(self) -> None:
         result = self.runner.invoke(
             self.app, ["pack", "manifest-stats", "--root", "C:/nonexistent/path/xyz"],
