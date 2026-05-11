@@ -1042,3 +1042,96 @@ primitive_tech (9 packs) + roman_arena (14 packs) -> both loadable
 - `docs/COMMIT_READY-assetboi.md` (this entry)
 
 **Next:** s10.5 — mechanical pack_pipeline body extract + delete cli_legacy.py. After that v1.2 polish + tag v1.2.0.
+
+---
+
+## Slice s10.5a — Day 11 delete cli_legacy.py + 18 broken tests (-12,443 LOC) (2026-05-11)
+
+**Status:** SHIPPED.
+
+**Pivot decision:** PATH_B_DAY11_PLAN's s10.5 said "mechanical pack_pipeline body extract + delete cli_legacy." Splitting the slice in two: **s10.5a (THIS) ships the cli_legacy delete + broken-test cleanup right now** (zero risk to pack_pipeline; cli_legacy is already broken since s2.6d). **s10.5b (next)** does the actual pack_pipeline body extraction with the 3 risk tests peer-opus flagged.
+
+**What shipped:**
+
+### 1. Deleted `Python/assetboy/cli_legacy.py` (8,495 lines)
+
+The 386 KB monolithic argparse CLI. Already broken since s2.6d (imports `assetboy.providers.ai_bridge` which was deleted). Already shadowed by the new `cli/` Typer package since s5. No production importer.
+
+### 2. Deleted 18 broken test files (-3,948 lines)
+
+Tests that imported from cli_legacy or from now-DEAD modules. All were collection-errored before this slice:
+
+| Test file | Lines | Why broken |
+|---|---|---|
+| `Tests/python/test_cli_parser_commands.py` | 901 | `from assetboy.cli_legacy import build_parser` |
+| `Tests/python/test_publish_filters.py` | 20 | `from assetboy.cli_legacy import _filter_publish_packs, _is_example_pack_id` |
+| `Tests/python/test_generator_emit.py` | 66 | `from assetboy.cli_legacy import build_parser` |
+| `Tests/python/test_gate_report.py` | 48 | `from assetboy.cli_legacy import _default_gate_path` |
+| `Tests/python/test_ai_bridge.py` | 30 | imports deleted `assetboy.providers.ai_bridge` |
+| `Tests/python/test_blender_runner.py` | 155 | imports `RomanFirstPlayableSpec` (deleted in s2.6e) |
+| `Tests/python/test_browser_automation.py` | 1,668 | imports deleted playwright_runner |
+| `Tests/python/test_colab_runner.py` | 49 | imports deleted colab_runner |
+| `Tests/python/test_dialogue_runner.py` | 38 | imports deleted dialogue_runner |
+| `Tests/python/test_execution_kit.py` | 44 | imports deleted execution_kit |
+| `Tests/python/test_flax_wrapper_commands.py` | 310 | imports deleted MUSEUM_PRESETS |
+| `Tests/python/test_pack_family_plan.py` | 54 | imports deleted pack_family_plan |
+| `Tests/python/test_provider_runbooks.py` | 51 | imports deleted runbooks |
+| `Tests/python/test_quaternius_runner.py` | 54 | imports deleted quaternius_runner |
+| `Tests/python/test_roman_blockers.py` | 89 | imports deleted roman_blockers |
+| `Tests/python/test_roman_first_playable.py` | 110 | imports deleted roman_first_playable |
+| `Tests/python/test_roman_launchers.py` | 98 | imports deleted roman_launchers |
+| `Tests/python/test_roman_source_presets.py` | 163 | imports deleted roman_source_presets |
+
+### Slice metric
+
+- **-12,443 lines deleted** (cli_legacy 8,495 + 18 tests 3,948).
+- **0 lines added.**
+- Largest single-slice deletion of v1.2.
+
+### Test surface after deletion
+
+```
+Before s10.5a:  261 tests collected + 14 collection errors (= partial)
+After  s10.5a:  261 tests collected + 0 collection errors (= clean)
+                172 passing (26 canary + 146 others)
+                89 failing — ALL share root cause: assetboy.workspace.json
+                              not found (pre-existing from s0 rescue; tests
+                              expect game-factory workspace at
+                              C:\flax\game-factory\). Out of s10.5a scope.
+```
+
+The 89 workspace-bootstrap failures are a separate "test environment" slice — they were never green since the s0 rescue. v1.2 doesn't regress them; they just stay yellow.
+
+### Verification
+
+```
+=== all KEEP modules import OK ===
+=== 26/26 canary tests still pass ===
+=== 172 tests pass overall (up from 26 baseline — broken-test cleanup unblocked many) ===
+```
+
+### Path B v1.2 cumulative reduction (8 commits this turn since v1.1.0 tag)
+
+| Slice | Net LOC |
+|---|---|
+| s2.6a provider_readiness rewire | +82 |
+| s2.6b __init__ + browser_automation + freesound | +72 |
+| s2.6c flax_wrapper drop 10 deads + stub bulk | -362 |
+| s2.6d bulk delete 13 DEAD files | -6,176 |
+| s2.6e delete 9 workflows + blender YAML rewire | -2,985 |
+| s10.5a delete cli_legacy + 18 broken tests | **-12,443** |
+| **v1.2 total** | **-21,812 LOC** |
+
+**Going from ~50k LOC pre-Path-B to ~28k LOC after s10.5a.** Roughly 44% codebase reduction since v1.0 baseline.
+
+### Files staged for commit
+
+- `Python/assetboy/cli_legacy.py` (DELETED, 8,495 LOC)
+- 18 `Tests/python/test_*.py` files (DELETED, ~3,948 LOC total)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+### What's left for s10.5b
+
+The mechanical extraction of `pack_pipeline.execute_prepare_pack` body (lines 60-286) into the 5 `STAGE_HANDLERS` functions. Per peer-opus s7 refactor map: needs 3 risk tests (v1 ledger roundtrip, cleanup-pause-called-once, degraded-canonicalization-still-publishes) before the extraction. ~1 day of careful work.
+
+**Next:** s10.5b mechanical extraction OR s11 pre-pack acquisition router OR v1.2 polish/tag. Pick whichever has highest leverage on next iteration.
