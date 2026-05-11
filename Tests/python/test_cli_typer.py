@@ -238,6 +238,74 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
 
     # ----------------------------------------------------------------- #
+    # pack from-recipe --only filter (v1.9.s21)
+    # ----------------------------------------------------------------- #
+
+    ONLY_FILTER_RECIPE = (
+        "recipe:\n"
+        "  id: only_filter_test\n"
+        "  game: sandbox\n"
+        "packs:\n"
+        "  - id: PACK_A\n"
+        "    provider: polyhaven\n"
+        "    acquisition_method: direct_url\n"
+        "    assets:\n"
+        "      - asset_id: a\n"
+        "  - id: PACK_B\n"
+        "    provider: kenney\n"
+        "    acquisition_method: direct_url\n"
+        "    assets:\n"
+        "      - asset_id: b\n"
+        "  - id: PACK_C\n"
+        "    provider: ambientcg\n"
+        "    acquisition_method: direct_url\n"
+        "    assets:\n"
+        "      - asset_id: c\n"
+    )
+
+    def test_pack_from_recipe_only_filters_to_named_pack(self) -> None:
+        """v1.9.s21: --only PACK_B restricts to that pack only."""
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "from-recipe", "--inline-yaml", self.ONLY_FILTER_RECIPE,
+             "--only", "PACK_B", "--dry-run", "--json"],
+        )
+        import json
+        parsed = json.loads(result.stdout)
+        # Total reflects how many were actually processed (1, not 3)
+        self.assertEqual(parsed["total_packs"], 1)
+        self.assertEqual(len(parsed["results"]), 1)
+        self.assertEqual(parsed["results"][0]["pack_id"], "PACK_B")
+
+    def test_pack_from_recipe_only_repeatable(self) -> None:
+        """v1.9.s21: --only repeats to select multiple packs."""
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "from-recipe", "--inline-yaml", self.ONLY_FILTER_RECIPE,
+             "--only", "PACK_A", "--only", "PACK_C", "--dry-run", "--json"],
+        )
+        import json
+        parsed = json.loads(result.stdout)
+        self.assertEqual(parsed["total_packs"], 2)
+        pack_ids = sorted(r["pack_id"] for r in parsed["results"])
+        self.assertEqual(pack_ids, ["PACK_A", "PACK_C"])
+
+    def test_pack_from_recipe_only_plus_skip_skip_wins(self) -> None:
+        """v1.9.s21: --skip takes precedence over --only on overlap."""
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "from-recipe", "--inline-yaml", self.ONLY_FILTER_RECIPE,
+             "--only", "PACK_A", "--only", "PACK_B",
+             "--skip", "PACK_B",
+             "--dry-run", "--json"],
+        )
+        import json
+        parsed = json.loads(result.stdout)
+        # Only PACK_A survives (only=[A,B], skip=[B] -> just A)
+        self.assertEqual(parsed["total_packs"], 1)
+        self.assertEqual(parsed["results"][0]["pack_id"], "PACK_A")
+
+    # ----------------------------------------------------------------- #
     # library asset (v1.6.s2)
     # ----------------------------------------------------------------- #
 

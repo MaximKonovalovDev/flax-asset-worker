@@ -231,6 +231,16 @@ def from_recipe_cmd(
             help="Pack IDs to skip (repeatable).",
         ),
     ] = None,
+    only: Annotated[
+        list[str],
+        typer.Option(
+            "--only",
+            help=(
+                "Run ONLY these pack IDs (repeatable; v1.9.s21). "
+                "Use to target a single pack from a multi-pack recipe."
+            ),
+        ),
+    ] = None,
     only_required: Annotated[
         bool,
         typer.Option(
@@ -364,6 +374,10 @@ def from_recipe_cmd(
     block_on_missing = bool(gates.get("block_on_missing_required", True))
 
     packs = list(doc.get("packs") or [])
+    # v1.9.s21: --only filter (most-restrictive; applied before --only-required + --skip)
+    if only:
+        only_set = set(only)
+        packs = [p for p in packs if p.get("id") in only_set]
     if only_required:
         packs = [p for p in packs if p.get("id") in required_ids]
     if skip:
