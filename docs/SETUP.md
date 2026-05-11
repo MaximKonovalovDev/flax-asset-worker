@@ -174,8 +174,22 @@ but full E2E setup is your call.
 ### 5.5 Public-API providers (env-var keys, all FREE) — v1.10+ R1A
 
 Five providers from the R1A public-API integration require API keys.
-All have generous free tiers. Set the env var in your shell (PowerShell:
-`$env:NAME = "value"` for the session, or User Variables for permanent).
+All have generous free tiers.
+
+**Quick interactive setup** (v1.11.s49):
+
+```powershell
+# Interactive prompt for all 5 keys; shows current state + signup URLs:
+pwsh ./scripts/setup-r1a-keys.ps1
+
+# Just show current state (no prompts):
+pwsh ./scripts/setup-r1a-keys.ps1 -List
+
+# Persist keys across shells (User env vars):
+pwsh ./scripts/setup-r1a-keys.ps1 -Scope User
+```
+
+Or set them manually:
 
 | Provider | Env var | Free tier | Signup link |
 |---|---|---|---|
