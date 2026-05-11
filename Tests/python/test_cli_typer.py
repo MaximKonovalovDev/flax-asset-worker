@@ -249,6 +249,31 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("Fetch", result.stdout)
         self.assertIn("asset", result.stdout.lower())
 
+    def test_library_readiness_help_renders(self) -> None:
+        """v1.7.s13: library readiness --help works."""
+        result = self.runner.invoke(self.app, ["library", "readiness", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("readiness", result.stdout.lower())
+
+    def test_library_readiness_runs_without_crash(self) -> None:
+        """v1.7.s13: library readiness exits cleanly + emits expected fields."""
+        result = self.runner.invoke(self.app, ["library", "readiness"])
+        self.assertEqual(result.exit_code, 0)
+        # Should emit summary counts
+        self.assertIn("library_readiness_total=", result.stdout)
+        self.assertIn("library_readiness_ready_now=", result.stdout)
+        self.assertIn("library_readiness_setup_required=", result.stdout)
+
+    def test_library_readiness_json_mode(self) -> None:
+        """v1.7.s13: --json emits parseable structured output."""
+        result = self.runner.invoke(self.app, ["library", "readiness", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        import json
+        parsed = json.loads(result.stdout)
+        self.assertIn("summary", parsed)
+        self.assertIn("providers", parsed)
+        self.assertIsInstance(parsed["providers"], list)
+
     def test_library_asset_when_server_down_exits_clean(self) -> None:
         """When FAW server isn't running, library asset must exit cleanly (not crash)."""
         result = self.runner.invoke(
