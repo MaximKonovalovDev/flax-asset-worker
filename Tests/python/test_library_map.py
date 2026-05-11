@@ -55,7 +55,11 @@ class LibraryMapTests(unittest.TestCase):
             asset_dir.mkdir(parents=True, exist_ok=True)
             (asset_dir / "rock_sandstone.json").write_text("{}", encoding="utf-8")
 
-            with patch("assetboy.providers.library_map._probe_quixel_bridge_api", return_value={"reachable": False, "megascans_folder": "", "zip_folders": [], "asset_count": 0, "category_counts": {}, "error": "offline"}):
+            # Path B s3 (2026-05-10) moved the Quixel scanner out of
+            # library_map.py into providers/quixel_scanner.py. Patch the new
+            # location. library_map still re-exports build_local_quixel_library_map
+            # for back-compat, so the public surface is unchanged.
+            with patch("assetboy.providers.quixel_scanner._probe_quixel_bridge_api", return_value={"reachable": False, "megascans_folder": "", "zip_folders": [], "asset_count": 0, "category_counts": {}, "error": "offline"}):
                 report = build_local_quixel_library_map(extra_roots=(root,))
 
         self.assertEqual(report["summary"]["detected_root_count"], 1)

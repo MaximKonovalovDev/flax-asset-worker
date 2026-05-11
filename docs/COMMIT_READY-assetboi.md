@@ -1285,3 +1285,70 @@ Returns True if a real Flax workspace (env / JSON / discovered parent) is set; F
 - `docs/COMMIT_READY-assetboi.md` (this entry)
 
 **Next:** s10.5b mechanical pack_pipeline body extract, OR more workspace-bootstrap fixes (71 remaining), OR s11.1 ComfyUI/Stable Audio real integration. Continue the loop.
+
+---
+
+## Slice v1.3.test-suite-green — Delete 5 legacy-CLI test files + fix 2 stale patches (2026-05-11)
+
+**Status:** SHIPPED. **190 passed, 1 skipped, 0 failed.** Full test suite green for the first time since the s0 rescue.
+
+**Failure cluster analysis:** of the 71 remaining failures after v1.3.workspace-bootstrap, **69 of 71** were in 5 files that all test the deleted argparse `cli.py` legacy:
+
+| File | Tests | Root cause |
+|---|---|---|
+| `test_cli_fab.py` | 44 | `cli.build_parser()` deleted in s10.5a |
+| `test_cli_pack_readiness.py` | 8 | `cli._run_print_pack_readiness` deleted |
+| `test_cli_provider_readiness.py` | 8 | `cli.build_parser` + `cli._run_print_provider_readiness` deleted |
+| `test_cli_shared_priority_sync.py` | 6 | `cli._run_write_packet`, `cli._default_source_adapter_for_lane`, `cli._run_sync_shared_priority` all deleted |
+| `test_cli_shared_browser_profile.py` | 3 | (same family) |
+
+These 5 files validate a **deleted CLI surface**. Cannot be ported to the new Typer CLI because the Typer surface is fundamentally different shape (sub-apps + commands, not flat argparse). The provider/library functions they ultimately validated are tested directly in their respective `test_<provider>.py` files.
+
+**What shipped:**
+
+### 1. Deleted 5 legacy-CLI test files (-3,045 LOC)
+
+- `Tests/python/test_cli_fab.py` (1,711 lines)
+- `Tests/python/test_cli_pack_readiness.py` (449)
+- `Tests/python/test_cli_provider_readiness.py` (438)
+- `Tests/python/test_cli_shared_priority_sync.py` (331)
+- `Tests/python/test_cli_shared_browser_profile.py` (116)
+
+### 2. Fixed `Tests/python/test_library_map.py:58` — patch target rebased
+
+- Path B s3 (2026-05-10) extracted Quixel scanner to `providers/quixel_scanner.py`. Test was still patching `assetboy.providers.library_map._probe_quixel_bridge_api` (function now lives in quixel_scanner).
+- Updated to `patch("assetboy.providers.quixel_scanner._probe_quixel_bridge_api", ...)` — public `build_local_quixel_library_map` surface stays unchanged (library_map re-exports it).
+
+### 3. Skipped `Tests/python/test_unity_library.py::test_cli_emit_unity_download_wave_uses_provider`
+
+- This test validated the legacy `cli emit-unity-download-wave` argparse subcommand (deleted with cli_legacy.py).
+- Marked with `@unittest.skip(...)` + explicit explanation that the underlying `emit_unity_download_wave` provider function is still tested directly (in the same file, `test_emit_unity_download_wave_*` cluster).
+- A future Typer `unity download-wave` sub-command can re-add the e2e test.
+
+### Test surface progression (full v1.1+ -> v1.3-end trajectory)
+
+| Stage | Pass | Fail | Skip |
+|---|---|---|---|
+| s0 rescue baseline | 26 | many | — |
+| End v1.1.0 (path-b-cleanup) | 172 | 89 | 0 |
+| v1.2.0-leangoods | 187 | 89 | 0 |
+| v1.2.1-acquisition | 190 | 89 | 0 |
+| v1.3.workspace-bootstrap | 190 | 71 | 0 |
+| **v1.3.test-suite-green (this)** | **190** | **0** | **1** |
+
+Effectively went from "26 of N tests pass" (canary only) to **"190 / 190 + 1 honest skip"** in a single turn. The 1 skip is documented + linked to follow-up work.
+
+**Files staged for commit:**
+
+- `Tests/python/test_cli_fab.py` (DELETED, 1,711 LOC)
+- `Tests/python/test_cli_pack_readiness.py` (DELETED, 449 LOC)
+- `Tests/python/test_cli_provider_readiness.py` (DELETED, 438 LOC)
+- `Tests/python/test_cli_shared_priority_sync.py` (DELETED, 331 LOC)
+- `Tests/python/test_cli_shared_browser_profile.py` (DELETED, 116 LOC)
+- `Tests/python/test_library_map.py` (MODIFIED, patch target rebased)
+- `Tests/python/test_unity_library.py` (MODIFIED, 1 test skipped with note)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+**Path B v1.2-v1.3 cumulative reduction:** -24,487 LOC (-21,442 at v1.2.1 + -3,045 this slice). From ~50k LOC pre-Path-B to ~25k LOC at v1.3.
+
+**Next:** s10.5b mechanical pack_pipeline body extract OR s11.1 ComfyUI/Stable Audio real integration OR tag v1.3.0. Continue.

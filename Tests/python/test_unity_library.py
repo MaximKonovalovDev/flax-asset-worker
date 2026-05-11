@@ -107,31 +107,16 @@ class UnityLibraryTests(unittest.TestCase):
                     self.assertEqual(emit_browser.call_count, 3)
                     self.assertEqual(emit_unity.call_count, 2)
 
+    @unittest.skip(
+        "Path B v1.3 (2026-05-11): legacy `emit-unity-download-wave` "
+        "argparse subcommand was removed alongside cli_legacy.py deletion in "
+        "s10.5a. The underlying emit_unity_download_wave provider function is "
+        "still tested above (test_emit_unity_download_wave_*). A future "
+        "Typer-side `unity download-wave` sub-command can re-add an "
+        "end-to-end test then."
+    )
     def test_cli_emit_unity_download_wave_uses_provider(self) -> None:
-        fake_report = {
-            "output_dir": "C:/Temp/unity_wave",
-            "summary": {
-                "asset_store_entries": 77,
-                "best_first_wave_entries": 12,
-                "export_runner_candidates": 42,
-                "browser_jobs_emitted": 77,
-                "unity_export_runners_emitted": 42,
-            },
-        }
-        stdout = io.StringIO()
-        with patch.object(cli, "emit_unity_download_wave", return_value=fake_report):
-            with redirect_stdout(stdout):
-                result = cli.main(
-                    [
-                        "emit-unity-download-wave",
-                        "--source-file",
-                        "docs/reference/UNITY_FULL_DOWNLOAD_URLS_2026-03-26.md",
-                    ]
-                )
-
-        self.assertEqual(result, 0)
-        self.assertIn("unity_download_wave_asset_store_entries=77", stdout.getvalue())
-        self.assertIn("unity_download_wave_export_runners=42", stdout.getvalue())
+        pass
 
     def test_select_unity_download_wave_jobs_filters_best_first_exportable_category(self) -> None:
         report = {
