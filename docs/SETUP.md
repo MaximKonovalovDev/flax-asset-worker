@@ -242,6 +242,22 @@ python -m assetboy.cli gen rawg games --query "roguelike" --max-screenshots 3 -n
 python -m assetboy.cli gen jamendo tracks --query "ambient cinematic" -n 3
 ```
 
+#### Live-API smoke tests (opt-in, v1.11.17)
+
+After setting up the no-key providers, verify each is reachable:
+
+```powershell
+$env:FAW_RUN_LIVE_TESTS = "1"
+python -m pytest Tests/python/test_r1a_live_smoke.py -v
+# Hits Met Museum + Wikimedia + Archive.org + Scryfall + Iconify
+# Each runs ONE minimal search; total wall time ~5-15 seconds.
+
+# Clear when done so routine pytest stays offline:
+Remove-Item Env:FAW_RUN_LIVE_TESTS
+```
+
+Useful as a weekly canary or after suspected API drift.
+
 #### License/attribution notes
 
 - **Attribution-FREE** (most permissive): Met, Wikimedia (CC0 items),
