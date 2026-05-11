@@ -203,6 +203,7 @@ def from_recipe_cmd(
         packs = [p for p in packs if p.get("id") not in skip_set]
 
     # Lazy import — keeps `pack --help` fast (avoids flax_wrapper import chain)
+    from assetboy.workflows.acquisition_router import acquire_source_dir
     from assetboy.workflows.pack_pipeline import (
         PipelineContext,
         execute_prepare_pack_dispatched,
@@ -215,21 +216,54 @@ def from_recipe_cmd(
     for pack in packs:
         pack_id = pack.get("id", "?")
         is_required = pack_id in required_ids
-        ctx = PipelineContext(
-            pack_id=pack_id,
-            game_scope=game_scope,
-            source_dir=None,           # operator drops manually / Day 8 stub
-            bulk_profile=None,
-            cleanup_mode=(pack.get("cleanup") or {}).get("mode", "auto"),
-            asset_kind=pack.get("asset_kind", "prop"),
-            animated=pack.get("asset_kind") in ("character_animated", "animation"),
-            dry_run=dry_run,
-            resume=resume,
-        )
-        try:
-            ledger = execute_prepare_pack_dispatched(ctx)
-        except Exception as exc:
-            ledger = {"status": "failed", "current_state": "failed", "error": str(exc)}
+
+        # Path B s11 (2026-05-11): pre-pack acquisition router. Maps recipe
+        # acquisition_method (direct_url / manual_browser / generator) to a
+        # real source_dir BEFORE pack_pipeline runs. Without this every pack
+        # went RED because pack_pipeline rejects missing source_dir.
+        acq = acquire_source_dir(pack, doc, dry_run=dry_run)
+
+        if not acq.ok and not acq.awaiting_manual:
+            # Acquisition failed outright (unsupported provider, runner crash,
+            # etc.) -- skip pack_pipeline and record the failure cleanly.
+            ledger = {
+                "status": "failed",
+                "current_state": "acquisition_failed",
+                "next_step": "fix recipe + retry",
+                "error": acq.error,
+                "method": acq.method,
+                "provider": acq.provider,
+            }
+        elif acq.awaiting_manual:
+            # manual_browser lane: marker emitted, waiting for operator drop.
+            # Not a failure -- pack is paused. Don't run pack_pipeline yet.
+            ledger = {
+                "status": "pending_manual_drop",
+                "current_state": "awaiting_manual_browser_drop",
+                "next_step": acq.notes,
+                "method": acq.method,
+                "provider": acq.provider,
+                "drop_dir": str(acq.source_dir) if acq.source_dir else "",
+            }
+        else:
+            # Acquisition green -- hand source_dir to pack_pipeline.
+            ctx = PipelineContext(
+                pack_id=pack_id,
+                game_scope=game_scope,
+                source_dir=acq.source_dir,
+                bulk_profile=None,
+                cleanup_mode=(pack.get("cleanup") or {}).get("mode", "auto"),
+                asset_kind=pack.get("asset_kind", "prop"),
+                animated=pack.get("asset_kind") in ("character_animated", "animation"),
+                dry_run=dry_run,
+                resume=resume,
+            )
+            try:
+                ledger = execute_prepare_pack_dispatched(ctx)
+            except Exception as exc:
+                ledger = {
+                    "status": "failed", "current_state": "failed", "error": str(exc),
+                }
 
         status = ledger.get("status", "?")
         results.append(
@@ -241,19 +275,26 @@ def from_recipe_cmd(
                 "next_step": ledger.get("next_step", "?"),
                 "ledger_path": ledger.get("ledger_path", ""),
                 "error": ledger.get("error"),
+                "method": ledger.get("method", ""),  # populated by acquisition router
+                "provider": ledger.get("provider", ""),
             }
         )
 
-        if status != "completed":
+        # pending_manual_drop is NOT a failure -- it's a green-pause waiting
+        # for operator action (per s11 acquisition_router contract).
+        if status not in ("completed", "pending_manual_drop"):
             fail_count += 1
             if is_required:
                 required_fail = True
 
         if not json_out:
             tag = "REQ" if is_required else "opt"
-            marker = "OK " if status == "completed" else "RED"
+            marker = {
+                "completed": "OK ",
+                "pending_manual_drop": "WAIT",
+            }.get(status, "RED")
             print(
-                f"  [{marker}] [{tag}] {pack_id:60} "
+                f"  [{marker:4}] [{tag}] {pack_id:60} "
                 f"state={ledger.get('current_state', '?')}"
             )
 
