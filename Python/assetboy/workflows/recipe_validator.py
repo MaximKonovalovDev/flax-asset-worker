@@ -43,6 +43,12 @@ VALID_ACQUISITION_METHODS = {"direct_url", "manual_browser", "generator"}
 # let the runtime fail if unsupported).
 DIRECT_URL_PROVIDERS = {
     "polyhaven", "kenney", "ambientcg", "freesound", "quaternius",
+    # v1.11.s41: R1A no-key providers wired into acquisition_router.
+    "met_museum", "met-museum",
+    "wikimedia", "wikimedia_commons",
+    "archive_org", "archive-org", "archiveorg",
+    "scryfall",
+    "iconify",
 }
 MANUAL_BROWSER_PROVIDERS = {
     "fab", "mixamo", "unity", "epic",

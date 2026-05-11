@@ -161,6 +161,17 @@ def _acquire_direct_url(
         return _drive_freesound(pack, pack_id=pack_id, out_dir=out_dir)
     if provider == "quaternius":
         return _drive_quaternius(pack, pack_id=pack_id, out_dir=out_dir)
+    # v1.11.s41: R1A no-key providers
+    if provider in ("met_museum", "met-museum"):
+        return _drive_met_museum(pack, pack_id=pack_id, out_dir=out_dir)
+    if provider in ("wikimedia", "wikimedia_commons"):
+        return _drive_wikimedia(pack, pack_id=pack_id, out_dir=out_dir)
+    if provider in ("archive_org", "archive-org", "archiveorg"):
+        return _drive_archive_org(pack, pack_id=pack_id, out_dir=out_dir)
+    if provider == "scryfall":
+        return _drive_scryfall(pack, pack_id=pack_id, out_dir=out_dir)
+    if provider == "iconify":
+        return _drive_iconify(pack, pack_id=pack_id, out_dir=out_dir)
 
     return AcquisitionResult(
         ok=False,
@@ -168,9 +179,222 @@ def _acquire_direct_url(
         provider=provider,
         error=(
             f"unsupported_provider: {provider!r}. "
-            "direct_url lane currently supports: polyhaven, kenney, ambientcg, freesound, quaternius. "
+            "direct_url lane supports: polyhaven, kenney, ambientcg, freesound, "
+            "quaternius, met_museum, wikimedia, archive_org, scryfall, iconify. "
             "For others, set acquisition_method: manual_browser or generator."
         ),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# v1.11.s41 — R1A no-key provider drivers
+#
+# Each driver follows the same shape: collect a search query from the pack's
+# `search_terms` (first) or `assets[].asset_id`, default count = len(assets)
+# or 4, call the runner, map back to AcquisitionResult.
+# --------------------------------------------------------------------------- #
+
+def _pack_search_query(pack: dict[str, Any]) -> str:
+    """Extract search query string from a pack.
+
+    Priority: search_terms[0] -> assets[0].asset_id (or asset[0] str) -> pack id.
+    """
+    terms = pack.get("search_terms") or []
+    if terms and isinstance(terms, list):
+        first = terms[0]
+        if isinstance(first, str) and first.strip():
+            return first.strip()
+        if isinstance(first, dict) and first.get("term"):
+            return str(first["term"]).strip()
+    assets = pack.get("assets") or []
+    if assets:
+        a0 = assets[0]
+        if isinstance(a0, dict):
+            v = a0.get("asset_id") or a0.get("query") or a0.get("name")
+            if v:
+                return str(v).strip()
+        elif isinstance(a0, str):
+            return a0.strip()
+    return str(pack.get("id", "untitled")).replace("_", " ")
+
+
+def _pack_count(pack: dict[str, Any], default: int = 4) -> int:
+    """Determine target count for a pack.
+
+    Priority: pack['count'] -> len(pack['assets']) -> default.
+    """
+    c = pack.get("count")
+    if isinstance(c, int) and c > 0:
+        return c
+    assets = pack.get("assets") or []
+    if assets:
+        return len(assets)
+    return default
+
+
+def _drive_met_museum(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
+    try:
+        from assetboy.execution.met_museum_runner import run_met_museum_batch
+    except ImportError as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider="met_museum",
+            error=f"import_failed: {exc}",
+        )
+    query = _pack_search_query(pack)
+    count = _pack_count(pack, default=4)
+    department = pack.get("met_department_id")
+    try:
+        result = run_met_museum_batch(
+            query=query, pack_id=pack_id, count=count,
+            department_id=int(department) if department is not None else None,
+            output_dir=out_dir,
+        )
+    except Exception as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider="met_museum",
+            error=f"runner_crashed: {exc}",
+        )
+    return AcquisitionResult(
+        ok=result.ok, method="direct_url", provider="met_museum",
+        source_dir=out_dir,
+        notes=(
+            f"met_museum: matched={result.objects_matched} "
+            f"downloaded={result.objects_downloaded} "
+            f"skipped_non_pd={result.objects_skipped_non_pd}"
+        ),
+        error=result.error if not result.ok else None,
+    )
+
+
+def _drive_wikimedia(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
+    try:
+        from assetboy.execution.wikimedia_runner import run_wikimedia_batch
+    except ImportError as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider="wikimedia",
+            error=f"import_failed: {exc}",
+        )
+    query = _pack_search_query(pack)
+    count = _pack_count(pack, default=6)
+    try:
+        result = run_wikimedia_batch(
+            query=query, pack_id=pack_id, count=count, output_dir=out_dir,
+        )
+    except Exception as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider="wikimedia",
+            error=f"runner_crashed: {exc}",
+        )
+    return AcquisitionResult(
+        ok=result.ok, method="direct_url", provider="wikimedia",
+        source_dir=out_dir,
+        notes=(
+            f"wikimedia: matched={result.files_matched} "
+            f"downloaded={result.files_downloaded} "
+            f"skipped_restricted={result.files_skipped_restricted}"
+        ),
+        error=result.error if not result.ok else None,
+    )
+
+
+def _drive_archive_org(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
+    try:
+        from assetboy.execution.archive_org_runner import run_archive_org_batch
+    except ImportError as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider="archive_org",
+            error=f"import_failed: {exc}",
+        )
+    query = _pack_search_query(pack)
+    count = _pack_count(pack, default=4)
+    mediatype = pack.get("archive_mediatype") or pack.get("mediatype")
+    try:
+        result = run_archive_org_batch(
+            query=query, mediatype=(str(mediatype).lower() if mediatype else None),
+            pack_id=pack_id, count=count, output_dir=out_dir,
+        )
+    except Exception as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider="archive_org",
+            error=f"runner_crashed: {exc}",
+        )
+    return AcquisitionResult(
+        ok=result.ok, method="direct_url", provider="archive_org",
+        source_dir=out_dir,
+        notes=(
+            f"archive_org: matched={result.items_matched} "
+            f"downloaded={result.items_downloaded} "
+            f"skipped_restricted={result.items_skipped_restricted}"
+        ),
+        error=result.error if not result.ok else None,
+    )
+
+
+def _drive_scryfall(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
+    try:
+        from assetboy.execution.scryfall_runner import run_scryfall_batch
+    except ImportError as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider="scryfall",
+            error=f"import_failed: {exc}",
+        )
+    query = _pack_search_query(pack)
+    count = _pack_count(pack, default=6)
+    variant = str(pack.get("scryfall_variant", "art_crop")).strip().lower()
+    try:
+        result = run_scryfall_batch(
+            query=query, pack_id=pack_id, count=count,
+            variant=variant, output_dir=out_dir,
+        )
+    except Exception as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider="scryfall",
+            error=f"runner_crashed: {exc}",
+        )
+    return AcquisitionResult(
+        ok=result.ok, method="direct_url", provider="scryfall",
+        source_dir=out_dir,
+        notes=(
+            f"scryfall: matched={result.cards_matched} "
+            f"downloaded={result.cards_downloaded} "
+            f"variant={result.variant}"
+        ),
+        error=result.error if not result.ok else None,
+    )
+
+
+def _drive_iconify(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
+    try:
+        from assetboy.execution.iconify_runner import run_iconify_batch
+    except ImportError as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider="iconify",
+            error=f"import_failed: {exc}",
+        )
+    query = _pack_search_query(pack)
+    count = _pack_count(pack, default=16)
+    width = int(pack.get("iconify_width", 64) or 64)
+    color = pack.get("iconify_color") or None
+    try:
+        result = run_iconify_batch(
+            query=query, pack_id=pack_id, count=count,
+            width=width, color=str(color) if color else None,
+            output_dir=out_dir,
+        )
+    except Exception as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider="iconify",
+            error=f"runner_crashed: {exc}",
+        )
+    return AcquisitionResult(
+        ok=result.ok, method="direct_url", provider="iconify",
+        source_dir=out_dir,
+        notes=(
+            f"iconify: matched={result.icons_matched} "
+            f"downloaded={result.icons_downloaded} "
+            f"skipped_restricted={result.icons_skipped_restricted}"
+        ),
+        error=result.error if not result.ok else None,
     )
 
 
