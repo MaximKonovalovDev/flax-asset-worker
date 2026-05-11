@@ -947,6 +947,94 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(len(crashed), 1)
         self.assertIn("crashed", crashed[0]["error"])
 
+    # ----------------------------------------------------------------- #
+    # gen all-key (v1.11.s38)
+    # ----------------------------------------------------------------- #
+
+    def test_all_key_help_renders(self) -> None:
+        result = self.runner.invoke(self.app, ["gen", "all-key", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("key-required", result.stdout)
+        self.assertIn("PEXELS_API_KEY", result.stdout)
+        self.assertIn("--include-video", result.stdout)
+
+    def test_all_key_all_missing_keys_shows_all_skipped(self) -> None:
+        """No env vars set -> every provider reports skipped."""
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {}, clear=False):
+            for k in ("PEXELS_API_KEY", "PIXABAY_API_KEY",
+                      "UNSPLASH_ACCESS_KEY", "RAWG_API_KEY", "JAMENDO_CLIENT_ID"):
+                os.environ.pop(k, None)
+            result = self.runner.invoke(
+                self.app, ["gen", "all-key", "--query", "x", "--dry-run", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        # No --include-video, so 5 providers run (1 photo each from Pexels,
+        # Pixabay, Unsplash + RAWG + Jamendo).
+        self.assertEqual(data["providers_run"], 5)
+        self.assertEqual(data["providers_skipped"], 5)
+        self.assertEqual(data["providers_ok"], 0)
+        for p in data["providers"]:
+            self.assertTrue(p["skipped"])
+            self.assertEqual(p["error"], "missing_env_key")
+
+    def test_all_key_with_video_runs_7_providers(self) -> None:
+        """--include-video adds Pexels videos + Pixabay videos (5 -> 7 providers)."""
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {}, clear=False):
+            for k in ("PEXELS_API_KEY", "PIXABAY_API_KEY",
+                      "UNSPLASH_ACCESS_KEY", "RAWG_API_KEY", "JAMENDO_CLIENT_ID"):
+                os.environ.pop(k, None)
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "all-key", "--query", "x", "--include-video", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["providers_run"], 7)
+        self.assertTrue(data["include_video"])
+
+    def test_all_key_partial_env_runs_only_keyed_providers(self) -> None:
+        """Set only PEXELS_API_KEY; mock its runner; others should still be SKIP."""
+        import os
+        from unittest.mock import patch
+        from assetboy.execution.pexels_runner import PexelsResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(os.environ, {"PEXELS_API_KEY": "test-key"}, clear=False):
+                for k in ("PIXABAY_API_KEY", "UNSPLASH_ACCESS_KEY",
+                          "RAWG_API_KEY", "JAMENDO_CLIENT_ID"):
+                    os.environ.pop(k, None)
+                fake = PexelsResult(
+                    pack_id="P", query="x", output_dir=Path(tmp),
+                    kind="photos", items_matched=3, items_downloaded=3, ok=True,
+                )
+                with patch(
+                    "assetboy.execution.pexels_runner.run_pexels_photo_batch",
+                    return_value=fake,
+                ):
+                    result = self.runner.invoke(
+                        self.app,
+                        ["gen", "all-key", "--query", "x", "--json"],
+                    )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["providers_ok"], 1)
+        self.assertEqual(data["providers_skipped"], 4)
+        # Pexels photos must be the one that ran.
+        ok = [p for p in data["providers"] if p["ok"]]
+        self.assertEqual(len(ok), 1)
+        self.assertEqual(ok[0]["provider"], "pexels_photos")
+        self.assertEqual(ok[0]["matched"], 3)
+        self.assertEqual(ok[0]["downloaded"], 3)
+
     def test_comfy_submit_workflow_help_renders(self) -> None:
         result = self.runner.invoke(
             self.app, ["gen", "comfyui", "submit-workflow", "--help"]
