@@ -333,6 +333,108 @@ def asset_cmd(
 
 
 # --------------------------------------------------------------------------- #
+# library export  (v1.9.s22)
+# --------------------------------------------------------------------------- #
+
+@app.command("export")
+def export_cmd(
+    out_path: Annotated[
+        Path,
+        typer.Argument(
+            help="Path to write the manifest (JSON or YAML by extension).",
+        ),
+    ],
+    base: Annotated[
+        str,
+        typer.Option("--server", help="FAW server base URL."),
+    ] = DEFAULT_BASE,
+    format: Annotated[
+        str,
+        typer.Option(
+            "--format",
+            help="Output format: json | yaml (default: inferred from out_path extension).",
+        ),
+    ] = "",
+    include_checksums: Annotated[
+        bool,
+        typer.Option(
+            "--include-checksums",
+            help="Include sha256 per asset for verification (default: false).",
+        ),
+    ] = False,
+) -> None:
+    """Export installed library as a portable manifest (Path B v1.9.s22).
+
+    Walks /api/v1/library/ready and dumps in the same shape `bulk-install`
+    accepts. Round-trip: export from one machine, bulk-install on another.
+
+    With --include-checksums, each entry gets its sha256 (the C# server
+    already records it per asset). Useful for verifying the receiving
+    machine ended up with byte-identical files.
+    """
+    try:
+        data = _faw_post("/api/v1/library/ready", {}, base=base)
+    except Exception as exc:
+        print(f"library_export_error={exc}")
+        raise typer.Exit(code=1)
+
+    raw_assets = data.get("ready_assets") or data.get("assets") or []
+    if not isinstance(raw_assets, list):
+        print(f"library_export_error=unexpected_response_shape (got {type(raw_assets).__name__})")
+        raise typer.Exit(code=1)
+
+    # Build the manifest entries (subset of fields that bulk-install consumes)
+    manifest: list[dict] = []
+    for asset in raw_assets:
+        if not isinstance(asset, dict):
+            continue
+        entry = {
+            "asset_id": asset.get("id", ""),
+            "provider": asset.get("provider", ""),
+            "category": asset.get("category", ""),
+            "name": asset.get("name", asset.get("id", "")),
+        }
+        if include_checksums and asset.get("sha256"):
+            entry["sha256"] = asset["sha256"]
+        manifest.append(entry)
+
+    # Decide format: explicit --format wins, else infer from extension
+    fmt = format.strip().lower()
+    if not fmt:
+        suffix = out_path.suffix.lower()
+        if suffix in (".yaml", ".yml"):
+            fmt = "yaml"
+        else:
+            fmt = "json"
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    if fmt == "yaml":
+        try:
+            import yaml
+        except ImportError:
+            print(f"library_export_error=pyyaml_not_installed (use --format json or pip install pyyaml)")
+            raise typer.Exit(code=1)
+        out_path.write_text(
+            yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+    elif fmt == "json":
+        out_path.write_text(
+            json.dumps(manifest, indent=2),
+            encoding="utf-8",
+        )
+    else:
+        print(f"library_export_error=unknown_format: {fmt!r} (use json or yaml)")
+        raise typer.Exit(code=1)
+
+    print(f"library_export_count={len(manifest)}")
+    print(f"library_export_format={fmt}")
+    print(f"library_export_path={out_path}")
+    print(f"library_export_bytes={out_path.stat().st_size}")
+    print(f"library_export_include_checksums={'true' if include_checksums else 'false'}")
+
+
+# --------------------------------------------------------------------------- #
 # library bulk-install  (v1.8.s16)
 # --------------------------------------------------------------------------- #
 

@@ -290,6 +290,74 @@ class TyperCliSmokeTests(unittest.TestCase):
         pack_ids = sorted(r["pack_id"] for r in parsed["results"])
         self.assertEqual(pack_ids, ["PACK_A", "PACK_C"])
 
+    # ----------------------------------------------------------------- #
+    # library export (v1.9.s22)
+    # ----------------------------------------------------------------- #
+
+    def test_library_export_help_renders(self) -> None:
+        result = self.runner.invoke(self.app, ["library", "export", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("manifest", result.stdout.lower())
+
+    def test_library_export_when_server_down_exits_clean(self) -> None:
+        """v1.9.s22: server-down -> clean error, not crash."""
+        import tempfile
+        with tempfile.NamedTemporaryFile(
+            suffix=".json", delete=False, mode="w", encoding="utf-8"
+        ) as tf:
+            out_path = tf.name
+        try:
+            result = self.runner.invoke(
+                self.app,
+                ["library", "export", out_path, "--server", "http://localhost:1"],
+            )
+            self.assertEqual(result.exit_code, 1)
+            self.assertIn("library_export_error", result.stdout)
+        finally:
+            import os
+            try:
+                os.unlink(out_path)
+            except OSError:
+                pass
+
+    def test_library_export_format_inferred_from_extension(self) -> None:
+        """--out_path *.yaml -> yaml format, else json."""
+        from unittest.mock import patch
+        import tempfile, os, json as _json
+
+        fake_ready = {
+            "ready_assets": [
+                {"id": "A", "provider": "polyhaven", "category": "texture", "name": "A name"},
+                {"id": "B", "provider": "kenney", "category": "model", "name": "B name", "sha256": "abc123"},
+            ]
+        }
+
+        # JSON output (default extension)
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tf:
+            out_json = tf.name
+        try:
+            with patch(
+                "assetboy.cli.library._faw_post",
+                return_value=fake_ready,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["library", "export", out_json, "--include-checksums"],
+                )
+            self.assertEqual(result.exit_code, 0, f"stdout: {result.stdout}")
+            self.assertIn("library_export_count=2", result.stdout)
+            self.assertIn("library_export_format=json", result.stdout)
+            # Verify the JSON shape matches bulk-install expectations
+            parsed = _json.loads(open(out_json, encoding="utf-8").read())
+            self.assertEqual(len(parsed), 2)
+            self.assertEqual(parsed[0]["asset_id"], "A")
+            self.assertEqual(parsed[1]["sha256"], "abc123")
+        finally:
+            try:
+                os.unlink(out_json)
+            except OSError:
+                pass
+
     def test_pack_from_recipe_only_plus_skip_skip_wins(self) -> None:
         """v1.9.s21: --skip takes precedence over --only on overlap."""
         result = self.runner.invoke(
