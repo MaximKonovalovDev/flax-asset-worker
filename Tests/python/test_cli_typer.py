@@ -160,6 +160,22 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn("bad_filter_shape", result.stdout)
 
+    def test_pack_list_recipes_json_with_filter_round_trip(self) -> None:
+        """v1.11.s57: --json + --filter combo emits filtered list + filters_applied."""
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "list-recipes", "--filter", "genre:survival", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout)
+        self.assertIn("filters_applied", data)
+        self.assertEqual(data["filters_applied"], ["genre:survival"])
+        # Should match exactly primitive_tech (sole survival-genre recipe).
+        self.assertEqual(data["count"], 1)
+        self.assertIn("primitive_tech", data["recipes"][0]["path"])
+        self.assertEqual(data["recipes"][0]["genre"], "survival")
+
     def test_pack_list_recipes_json_includes_metadata(self) -> None:
         """JSON output for r1a_smoke must include genre/theme/style/tags."""
         result = self.runner.invoke(
