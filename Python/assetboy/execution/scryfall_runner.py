@@ -70,15 +70,22 @@ class ScryfallResult:
 # --------------------------------------------------------------------------- #
 
 def _get_json(url: str, *, timeout: float = 20.0) -> dict:
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": USER_AGENT,
-            "Accept": "application/json",
-        },
-    )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read())
+    """v1.12.s69: retries 429/503/502/504. 404 passes through (Scryfall
+    semantics: empty-result search returns 404 by design)."""
+    from assetboy.execution._http_retry import with_429_retry
+
+    def _do_call() -> dict:
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": USER_AGENT,
+                "Accept": "application/json",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read())
+
+    return with_429_retry(_do_call, max_retries=3, base_delay_s=1.0, cap_delay_s=30.0)
 
 
 def _download_binary(url: str, dest: Path, *, timeout: float = 30.0) -> int:

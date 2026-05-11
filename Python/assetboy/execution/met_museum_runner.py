@@ -61,11 +61,16 @@ class MetMuseumResult:
 # --------------------------------------------------------------------------- #
 
 def _get_json(url: str, *, timeout: float = 15.0) -> dict:
-    """GET a URL, parse JSON. Raises urllib.error.URLError / ValueError on failure."""
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        raw = resp.read()
-    return json.loads(raw)
+    """GET a URL, parse JSON. v1.12.s69: retries HTTP 429/503/502/504."""
+    from assetboy.execution._http_retry import with_429_retry
+
+    def _do_call() -> dict:
+        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read()
+        return json.loads(raw)
+
+    return with_429_retry(_do_call, max_retries=3, base_delay_s=1.0, cap_delay_s=30.0)
 
 
 def _download_binary(url: str, dest: Path, *, timeout: float = 30.0) -> int:
