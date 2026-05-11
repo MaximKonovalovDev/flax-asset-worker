@@ -58,12 +58,19 @@ archive_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
 )
+scryfall_app = typer.Typer(
+    name="scryfall",
+    help="Scryfall MTG card art fetcher (CC-BY-SA-4.0).",
+    add_completion=False,
+    no_args_is_help=True,
+)
 
 app.add_typer(comfy_app, name="comfyui")
 app.add_typer(sd_app, name="sd")
 app.add_typer(met_app, name="met-museum")
 app.add_typer(wikimedia_app, name="wikimedia")
 app.add_typer(archive_app, name="archive-org")
+app.add_typer(scryfall_app, name="scryfall")
 
 
 # --------------------------------------------------------------------------- #
@@ -1049,6 +1056,127 @@ def archive_fetch_cmd(
             print(f"gen_archive_org_manifest={result.manifest_path}")
         if result.error:
             print(f"gen_archive_org_note={result.error}")
+
+    if not result.ok:
+        raise typer.Exit(code=1)
+
+
+# --------------------------------------------------------------------------- #
+# gen scryfall fetch  (v1.10.s29)
+# --------------------------------------------------------------------------- #
+
+@scryfall_app.command("fetch")
+def scryfall_fetch_cmd(
+    query: Annotated[
+        str,
+        typer.Option(
+            "--query", "-q",
+            help="Scryfall query syntax (e.g. 'type:dragon', 'art:landscape c:r').",
+        ),
+    ],
+    count: Annotated[
+        int, typer.Option("--count", "-n", help="Max cards to download."),
+    ] = 6,
+    variant: Annotated[
+        str,
+        typer.Option(
+            "--variant",
+            help="Image variant: png | large | normal | small | art_crop | border_crop.",
+        ),
+    ] = "art_crop",
+    pack_id: Annotated[
+        str, typer.Option("--pack-id", help="Pack id for output dir."),
+    ] = "",
+    output_dir: Annotated[
+        Path,
+        typer.Option("--output-dir", help="Override output dir."),
+    ] = Path(""),
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Plan only; skip binary downloads."),
+    ] = False,
+    json_out: Annotated[
+        bool, typer.Option("--json", help="Emit JSON output."),
+    ] = False,
+) -> None:
+    """Fetch CC-BY-SA card art from Scryfall (Path B v1.10.s29).
+
+    Scryfall hosts ~25K MTG cards' images, all CC-BY-SA-4.0. Useful for
+    fantasy reference plates, card UI mood boards, ComfyUI img2img seeds.
+
+    Variants:
+      art_crop   art only, no frame      -> best for img2img seed
+      png        745x1040 full card      -> best for UI mood / framed
+      large      672x936 full card
+      normal     488x680
+      small      146x204
+      border_crop full card minus border
+
+    Examples:
+      assetboy gen scryfall fetch -q "type:dragon" -n 8
+      assetboy gen scryfall fetch -q "art:landscape c:r" --variant art_crop -n 6
+      assetboy gen scryfall fetch -q "set:lea" --variant png -n 10  # Alpha set
+
+    Output: <manual_drop>/scryfall/<pack_id>/ contains image files plus
+    scryfall_manifest.json with artist/set/license attribution data.
+
+    IMPORTANT: CC-BY-SA-4.0 requires attribution. Manifest captures the
+    'artist' field per card; downstream credits must use it. Also subject
+    to Wizards' fan content policy for derivative use.
+    """
+    from assetboy.execution.scryfall_runner import run_scryfall_batch
+
+    out_dir_arg: Path | None = output_dir if str(output_dir) else None
+    pack_id_arg: str | None = pack_id if pack_id else None
+
+    try:
+        result = run_scryfall_batch(
+            query=query,
+            pack_id=pack_id_arg,
+            count=count,
+            variant=variant,
+            output_dir=out_dir_arg,
+            dry_run=dry_run,
+        )
+    except Exception as exc:
+        msg = f"scryfall_runner_crashed: {exc}"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_scryfall_error={msg}")
+        raise typer.Exit(code=1)
+
+    summary = {
+        "ok": result.ok,
+        "pack_id": result.pack_id,
+        "query": result.query,
+        "variant": result.variant,
+        "output_dir": str(result.output_dir),
+        "cards_matched": result.cards_matched,
+        "cards_with_image": result.cards_with_image,
+        "cards_downloaded": result.cards_downloaded,
+        "cards_failed": result.cards_failed,
+        "downloaded_paths": [str(p) for p in result.downloaded_paths],
+        "manifest_path": str(result.manifest_path) if result.manifest_path else None,
+        "dry_run": result.dry_run,
+        "error": result.error,
+    }
+
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"gen_scryfall_pack_id={result.pack_id}")
+        print(f"gen_scryfall_query={result.query!r}")
+        print(f"gen_scryfall_variant={result.variant}")
+        print(f"gen_scryfall_matched={result.cards_matched}")
+        print(f"gen_scryfall_downloaded={result.cards_downloaded}")
+        print(f"gen_scryfall_failed={result.cards_failed}")
+        print(f"gen_scryfall_output_dir={result.output_dir}")
+        if result.manifest_path:
+            print(f"gen_scryfall_manifest={result.manifest_path}")
+        if result.error:
+            print(f"gen_scryfall_note={result.error}")
 
     if not result.ok:
         raise typer.Exit(code=1)

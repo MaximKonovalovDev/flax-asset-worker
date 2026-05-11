@@ -451,6 +451,66 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["items_skipped_restricted"], 5)
         self.assertTrue(data["ok"])
 
+    # ----------------------------------------------------------------- #
+    # gen scryfall fetch (v1.10.s29)
+    # ----------------------------------------------------------------- #
+
+    def test_scryfall_fetch_help_renders(self) -> None:
+        result = self.runner.invoke(
+            self.app, ["gen", "scryfall", "fetch", "--help"]
+        )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Scryfall", result.stdout)
+        self.assertIn("CC-BY-SA", result.stdout)
+
+    def test_scryfall_fetch_dry_run_no_matches_exits_zero(self) -> None:
+        from unittest.mock import patch
+        from assetboy.execution.scryfall_runner import ScryfallResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = ScryfallResult(
+                pack_id="T", query="zzz", output_dir=Path(tmp),
+                variant="art_crop", cards_matched=0, ok=True, error="no_matches",
+            )
+            with patch(
+                "assetboy.execution.scryfall_runner.run_scryfall_batch",
+                return_value=fake,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "scryfall", "fetch", "--query", "zzz", "--dry-run"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("gen_scryfall_matched=0", result.stdout)
+        self.assertIn("no_matches", result.stdout)
+
+    def test_scryfall_fetch_json_output_shape(self) -> None:
+        from unittest.mock import patch
+        from assetboy.execution.scryfall_runner import ScryfallResult
+        import tempfile, json as _json
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = ScryfallResult(
+                pack_id="P", query="q", output_dir=Path(tmp),
+                variant="png", cards_matched=4, cards_with_image=4,
+                cards_downloaded=4, ok=True,
+            )
+            with patch(
+                "assetboy.execution.scryfall_runner.run_scryfall_batch",
+                return_value=fake,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "scryfall", "fetch", "--query", "q", "--variant", "png", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["pack_id"], "P")
+        self.assertEqual(data["variant"], "png")
+        self.assertEqual(data["cards_downloaded"], 4)
+        self.assertTrue(data["ok"])
+
     def test_comfy_submit_workflow_help_renders(self) -> None:
         result = self.runner.invoke(
             self.app, ["gen", "comfyui", "submit-workflow", "--help"]
