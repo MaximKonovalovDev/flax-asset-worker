@@ -1952,5 +1952,149 @@ def unsplash_photos_cmd(
         raise typer.Exit(code=1)
 
 
+# --------------------------------------------------------------------------- #
+# gen all-no-key  (v1.11.s37)
+# --------------------------------------------------------------------------- #
+
+@app.command("all-no-key")
+def all_no_key_cmd(
+    query: Annotated[
+        str, typer.Option("--query", "-q", help="Search query (fans out across all providers)."),
+    ],
+    count: Annotated[
+        int, typer.Option("--count", "-n", help="Per-provider count."),
+    ] = 3,
+    pack_id: Annotated[str, typer.Option("--pack-id")] = "",
+    output_dir: Annotated[Path, typer.Option("--output-dir")] = Path(""),
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Plan only across all providers; recommended default for scouting.",
+        ),
+    ] = True,
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Fan out one query across all 5 no-key R1A providers (Path B v1.11.s37).
+
+    Hits Met Museum, Wikimedia Commons, Archive.org (image mediatype),
+    Scryfall, and Iconify in sequence. Returns aggregated counts +
+    per-provider manifest paths.
+
+    This is the FAST SCOUTING command: get a feel for what's available
+    across every no-key source in one shot. Add --no-dry-run to actually
+    download (will take longer).
+
+    Examples:
+      assetboy gen all-no-key -q "dragon" -n 2 --dry-run
+      assetboy gen all-no-key -q "stone wall" -n 1 --no-dry-run
+    """
+    from assetboy.execution.met_museum_runner import run_met_museum_batch
+    from assetboy.execution.wikimedia_runner import run_wikimedia_batch
+    from assetboy.execution.archive_org_runner import run_archive_org_batch
+    from assetboy.execution.scryfall_runner import run_scryfall_batch
+    from assetboy.execution.iconify_runner import run_iconify_batch
+
+    out_dir_arg: Path | None = output_dir if str(output_dir) else None
+    base_pack_id = pack_id or f"ALL_NO_KEY_{query.replace(' ', '_').upper()}"
+
+    providers_run: list[dict] = []
+
+    def _run_safely(provider: str, fn, **kwargs) -> None:
+        """Call a provider runner; capture any exception into the report."""
+        try:
+            r = fn(**kwargs)
+            providers_run.append({
+                "provider": provider,
+                "ok": r.ok,
+                "matched": getattr(r, "items_matched", 0)
+                           or getattr(r, "objects_matched", 0)
+                           or getattr(r, "files_matched", 0)
+                           or getattr(r, "cards_matched", 0)
+                           or getattr(r, "icons_matched", 0),
+                "downloaded": getattr(r, "items_downloaded", 0)
+                              or getattr(r, "objects_downloaded", 0)
+                              or getattr(r, "files_downloaded", 0)
+                              or getattr(r, "cards_downloaded", 0)
+                              or getattr(r, "icons_downloaded", 0),
+                "manifest_path": str(r.manifest_path) if getattr(r, "manifest_path", None) else None,
+                "error": r.error,
+                "output_dir": str(r.output_dir),
+            })
+        except Exception as exc:
+            providers_run.append({
+                "provider": provider,
+                "ok": False,
+                "matched": 0, "downloaded": 0,
+                "manifest_path": None,
+                "error": f"crashed: {exc}",
+                "output_dir": "",
+            })
+
+    _run_safely(
+        "met_museum", run_met_museum_batch,
+        query=query, pack_id=f"{base_pack_id}_MET", count=count,
+        output_dir=(out_dir_arg / "met_museum") if out_dir_arg else None,
+        dry_run=dry_run,
+    )
+    _run_safely(
+        "wikimedia", run_wikimedia_batch,
+        query=query, pack_id=f"{base_pack_id}_WM", count=count,
+        output_dir=(out_dir_arg / "wikimedia") if out_dir_arg else None,
+        dry_run=dry_run,
+    )
+    _run_safely(
+        "archive_org", run_archive_org_batch,
+        query=query, mediatype="image",
+        pack_id=f"{base_pack_id}_AO", count=count,
+        output_dir=(out_dir_arg / "archive_org") if out_dir_arg else None,
+        dry_run=dry_run,
+    )
+    _run_safely(
+        "scryfall", run_scryfall_batch,
+        query=query, pack_id=f"{base_pack_id}_SF", count=count,
+        output_dir=(out_dir_arg / "scryfall") if out_dir_arg else None,
+        dry_run=dry_run,
+    )
+    _run_safely(
+        "iconify", run_iconify_batch,
+        query=query, pack_id=f"{base_pack_id}_IC", count=count,
+        output_dir=(out_dir_arg / "iconify") if out_dir_arg else None,
+        dry_run=dry_run,
+    )
+
+    total_matched = sum(p["matched"] for p in providers_run)
+    total_downloaded = sum(p["downloaded"] for p in providers_run)
+    providers_ok = sum(1 for p in providers_run if p["ok"])
+    providers_failed = sum(1 for p in providers_run if not p["ok"])
+
+    summary = {
+        "query": query,
+        "count_per_provider": count,
+        "dry_run": dry_run,
+        "providers_run": len(providers_run),
+        "providers_ok": providers_ok,
+        "providers_failed": providers_failed,
+        "total_matched": total_matched,
+        "total_downloaded": total_downloaded,
+        "providers": providers_run,
+    }
+
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"gen_all_no_key_query={query!r}")
+        print(f"gen_all_no_key_dry_run={dry_run}")
+        print(f"gen_all_no_key_providers_ok={providers_ok}/{len(providers_run)}")
+        print(f"gen_all_no_key_total_matched={total_matched}")
+        print(f"gen_all_no_key_total_downloaded={total_downloaded}")
+        for p in providers_run:
+            status = "OK " if p["ok"] else "RED"
+            note = f" ({p['error']})" if p["error"] else ""
+            print(f"  [{status}] {p['provider']:15s} matched={p['matched']:3d} "
+                  f"downloaded={p['downloaded']:3d}{note}")
+
+
 if __name__ == "__main__":
     app()

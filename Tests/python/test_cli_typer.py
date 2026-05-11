@@ -825,6 +825,128 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["photos_downloaded"], 4)
         self.assertEqual(data["download_pings"], 4)
 
+    # ----------------------------------------------------------------- #
+    # gen all-no-key (v1.11.s37)
+    # ----------------------------------------------------------------- #
+
+    def test_all_no_key_help_renders(self) -> None:
+        result = self.runner.invoke(self.app, ["gen", "all-no-key", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("no-key", result.stdout.lower())
+        self.assertIn("Met Museum", result.stdout)
+
+    def test_all_no_key_fans_out_with_mocked_runners(self) -> None:
+        """Mock all 5 runners; verify aggregation logic."""
+        from unittest.mock import patch
+        from assetboy.execution.met_museum_runner import MetMuseumResult
+        from assetboy.execution.wikimedia_runner import WikimediaResult
+        from assetboy.execution.archive_org_runner import ArchiveOrgResult
+        from assetboy.execution.scryfall_runner import ScryfallResult
+        from assetboy.execution.iconify_runner import IconifyResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch(
+                "assetboy.execution.met_museum_runner.run_met_museum_batch",
+                return_value=MetMuseumResult(
+                    pack_id="MET", query="q", output_dir=Path(tmp),
+                    objects_matched=10, objects_downloaded=2, ok=True,
+                ),
+            ), patch(
+                "assetboy.execution.wikimedia_runner.run_wikimedia_batch",
+                return_value=WikimediaResult(
+                    pack_id="WM", query="q", output_dir=Path(tmp),
+                    files_matched=20, files_downloaded=2, ok=True,
+                ),
+            ), patch(
+                "assetboy.execution.archive_org_runner.run_archive_org_batch",
+                return_value=ArchiveOrgResult(
+                    pack_id="AO", query="q", output_dir=Path(tmp),
+                    items_matched=5, items_downloaded=2, ok=True,
+                ),
+            ), patch(
+                "assetboy.execution.scryfall_runner.run_scryfall_batch",
+                return_value=ScryfallResult(
+                    pack_id="SF", query="q", output_dir=Path(tmp),
+                    cards_matched=30, cards_downloaded=2, ok=True,
+                ),
+            ), patch(
+                "assetboy.execution.iconify_runner.run_iconify_batch",
+                return_value=IconifyResult(
+                    pack_id="IC", query="q", output_dir=Path(tmp),
+                    icons_matched=50, icons_downloaded=2, ok=True,
+                ),
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "all-no-key", "--query", "q", "--count", "2", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["providers_run"], 5)
+        self.assertEqual(data["providers_ok"], 5)
+        self.assertEqual(data["total_matched"], 10 + 20 + 5 + 30 + 50)
+        self.assertEqual(data["total_downloaded"], 10)
+
+    def test_all_no_key_handles_one_provider_failure(self) -> None:
+        """One provider crashes mid-fanout; others still complete."""
+        from unittest.mock import patch
+        from assetboy.execution.met_museum_runner import MetMuseumResult
+        from assetboy.execution.wikimedia_runner import WikimediaResult
+        from assetboy.execution.archive_org_runner import ArchiveOrgResult
+        from assetboy.execution.scryfall_runner import ScryfallResult
+        from assetboy.execution.iconify_runner import IconifyResult
+        import tempfile
+
+        def crash(*a: object, **kw: object) -> None:
+            raise RuntimeError("simulated crash")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ok_result = MetMuseumResult(
+                pack_id="P", query="q", output_dir=Path(tmp),
+                objects_matched=5, objects_downloaded=1, ok=True,
+            )
+            with patch(
+                "assetboy.execution.met_museum_runner.run_met_museum_batch",
+                return_value=ok_result,
+            ), patch(
+                "assetboy.execution.wikimedia_runner.run_wikimedia_batch",
+                side_effect=crash,  # this one crashes
+            ), patch(
+                "assetboy.execution.archive_org_runner.run_archive_org_batch",
+                return_value=ArchiveOrgResult(
+                    pack_id="A", query="q", output_dir=Path(tmp),
+                    items_matched=2, items_downloaded=0, ok=True,
+                ),
+            ), patch(
+                "assetboy.execution.scryfall_runner.run_scryfall_batch",
+                return_value=ScryfallResult(
+                    pack_id="S", query="q", output_dir=Path(tmp),
+                    cards_matched=3, cards_downloaded=0, ok=True,
+                ),
+            ), patch(
+                "assetboy.execution.iconify_runner.run_iconify_batch",
+                return_value=IconifyResult(
+                    pack_id="I", query="q", output_dir=Path(tmp),
+                    icons_matched=7, icons_downloaded=0, ok=True,
+                ),
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "all-no-key", "--query", "q", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["providers_run"], 5)
+        self.assertEqual(data["providers_ok"], 4)
+        self.assertEqual(data["providers_failed"], 1)
+        # The crashed one has the error string.
+        crashed = [p for p in data["providers"] if not p["ok"]]
+        self.assertEqual(len(crashed), 1)
+        self.assertIn("crashed", crashed[0]["error"])
+
     def test_comfy_submit_workflow_help_renders(self) -> None:
         result = self.runner.invoke(
             self.app, ["gen", "comfyui", "submit-workflow", "--help"]
