@@ -496,6 +496,15 @@ def main(argv: list[str] | None = None) -> int:
         default=-1,
         help="delete all but the most recent N history files; skip running probes",
     )
+    p.add_argument(
+        "--exit-zero",
+        action="store_true",
+        help=(
+            "v1.9.s23: force exit 0 regardless of probe outcome. Useful for CI "
+            "hooks that consume the JSON output but shouldn't fail the build "
+            "on (e.g.) a transient PolyHaven 503."
+        ),
+    )
     args = p.parse_args(argv)
 
     # v1.7.s12 history modes (no probe run)
@@ -528,6 +537,8 @@ def main(argv: list[str] | None = None) -> int:
             status = "OK " if result.ok else "RED"
             tail = result.notes if result.ok else result.error
             print(f"[{status}] {args.probe}: {tail or ''}")
+        if args.exit_zero:
+            return 0
         return 0 if result.ok else 1
 
     if not args.quiet and not args.json:
@@ -542,6 +553,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  overall: {state['overall']}")
         print(f"  written: {out_path}")
 
+    if args.exit_zero:
+        return 0
     return 0 if state["overall"] == "green" else 1
 
 

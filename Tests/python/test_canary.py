@@ -663,6 +663,40 @@ class TestCli:
         assert parsed["overall"] == "green"
         assert set(parsed["probes"].keys()) == set(canary.PROBES.keys())
 
+    def test_exit_zero_flag_forces_zero_on_single_probe_red(self, canary, monkeypatch, capsys):
+        """v1.9.s23: --exit-zero suppresses non-zero exit on RED probes."""
+        monkeypatch.setitem(
+            canary.PROBES,
+            "polyhaven",
+            lambda: canary.ProbeResult(ok=False, error="simulated_red"),
+        )
+        rc = canary.main(["--probe", "polyhaven", "--exit-zero"])
+        assert rc == 0
+
+    def test_exit_zero_flag_forces_zero_on_full_run_red(self, canary, monkeypatch, tmp_path):
+        """v1.9.s23: --exit-zero also covers the full-run overall=red path."""
+        for name in canary.PROBES.keys():
+            monkeypatch.setitem(
+                canary.PROBES,
+                name,
+                lambda n=name: canary.ProbeResult(ok=False, error=f"{n}_red"),
+            )
+        monkeypatch.setattr(
+            canary, "state_root", lambda current_file=None: tmp_path
+        )
+        rc = canary.main(["--quiet", "--exit-zero"])
+        assert rc == 0
+
+    def test_exit_zero_absent_still_returns_1_on_red(self, canary, monkeypatch, capsys):
+        """Default behavior preserved: no --exit-zero, RED probe -> exit 1."""
+        monkeypatch.setitem(
+            canary.PROBES,
+            "polyhaven",
+            lambda: canary.ProbeResult(ok=False, error="simulated_red"),
+        )
+        rc = canary.main(["--probe", "polyhaven"])
+        assert rc == 1
+
     def test_state_file_written(self, canary, monkeypatch, tmp_path):
         for name in canary.PROBES.keys():
             monkeypatch.setitem(
