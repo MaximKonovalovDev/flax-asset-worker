@@ -1,6 +1,6 @@
 # HEARTBEAT — assetboi (operator hibernation read-back)
 
-> **Last update:** 2026-05-11 (mid-turn, **102 commits + 51 tags shipped this turn**)
+> **Last update:** 2026-05-11 (mid-turn, **109 commits + 54 tags shipped this turn**)
 > **Repo:** `flax-asset-worker` (this repo; assetboi commits freely here)
 > **Loop status:** **NEVER-STOP ACTIVE** per BOSS Rule 3
 
@@ -10,12 +10,22 @@ ROADMAP) is supporting detail.
 
 ---
 
-## TL;DR — top-of-loop milestone (v1.11.4, this turn)
+## TL;DR — top-of-loop milestone (v1.11.7, this turn)
 
-**102 commits, 51 tags, 568 tests passing, 10 new public-API providers shipped.**
+**109 commits, 54 tags, 589 tests passing, 10 new public-API providers shipped + fully wired across THREE invocation paths.**
 
 Major milestone reached: **R1A TOP-10 PUBLIC API CATALOG COMPLETE** (v1.10.9
-tag `v1.10.9-unsplash-COMPLETE-R1A`). FAW now has fetcher commands for:
+tag `v1.10.9-unsplash-COMPLETE-R1A`).
+
+Plus v1.11.x batch: **THREE-PATH INTEGRATION COMPLETE** (v1.11.7
+tag `v1.11.7-router-r1a-keyed`):
+
+  - Path A: `gen <provider> fetch` standalone CLI commands
+  - Path B: `pack from-recipe` recipe-driven pipeline with provider IDs
+  - Path C: `SOURCE_ADAPTERS['<provider>_api']` adapter lookup
+
+Plus working sample recipe `recipes/sandbox/r1a_smoke.yaml` (5 no-key
+packs in one document; validates clean; runs end-to-end). FAW now has fetcher commands for:
 
 ```
 NO-KEY (always works):
