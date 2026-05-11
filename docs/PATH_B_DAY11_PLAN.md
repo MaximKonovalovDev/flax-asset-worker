@@ -396,7 +396,84 @@ rather than depending on the recipe file being on the FAW server's disk.
 
 **Status:** PENDING.
 
-### v1.7.s15 — Quaternius direct_url provider (the s4 carve-out) (~3 hr)
+### v1.7.s15 — Quaternius direct_url provider ✅ SHIPPED 2026-05-11 v1.7.3
+
+### v1.7.s11 — MEGA_TOOL_DISPATCH.md ✅ SHIPPED 2026-05-11
+### v1.7.s12 — canary history management ✅ SHIPPED 2026-05-11 v1.7.2
+### v1.7.s13 — library readiness CLI ✅ SHIPPED 2026-05-11 v1.7.0
+### v1.7.s14 — pack diff command ✅ SHIPPED 2026-05-11 v1.7.1
+
+---
+
+## v1.8 backlog (s16-s20) — written 2026-05-11
+
+All 5 v1.7 slices done. 5 more candidates queued:
+
+### v1.8.s16 — `library bulk-install` from manifest (~2 hr)
+
+**Trigger:** operators installing 20+ assets at once shouldn't fire 20 separate `library install` calls. A bulk-install command takes a YAML/JSON manifest and runs them in a batch with per-asset success/fail reporting.
+
+**Scope:**
+- `cli/library.py`: new `library bulk-install <manifest>` command.
+- Manifest schema: `[{asset_id, provider, category, name}, ...]`.
+- Per-asset error isolation: one failure doesn't abort the batch.
+- `--json` summary `{total, succeeded, failed, results: [...]}`.
+
+**Tests:** 4-5 (manifest load, partial-failure, all-success, malformed).
+
+**Status:** PENDING.
+
+### v1.8.s17 — `pack export-summary` for shareable status reports (~2 hr)
+
+**Trigger:** operators sharing pack state with collaborators (or AI agents inspecting) want a single condensed report — not 9 separate ledger files. Generate a markdown summary of a recipe's current state.
+
+**Scope:**
+- New `workflows/pack_summary.py`: `render_pack_summary(recipe_doc) -> str` returns markdown.
+- `cli/pack.py`: new `pack export-summary <recipe>` command.
+- Output sections: per-pack status table, missing-source-dir list, manual-drop instructions, retry suggestions.
+
+**Tests:** 3-5.
+
+**Status:** PENDING.
+
+### v1.8.s18 — `gen status-all` aggregate generator availability (~1 hr)
+
+**Trigger:** `gen comfyui status` exists but operators want one-shot "are any of my generators ready?" across all 3 (ComfyUI, sd.cpp, Stable Audio).
+
+**Scope:**
+- `cli/gen.py`: new `status-all` command at the gen level (not nested).
+- Probes each generator via existing `is_*_available()` helpers + reports status table.
+
+**Tests:** 2-3.
+
+**Status:** PENDING.
+
+### v1.8.s19 — `pack validate-all` batch validator (~1 hr)
+
+**Trigger:** `pack validate <one.yaml>` exists; CI/operator wants `pack validate-all` walking the entire `recipes/` tree.
+
+**Scope:**
+- `cli/pack.py`: new `validate-all` command (no positional arg; walks `recipes/`).
+- Per-recipe summary + aggregate counters.
+- Exit 1 if any recipe has errors.
+
+**Tests:** 3.
+
+**Status:** PENDING.
+
+### v1.8.s20 — Polyhaven `category` filter override per-pack (~1 hr)
+
+**Trigger:** acquisition_router `_drive_polyhaven` infers category from `asset_kind` — but operators sometimes want explicit override (e.g. an asset_kind "model" pack that actually downloads an HDRI environment).
+
+**Scope:**
+- Recipe schema: optional `polyhaven_category: textures|models|hdris` per pack.
+- `_drive_polyhaven`: honor the override if set; else infer.
+
+**Tests:** 2.
+
+**Status:** PENDING.
+
+
 
 **Trigger:** v1.6.s4 was "Quaternius + OGA"; the OGA half is complex (HTML scraping + per-asset license parsing). Ship Quaternius alone — CC0, predictable ZIP URLs, similar pattern to Kenney.
 
