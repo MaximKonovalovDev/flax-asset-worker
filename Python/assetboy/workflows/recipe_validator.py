@@ -42,7 +42,7 @@ VALID_ACQUISITION_METHODS = {"direct_url", "manual_browser", "generator"}
 # Empty set in any value = no per-provider whitelist (we accept anything and
 # let the runtime fail if unsupported).
 DIRECT_URL_PROVIDERS = {
-    "polyhaven", "kenney", "ambientcg", "freesound",
+    "polyhaven", "kenney", "ambientcg", "freesound", "quaternius",
 }
 MANUAL_BROWSER_PROVIDERS = {
     "fab", "mixamo", "unity", "epic",

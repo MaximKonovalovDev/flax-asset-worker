@@ -159,6 +159,8 @@ def _acquire_direct_url(
         return _drive_ambientcg(pack, pack_id=pack_id, out_dir=out_dir)
     if provider == "freesound":
         return _drive_freesound(pack, pack_id=pack_id, out_dir=out_dir)
+    if provider == "quaternius":
+        return _drive_quaternius(pack, pack_id=pack_id, out_dir=out_dir)
 
     return AcquisitionResult(
         ok=False,
@@ -166,7 +168,7 @@ def _acquire_direct_url(
         provider=provider,
         error=(
             f"unsupported_provider: {provider!r}. "
-            "direct_url lane currently supports: polyhaven, kenney, ambientcg, freesound. "
+            "direct_url lane currently supports: polyhaven, kenney, ambientcg, freesound, quaternius. "
             "For others, set acquisition_method: manual_browser or generator."
         ),
     )
@@ -349,6 +351,85 @@ def _drive_freesound(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> Ac
         ok=True, method="direct_url", provider="freesound",
         source_dir=out_dir,
         notes=f"freesound spec emitted for {len(search_terms)} search term(s) -> {out_dir}",
+    )
+
+
+def _drive_quaternius(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
+    """Drive quaternius_runner (Path B v1.7.s15).
+
+    Each pack's assets[] entry can specify either:
+      - {asset_id: "...", source_url: "https://..."}  - explicit zip URL
+      - {asset_id: "nature-kit"}                       - slug (resolved to QUATERNIUS_BASE + .zip)
+    Pack with no assets[] but matching a known preset (by pack_id) auto-resolves.
+    """
+    try:
+        from assetboy.execution.quaternius_runner import (
+            QUATERNIUS_PRESETS,
+            run_quaternius_batch,
+        )
+    except ImportError as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider="quaternius",
+            error=f"import_failed: {exc}",
+        )
+
+    assets = pack.get("assets") or []
+    downloaded = 0
+    last_error: str | None = None
+
+    # If no assets specified, try matching pack_id against a preset
+    if not assets:
+        preset_match = next(
+            (p for p in QUATERNIUS_PRESETS if p[0] == pack_id),
+            None,
+        )
+        if preset_match:
+            assets = [{"asset_id": preset_match[1]}]
+        else:
+            return AcquisitionResult(
+                ok=False, method="direct_url", provider="quaternius",
+                error=(
+                    f"no_assets_in_pack: provide assets[] with asset_id "
+                    f"(slug or URL) OR use a known preset pack_id "
+                    f"(known: {[p[0] for p in QUATERNIUS_PRESETS]})"
+                ),
+            )
+
+    try:
+        for asset in assets:
+            if isinstance(asset, dict):
+                source_url = asset.get("source_url", "") or asset.get("asset_id", "")
+            else:
+                source_url = str(asset)
+            result = run_quaternius_batch(
+                pack_id=pack_id,
+                source_url=source_url,
+                output_dir=out_dir,
+            )
+            if result.error:
+                last_error = result.error
+                # Continue trying other assets in the pack
+                continue
+            downloaded += 1
+    except Exception as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider="quaternius",
+            error=f"runner_crashed: {exc}",
+        )
+
+    if downloaded == 0:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider="quaternius",
+            error=f"all_assets_failed: last_error={last_error}",
+        )
+
+    return AcquisitionResult(
+        ok=True, method="direct_url", provider="quaternius",
+        source_dir=out_dir,
+        notes=(
+            f"quaternius downloaded {downloaded}/{len(assets)} asset(s) -> {out_dir}"
+            + (f"; last_warning={last_error}" if last_error else "")
+        ),
     )
 
 
