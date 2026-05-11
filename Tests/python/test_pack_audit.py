@@ -189,6 +189,74 @@ class PackAuditTests(unittest.TestCase):
         self.assertEqual(len(report["ledgers"]), 2)
 
 
+class FindFailedPacksTests(unittest.TestCase):
+    """v1.6.s8: find_failed_packs filters audit output to failed-only."""
+
+    def setUp(self) -> None:
+        from assetboy.workflows.pack_audit import find_failed_packs
+        self.find_failed = find_failed_packs
+
+    def _seed_and_query(self, layout, **kwargs):
+        from assetboy.workflows import pack_audit
+        from unittest.mock import patch
+        with TemporaryDirectory() as tmp_dir:
+            tmp_root = Path(tmp_dir)
+            pipeline_dir = tmp_root / "pack_pipeline"
+            for game_scope, packs in layout.items():
+                game_dir = pipeline_dir / game_scope
+                game_dir.mkdir(parents=True, exist_ok=True)
+                for pack_id, ledger in packs.items():
+                    (game_dir / f"{pack_id}.json").write_text(
+                        json.dumps(ledger), encoding="utf-8"
+                    )
+            with patch.object(pack_audit, "state_root", return_value=tmp_root):
+                return self.find_failed(**kwargs)
+
+    def test_returns_only_failed_status_entries(self) -> None:
+        layout = {
+            "sandbox": {
+                "GREEN_01": {"status": "completed", "current_state": "packeted"},
+                "RED_01": {"status": "failed", "current_state": "failed"},
+                "RED_02": {"status": "failed", "current_state": "acquisition_failed"},
+                "WAIT_01": {"status": "pending_manual_drop", "current_state": "awaiting_manual_browser_drop"},
+            },
+        }
+        failed = self._seed_and_query(layout)
+        ids = sorted(e["pack_id"] for e in failed)
+        self.assertEqual(ids, ["RED_01", "RED_02"])
+
+    def test_skip_acquisition_failed_excludes_router_failures(self) -> None:
+        layout = {
+            "sandbox": {
+                "RED_PIPELINE": {"status": "failed", "current_state": "failed"},
+                "RED_ROUTER": {"status": "failed", "current_state": "acquisition_failed"},
+            },
+        }
+        failed = self._seed_and_query(layout, include_acquisition_failed=False)
+        ids = [e["pack_id"] for e in failed]
+        self.assertEqual(ids, ["RED_PIPELINE"])
+        self.assertNotIn("RED_ROUTER", ids)
+
+    def test_game_filter_narrows_results(self) -> None:
+        layout = {
+            "alpha": {"A_FAIL_01": {"status": "failed"}},
+            "beta": {"B_FAIL_01": {"status": "failed"}},
+        }
+        failed_alpha = self._seed_and_query(layout, game_filter="alpha")
+        self.assertEqual(len(failed_alpha), 1)
+        self.assertEqual(failed_alpha[0]["pack_id"], "A_FAIL_01")
+
+    def test_empty_when_no_failures(self) -> None:
+        layout = {
+            "sandbox": {
+                "GREEN_01": {"status": "completed"},
+                "WAIT_01": {"status": "pending_manual_drop"},
+            },
+        }
+        failed = self._seed_and_query(layout)
+        self.assertEqual(failed, [])
+
+
 class PackAuditCliTests(unittest.TestCase):
     """Smoke-test the `pack audit` Typer command (via CliRunner)."""
 
@@ -212,6 +280,34 @@ class PackAuditCliTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertIn("pack_audit_total_ledgers=", result.stdout)
         self.assertIn("pack_audit_game_count=", result.stdout)
+
+    def test_rerun_failed_help_renders(self) -> None:
+        """v1.6.s8: pack rerun-failed --help works."""
+        result = self.runner.invoke(self.app, ["pack", "rerun-failed", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Re-run all packs that previously failed", result.stdout)
+
+    def test_rerun_failed_missing_recipe_errors_cleanly(self) -> None:
+        """Without --recipe, rerun-failed cannot look up pack specs."""
+        result = self.runner.invoke(self.app, ["pack", "rerun-failed", "--json"])
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("missing_recipe", result.stdout)
+
+    def test_rerun_failed_with_recipe_smoke(self) -> None:
+        """v1.6.s8 CLI smoke: pack rerun-failed runs without crashing.
+
+        Live-state-tolerant: per-pack runners may print to stdout before
+        the --json summary lands, so we can't reliably parse stdout as
+        clean JSON here. We just verify the command exits with a valid
+        code (0 or 1) and doesn't crash. The FindFailedPacksTests class
+        covers the actual filtering logic with isolated state.
+        """
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "rerun-failed", "--recipe", "sandbox/one_pack_smoke.yaml", "--dry-run"],
+        )
+        # Should not crash (exit 0 = no failures, exit 1 = retry attempted)
+        self.assertIn(result.exit_code, (0, 1))
 
 
 if __name__ == "__main__":

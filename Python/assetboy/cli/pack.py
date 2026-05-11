@@ -669,6 +669,196 @@ def validate_cmd(
 
 
 # --------------------------------------------------------------------------- #
+# pack rerun-failed (v1.6.s8)
+# --------------------------------------------------------------------------- #
+
+@app.command("rerun-failed")
+def rerun_failed_cmd(
+    recipe_path: Annotated[
+        str,
+        typer.Option(
+            "--recipe",
+            help=(
+                "Recipe YAML to source pack specs from. The audit names which "
+                "packs failed, the recipe provides the pack body to re-fire."
+            ),
+        ),
+    ] = "",
+    game: Annotated[
+        str,
+        typer.Option("--game", help="Filter to one game_scope (default: all)."),
+    ] = "",
+    skip_acquisition_failures: Annotated[
+        bool,
+        typer.Option(
+            "--skip-acquisition-failures",
+            help=(
+                "Exclude packs whose current_state is 'acquisition_failed' "
+                "(router-level failures, typically config; not pack_pipeline)."
+            ),
+        ),
+    ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Plan only; don't re-execute."),
+    ] = False,
+    json_out: Annotated[
+        bool, typer.Option("--json", help="Emit JSON output."),
+    ] = False,
+) -> None:
+    """Re-run all packs that previously failed (Path B v1.6.s8).
+
+    Walks `state/pack_pipeline/<game>/*.json`, finds packs with
+    `status=failed`, and re-fires them using the original recipe's pack
+    definitions. Useful after fixing a transient config problem (e.g.
+    operator added Fab auth, started ComfyUI, set workspace path).
+
+    Requires `--recipe <path>` so the command can look up each failed
+    pack's spec by id.
+
+    Without `--skip-acquisition-failures`, includes router-level failures
+    (typically the ones most worth retrying after a config fix).
+    """
+    if not recipe_path:
+        msg = "missing_recipe: pass --recipe <path> so we know each pack's spec"
+        if json_out:
+            json.dump({"error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_rerun_failed_error={msg}")
+        raise typer.Exit(code=1)
+
+    # Resolve recipe path
+    candidates = [
+        Path(recipe_path),
+        Path.cwd() / recipe_path,
+        _recipes_dir() / recipe_path,
+    ]
+    resolved = next((c for c in candidates if c.exists()), None)
+    if resolved is None:
+        msg = f"recipe_not_found: tried {[str(c) for c in candidates]}"
+        if json_out:
+            json.dump({"error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_rerun_failed_error={msg}")
+        raise typer.Exit(code=1)
+
+    try:
+        recipe_doc = _load_recipe(resolved)
+    except Exception as exc:
+        msg = f"recipe_parse_failed: {exc}"
+        if json_out:
+            json.dump({"error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_rerun_failed_error={msg}")
+        raise typer.Exit(code=1)
+
+    # Build a pack_id -> pack lookup from the recipe
+    pack_by_id = {
+        str(p.get("id")): p
+        for p in (recipe_doc.get("packs") or [])
+        if isinstance(p, dict) and p.get("id")
+    }
+    recipe_game = (recipe_doc.get("recipe") or {}).get("game", "")
+    effective_game_filter = game or recipe_game
+
+    # Find failed packs from the audit
+    from assetboy.workflows.pack_audit import find_failed_packs
+    failed = find_failed_packs(
+        game_filter=effective_game_filter,
+        include_acquisition_failed=not skip_acquisition_failures,
+    )
+
+    # Cross-reference with recipe -- skip failed packs that aren't in this recipe
+    targets: list[dict[str, Any]] = []
+    skipped_not_in_recipe: list[str] = []
+    for failed_entry in failed:
+        pid = failed_entry.get("pack_id", "")
+        if pid in pack_by_id:
+            targets.append(pack_by_id[pid])
+        else:
+            skipped_not_in_recipe.append(pid)
+
+    if not targets:
+        # Either no failures, or no matching packs in recipe
+        summary = {
+            "ok": True,
+            "recipe": str(resolved),
+            "game_filter": effective_game_filter,
+            "total_failed_in_audit": len(failed),
+            "matched_in_recipe": 0,
+            "skipped_not_in_recipe": skipped_not_in_recipe,
+            "results": [],
+        }
+        if json_out:
+            json.dump(summary, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_rerun_failed_total_failed_in_audit={len(failed)}")
+            print(f"pack_rerun_failed_matched_in_recipe=0")
+            for pid in skipped_not_in_recipe:
+                print(f"pack_rerun_failed_skipped={pid}")
+        return
+
+    # Execute the matched packs
+    results: list[dict[str, Any]] = []
+    re_success = 0
+    re_fail = 0
+    for pack in targets:
+        pid = pack.get("id", "?")
+        ledger = _acquire_and_run_one_pack(
+            pack=pack,
+            recipe_doc=recipe_doc,
+            dry_run=dry_run,
+            resume=True,  # always resume; this is a retry
+        )
+        status = ledger.get("status", "?")
+        results.append(
+            {
+                "pack_id": pid,
+                "status": status,
+                "current_state": ledger.get("current_state", "?"),
+                "error": ledger.get("error"),
+            }
+        )
+        if status in ("completed", "pending_manual_drop"):
+            re_success += 1
+        else:
+            re_fail += 1
+        if not json_out:
+            marker = "OK " if status == "completed" else (
+                "WAIT" if status == "pending_manual_drop" else "RED"
+            )
+            print(f"  [{marker}] {pid:60} state={ledger.get('current_state', '?')}")
+
+    summary = {
+        "ok": re_fail == 0,
+        "recipe": str(resolved),
+        "game_filter": effective_game_filter,
+        "total_failed_in_audit": len(failed),
+        "matched_in_recipe": len(targets),
+        "skipped_not_in_recipe": skipped_not_in_recipe,
+        "rerun_succeeded": re_success,
+        "rerun_failed": re_fail,
+        "results": results,
+    }
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"pack_rerun_failed_total={len(targets)}")
+        print(f"pack_rerun_failed_succeeded={re_success}")
+        print(f"pack_rerun_failed_failed={re_fail}")
+        if skipped_not_in_recipe:
+            print(f"pack_rerun_failed_skipped_count={len(skipped_not_in_recipe)}")
+
+    if re_fail > 0:
+        raise typer.Exit(code=1)
+
+
+# --------------------------------------------------------------------------- #
 # pack run-pack (v1.6.s6)
 # --------------------------------------------------------------------------- #
 

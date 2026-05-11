@@ -141,7 +141,51 @@ def _read_ledger(ledger_file: Path, game_scope: str) -> dict[str, Any]:
     return summary
 
 
+def find_failed_packs(
+    *,
+    game_filter: str = "",
+    include_acquisition_failed: bool = True,
+) -> list[dict[str, Any]]:
+    """Walk the ledger inventory and return only failed-status packs.
+
+    Path B v1.6.s8 (2026-05-11). Used by `pack rerun-failed` CLI to
+    re-target packs that landed in a failure state (typically because of
+    a transient config problem: workspace path, provider auth, ComfyUI
+    not running, etc.).
+
+    Args:
+        game_filter:               if set, only packs from this game_scope
+        include_acquisition_failed: if True, include packs whose status is
+                                    "failed" AND current_state is
+                                    "acquisition_failed" (router-level
+                                    failures). When False, only true
+                                    pack_pipeline failures.
+
+    Returns:
+        List of ledger summary dicts (same shape build_pack_audit_report
+        emits in its `ledgers` list).
+    """
+    report = build_pack_audit_report(include_ledgers=True, max_ledgers=10_000)
+    ledgers = report.get("ledgers") or []
+    result: list[dict[str, Any]] = []
+    for entry in ledgers:
+        if game_filter and entry.get("game_scope") != game_filter:
+            continue
+        status = entry.get("status", "")
+        current_state = entry.get("current_state", "")
+        if status != "failed":
+            continue
+        if (
+            not include_acquisition_failed
+            and current_state == "acquisition_failed"
+        ):
+            continue
+        result.append(entry)
+    return result
+
+
 __all__ = [
     "build_pack_audit_report",
+    "find_failed_packs",
     "PACK_PIPELINE_DIRNAME",
 ]
