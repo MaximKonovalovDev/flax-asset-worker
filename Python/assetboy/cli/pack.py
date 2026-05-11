@@ -669,6 +669,71 @@ def validate_cmd(
 
 
 # --------------------------------------------------------------------------- #
+# pack export-summary (v1.8.s17)
+# --------------------------------------------------------------------------- #
+
+@app.command("export-summary")
+def export_summary_cmd(
+    recipe_path: Annotated[
+        Path,
+        typer.Argument(help="Path to the recipe YAML to summarize."),
+    ],
+    out: Annotated[
+        str,
+        typer.Option(
+            "--out",
+            help="Write the markdown summary to this path (default: stdout).",
+        ),
+    ] = "",
+) -> None:
+    """Render a markdown summary of a recipe's current pack state (Path B v1.8.s17).
+
+    Joins the recipe YAML with the latest pack_pipeline ledgers to produce
+    a shareable status report. Useful for:
+      - PR descriptions ('here's where my recipe stands')
+      - Slack/issue updates
+      - AI-agent inspection (one doc instead of N ledgers)
+
+    Sections:
+      - Status counts
+      - Per-pack table (pack_id / provider / method / status / current_state)
+      - Manual drops required (if any)
+      - Failed packs with errors (if any)
+      - Recommended next actions
+    """
+    # Resolve recipe path
+    candidates = [
+        recipe_path,
+        Path.cwd() / recipe_path,
+        _recipes_dir() / recipe_path,
+    ]
+    resolved = next((c for c in candidates if c.exists()), None)
+    if resolved is None:
+        print(f"pack_export_summary_error=recipe_not_found")
+        print(f"pack_export_summary_tried={'; '.join(str(c) for c in candidates)}")
+        raise typer.Exit(code=1)
+
+    try:
+        doc = _load_recipe(resolved)
+    except Exception as exc:
+        print(f"pack_export_summary_error=recipe_parse_failed: {exc}")
+        raise typer.Exit(code=1)
+
+    from assetboy.workflows.pack_summary import render_pack_summary
+    markdown = render_pack_summary(doc)
+
+    if out:
+        out_path = Path(out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(markdown, encoding="utf-8")
+        print(f"pack_export_summary_written={out_path}")
+        print(f"pack_export_summary_bytes={out_path.stat().st_size}")
+    else:
+        # Stdout
+        sys.stdout.write(markdown)
+
+
+# --------------------------------------------------------------------------- #
 # pack validate-all (v1.8.s19)
 # --------------------------------------------------------------------------- #
 
