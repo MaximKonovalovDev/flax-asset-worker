@@ -2357,6 +2357,17 @@ def all_key_cmd(
 
 @app.command("list-providers")
 def list_providers_cmd(
+    filter_: Annotated[
+        list[str],
+        typer.Option(
+            "--filter",
+            help=(
+                "v1.12.s71: filter providers by attribute. Supported:"
+                " 'env_set:true', 'env_set:false', 'env_var:none' (no-key only),"
+                " 'env_var:<NAME>' (specific env var). Repeatable; ANDed."
+            ),
+        ),
+    ] = None,
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -2369,6 +2380,8 @@ def list_providers_cmd(
       - env-var detection (set or not)
       - license summary
       - asset class
+
+    v1.12.s71: --filter env_set:true to see only ready-to-use providers.
     """
     import os
 
@@ -2480,6 +2493,38 @@ def list_providers_cmd(
         else:
             p["env_set"] = bool(os.environ.get(ev, "").strip())
 
+    # v1.12.s71 — apply --filter (env_set / env_var).
+    parsed_filters: list[tuple[str, str]] = []
+    for f in (filter_ or []):
+        if ":" not in f:
+            msg = f"bad_filter_shape: {f!r} (expected 'field:value')"
+            if json_out:
+                json.dump({"error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"gen_list_providers_error={msg}")
+            raise typer.Exit(code=1)
+        fname, _, fval = f.partition(":")
+        parsed_filters.append((fname.strip(), fval.strip()))
+
+    def _matches_filter(provider: dict, field_name: str, value: str) -> bool:
+        if field_name == "env_set":
+            wanted = value.lower() in ("true", "yes", "1")
+            # Providers with env_var=None have env_set=None; treat as "no key, irrelevant".
+            return bool(provider.get("env_set")) is wanted
+        if field_name == "env_var":
+            ev = provider.get("env_var")
+            if value.lower() == "none":
+                return ev is None
+            return ev == value or (ev is not None and ev.lower() == value.lower())
+        return False  # unknown field -> never matches
+
+    if parsed_filters:
+        providers = [
+            p for p in providers
+            if all(_matches_filter(p, fn, fv) for fn, fv in parsed_filters)
+        ]
+
     no_key_count = sum(1 for p in providers if p["env_var"] is None)
     key_required = [p for p in providers if p["env_var"] is not None]
     key_set = sum(1 for p in key_required if p["env_set"])
@@ -2492,6 +2537,7 @@ def list_providers_cmd(
         "key_required_count": len(key_required),
         "key_set_count": key_set,
         "key_unset_count": key_unset,
+        "filters_applied": [f"{fn}:{fv}" for fn, fv in parsed_filters],
     }
 
     if json_out:

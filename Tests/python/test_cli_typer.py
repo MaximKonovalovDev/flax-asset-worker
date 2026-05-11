@@ -1383,6 +1383,49 @@ class TyperCliSmokeTests(unittest.TestCase):
             for key in ("id", "cli", "env_var", "license", "asset_class", "what", "env_set"):
                 self.assertIn(key, p)
 
+    def test_list_providers_filter_env_set_true(self) -> None:
+        """v1.12.s71: --filter env_set:true returns only providers with keys SET."""
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {"PEXELS_API_KEY": "test"}, clear=False):
+            # Clear all others.
+            for k in ("PIXABAY_API_KEY", "UNSPLASH_ACCESS_KEY",
+                      "RAWG_API_KEY", "JAMENDO_CLIENT_ID"):
+                os.environ.pop(k, None)
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "list-providers", "--filter", "env_set:true", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        # Only pexels should be in the list (it's the only key-set).
+        self.assertEqual(data["total"], 1)
+        self.assertEqual(data["providers"][0]["id"], "pexels")
+        self.assertEqual(data["filters_applied"], ["env_set:true"])
+
+    def test_list_providers_filter_env_var_none(self) -> None:
+        """--filter env_var:none returns only no-key providers."""
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "list-providers", "--filter", "env_var:none", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        # 5 R1A no-key + comfyui + sd = 7
+        self.assertEqual(data["total"], 7)
+        for p in data["providers"]:
+            self.assertIsNone(p["env_var"])
+
+    def test_list_providers_bad_filter_shape_errors(self) -> None:
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "list-providers", "--filter", "no_colon_here"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("bad_filter_shape", result.stdout)
+
     def test_list_providers_detects_set_env_var(self) -> None:
         """When PEXELS_API_KEY is set, env_set=True for pexels."""
         import os
