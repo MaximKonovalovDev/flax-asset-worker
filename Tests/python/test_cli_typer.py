@@ -117,6 +117,53 @@ class TyperCliSmokeTests(unittest.TestCase):
         # Should emit fab_auth_state_* lines
         self.assertIn("fab_auth_state_path=", result.stdout)
 
+    # ----------------------------------------------------------------- #
+    # gen list-presets (v1.5.5: --provider filter)
+    # ----------------------------------------------------------------- #
+
+    def test_gen_list_presets_default_shows_all_three_providers(self) -> None:
+        result = self.runner.invoke(self.app, ["gen", "list-presets"])
+        self.assertEqual(result.exit_code, 0)
+        # All 3 generator providers should appear in default output
+        self.assertIn("gen_comfyui_preset_count=", result.stdout)
+        self.assertIn("gen_local_image_preset_count=", result.stdout)
+        self.assertIn("gen_stable_audio_preset_count=", result.stdout)
+
+    def test_gen_list_presets_provider_filter_stable_audio(self) -> None:
+        result = self.runner.invoke(
+            self.app, ["gen", "list-presets", "--provider", "stable_audio"]
+        )
+        self.assertEqual(result.exit_code, 0)
+        # Should show only stable_audio
+        self.assertIn("gen_stable_audio_preset_count=", result.stdout)
+        self.assertNotIn("gen_comfyui_preset_count=", result.stdout)
+        self.assertNotIn("gen_local_image_preset_count=", result.stdout)
+
+    def test_gen_list_presets_provider_filter_comfyui_resolves_ids(self) -> None:
+        """v1.5.5 fix: ComfyUI preset dicts use pack_id, not id; previously
+        showed 'name=?' for all. Verify the fix actually resolves names."""
+        result = self.runner.invoke(
+            self.app, ["gen", "list-presets", "--provider", "comfyui"]
+        )
+        self.assertEqual(result.exit_code, 0)
+        # Should NOT contain "id=?" or "name=?" (the v1.5.5 fix)
+        self.assertNotIn("id=?", result.stdout)
+        self.assertNotIn("name=?", result.stdout)
+        # Should contain at least one real preset id
+        self.assertIn("SHARED_MAT_", result.stdout)
+
+    def test_gen_list_presets_json_mode(self) -> None:
+        result = self.runner.invoke(self.app, ["gen", "list-presets", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        import json
+        parsed = json.loads(result.stdout)
+        for key in (
+            "comfyui_material_presets",
+            "local_image_ui_prompts",
+            "stable_audio_presets",
+        ):
+            self.assertIn(key, parsed)
+
 
 if __name__ == "__main__":
     unittest.main()
