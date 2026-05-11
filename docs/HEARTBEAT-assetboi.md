@@ -226,3 +226,47 @@ clean `[WAIT]` state instead of a hard `[RED]`.
 **7 tags on origin now:** v1.1.0, v1.2.0, v1.2.1, v1.3.0, v1.3.2, v1.4.0, v1.4.1.
 
 Loop continues per Rule 3. No pause.
+
+---
+
+## Update 2026-05-11 (mid-turn rev 3, v1.5.0 tag landed)
+
+**+ Tag shipped: `v1.5.0-server-endpoints` (`9d32670`).**
+
+Server-side C# HTTP routes for the monorepo facade. 4 new endpoints:
+- `POST /api/v1/recipes/list`
+- `POST /api/v1/recipes/run`
+- `GET /api/v1/packs/{id}/status`
+- `GET /api/v1/canary/status`
+
+Implementation: `Source/Routes/RecipeRoutes.cs` + `CanaryRoutes.cs`,
+each ~80-190 LOC. Recipe routes subprocess to `python -m assetboy.cli`
+with `--json` and parse the structured output (no business logic
+duplication). Canary route reads `state/canary/canary_status.json`
+with a multi-path resolver (standalone OR submodule layout).
+
+Also shipped: `docs/MONOREPO_FACADE_DESIGN.md` (commit `9f5495c`) —
+detailed contract for the flax-mcp side of the integration. Lane E
+broker should read this BEFORE implementing the MCP-side facade.
+
+**8 tags on origin now:** v1.1.0, v1.2.0, v1.2.1, v1.3.0, v1.3.2,
+v1.4.0, v1.4.1, **v1.5.0**.
+
+**Open questions for operator (when you wake up):**
+
+1. The C# code in `Source/Routes/RecipeRoutes.cs` and `CanaryRoutes.cs`
+   was NOT compile-verified (no dotnet build chain in this loop). It
+   pattern-matches existing routes that DO compile. Please run
+   `dotnet build` against the FAW project in your game's Source/ dir
+   before relying on the new endpoints in a live Flax editor session.
+
+2. The flax-mcp monorepo facade is not yet implemented (Lane E broker
+   territory; assetboi has multi-AI etiquette restriction on flax-mcp
+   commits). The design doc in `docs/MONOREPO_FACADE_DESIGN.md` lays
+   out the exact MCP atomics + their HTTP routes + the migration path
+   (additive → deprecate scaffold → delete scaffold → bump submodule).
+
+3. The flax-mcp `external/flax-asset-worker` submodule is pinned at
+   `0b1ad7d` (s0 rescue commit). Bumping it to current FAW HEAD
+   (`9d32670`) is operator/broker work, not assetboi work. Without the
+   bump, none of v1.2-v1.5 is visible in flax-mcp's view.
