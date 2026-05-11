@@ -392,25 +392,73 @@ class AcquisitionRouterTests(unittest.TestCase):
         self.assertTrue(result.ok)
         self.assertEqual(mock_run.call_count, 1)
 
-    def test_generator_stable_audio_still_TBD(self) -> None:
-        """stable_audio_open_small driver is queued for v1.4; returns clean error."""
+    def test_generator_stable_audio_emits_job_spec_when_runner_unavailable(self) -> None:
+        """v1.4.1: stable_audio_open_small now emits job specs even when the
+        model + runner aren't installed. Returns awaiting_manual=True so the
+        operator sees a clean WAIT marker, not a hard failure."""
+        with TemporaryDirectory() as tmp_dir:
+            with patch.dict(
+                "os.environ", {"ASSETBOY_FLAX_REPO_ROOT": tmp_dir}, clear=False
+            ):
+                # No STABLE_AUDIO_MODEL_DIR / RUNNER_BIN set -> available=False
+                result = self.acquire_source_dir(
+                    {
+                        "id": "TP_GEN_SA",
+                        "acquisition_method": "generator",
+                        "provider": "stable_audio_open_small",
+                        "prompts": [
+                            {"id": "p1", "text": "forest dawn ambience", "duration_s": 11},
+                        ],
+                    },
+                    {"recipe": {"game": "test"}},
+                    dry_run=False,
+                )
+
+        # Not real-ok but also not hard-failed -- awaiting_manual
+        self.assertFalse(result.ok)
+        self.assertTrue(result.awaiting_manual)
+        self.assertIn("stable_audio job specs emitted", result.notes)
+
+    def test_generator_stable_audio_alias_stable_audio_works(self) -> None:
+        """provider: stable_audio should route to the same driver."""
         with TemporaryDirectory() as tmp_dir:
             with patch.dict(
                 "os.environ", {"ASSETBOY_FLAX_REPO_ROOT": tmp_dir}, clear=False
             ):
                 result = self.acquire_source_dir(
                     {
-                        "id": "TP_GEN_SA",
+                        "id": "TP_SA_ALIAS",
+                        "acquisition_method": "generator",
+                        "provider": "stable_audio",  # alias
+                        "prompts": ["test"],
+                    },
+                    {"recipe": {"game": "test"}},
+                    dry_run=False,
+                )
+
+        # Should hit the driver (awaiting_manual since model not installed)
+        self.assertTrue(
+            result.awaiting_manual or result.ok,
+            f"alias should route to driver, got: {result.error}",
+        )
+
+    def test_generator_stable_audio_no_prompts_returns_error(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            with patch.dict(
+                "os.environ", {"ASSETBOY_FLAX_REPO_ROOT": tmp_dir}, clear=False
+            ):
+                result = self.acquire_source_dir(
+                    {
+                        "id": "TP_SA_NOPROMPTS",
                         "acquisition_method": "generator",
                         "provider": "stable_audio_open_small",
-                        "prompts": ["forest dawn ambience"],
                     },
                     {"recipe": {"game": "test"}},
                     dry_run=False,
                 )
 
         self.assertFalse(result.ok)
-        self.assertIn("stable_audio_open_small_driver_TBD", result.error)
+        self.assertIn("no_prompts_in_pack", result.error)
 
     def test_generator_comfyui_string_prompts_also_work(self) -> None:
         """Recipes can supply prompts as plain strings (not dicts)."""

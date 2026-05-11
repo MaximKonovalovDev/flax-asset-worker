@@ -1628,3 +1628,78 @@ $ python -m assetboy.cli pack from-recipe sandbox/one_pack_smoke.yaml --dry-run
 | Acquisition providers wired | 10/11 (polyhaven + kenney + ambientcg + freesound + fab + mixamo + unity + epic + comfyui + sd.cpp; stable_audio = v1.4) |
 
 **Next:** stable_audio_open_small driver (needs new execution module) OR v1.4 tag now and let stable_audio be the v1.4.1 follow-up. Going with **v1.4 tag now** — the audio driver is a clean v1.4.1 increment, no value in delaying the v1.4 cut for it.
+
+---
+
+## Slice v1.4.1.stable-audio — Stable Audio Open Small driver (2026-05-11)
+
+**Status:** SHIPPED. **227 passed, 1 skipped, 0 failed** (was 220).
+
+**What shipped:**
+
+### 1. New `Python/assetboy/execution/stable_audio_runner.py` (~240 lines)
+
+Honest text-to-audio runner for Stability AI's `stable-audio-open-small` model (~3B params; 11-second ambient clips at 44.1kHz stereo; runs on RTX 3050 6GB). License: Stability Community License (free under $1M annual revenue; training data CC0/CC-BY/Sampling+).
+
+**Design philosophy:** runner emits a JSON job spec + invocation plan; actual model inference is a subprocess against an operator-provided binary (`STABLE_AUDIO_RUNNER_BIN` env var) loading model files from `STABLE_AUDIO_MODEL_DIR`. We do NOT inline torch + diffusers — keeps FAW's import graph lightweight, avoids dragging a multi-GB ML stack as a hard dep.
+
+**Public surface:**
+- `STABLE_AUDIO_PRESETS` — 6 starter tuples (forest_dawn_loop, fire_crackle_close, river_over_rocks, wind_through_leaves_distant, roman_arena_crowd_distant, torch_flames_indoor).
+- `StableAudioBatchResult` dataclass (pack_id, prompt, duration_s, output_dir, job_spec_path, invocation_cmd, dry_run, error).
+- `is_stable_audio_available() -> bool` — checks env vars + model dir + runner bin exist.
+- `run_stable_audio_batch(*, pack_id, prompt, duration_s=11, output_dir=None, dry_run=False) -> StableAudioBatchResult`.
+- `MODEL_DOWNLOAD_URL` — points to huggingface.co/stabilityai/stable-audio-open-small.
+
+**Behavior matrix:**
+- `dry_run=True` → emit job spec, return `dry_run=True`, no subprocess.
+- `dry_run=False` + model/runner not configured → emit job spec, return error `stable_audio_not_available` with setup instructions.
+- `dry_run=False` + configured → invoke subprocess with 5-minute walltime; return result based on exit code + WAV existence.
+
+### 2. `_drive_stable_audio` in `acquisition_router.py` (~110 lines)
+
+Wires `run_stable_audio_batch` into the generator lane. Same recipe contract as ComfyUI/sd.cpp drivers: `prompts: [...]` list (per-prompt overrides for `duration_s`).
+
+**Smart pause logic:** when the runner isn't available, the driver returns `ok=False, awaiting_manual=True` instead of a hard failure. Reasoning: job specs ARE emitted to disk; operator can invoke them manually after setup. This shows up as `[WAIT]` in the CLI output, not `[RED]` — honest "you have work to do" rather than "your pipeline is broken".
+
+**Provider aliases:** `stable_audio_open_small` AND `stable_audio` both route to the same driver.
+
+### 3. 7 new tests
+
+**`Tests/python/test_acquisition_router.py` (+3 tests):**
+- `test_generator_stable_audio_emits_job_spec_when_runner_unavailable` — verifies the awaiting_manual=True fallback contract.
+- `test_generator_stable_audio_alias_stable_audio_works` — verifies the alias.
+- `test_generator_stable_audio_no_prompts_returns_error` — verifies the missing-prompts error path.
+
+**`Tests/python/test_stable_audio_runner.py` (NEW, 4 tests):**
+- `test_presets_have_expected_shape` — verifies 6 presets with (str, str, int) tuples + duration ≤30s.
+- `test_is_available_false_when_env_unset` — verifies env-var contract.
+- `test_run_dry_run_emits_job_spec` — verifies dry-run JSON shape includes license_kind="stability_community" + invocation_cmd.
+- `test_run_empty_prompt_returns_error` + `test_run_without_model_or_bin_returns_clean_error`.
+
+### Verification
+
+```
+=== full test suite ===
+227 passed, 1 skipped in 4.20s
+(was 220 passed at v1.4.0)
+```
+
+### s11.1 progress (4 of 4 generator providers wired — COMPLETE)
+
+| Provider | Driver | Status |
+|---|---|---|
+| `comfyui` | `_drive_comfyui` | ✅ v1.3.2 |
+| `local_image` / `sd.cpp` | `_drive_local_image` | ✅ v1.3.3 |
+| `stable_audio_open_small` / `stable_audio` | `_drive_stable_audio` | ✅ v1.4.1 (THIS) |
+
+**All four canonical generator providers shipped.** Recipes can now express any text-to-image (comfyui or sd.cpp) or text-to-audio (stable_audio) generation pack and the router will drive the appropriate runner.
+
+### Files staged for commit
+
+- `Python/assetboy/execution/stable_audio_runner.py` (NEW, ~240 lines)
+- `Python/assetboy/workflows/acquisition_router.py` (MODIFIED, +110 lines `_drive_stable_audio`)
+- `Tests/python/test_acquisition_router.py` (MODIFIED, +3 stable_audio router tests)
+- `Tests/python/test_stable_audio_runner.py` (NEW, 4 module-level tests)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+**Next:** v1.4.1 tag → continue with whichever slice has highest leverage next. Possibilities: recipe expansion (more sandbox variants), Mixamo runner improvements, HEARTBEAT refresh.

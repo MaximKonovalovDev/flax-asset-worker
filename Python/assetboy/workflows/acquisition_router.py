@@ -480,12 +480,8 @@ def _acquire_generator(
     if provider in ("local_image", "sd.cpp"):
         return _drive_local_image(pack, pack_id=pack_id, out_dir=out_dir)
 
-    if provider == "stable_audio_open_small":
-        return AcquisitionResult(
-            ok=False, method="generator", provider=provider,
-            error="stable_audio_open_small_driver_TBD (recipes can use this "
-                  "provider once sd-runner-style driver lands in v1.4)",
-        )
+    if provider in ("stable_audio_open_small", "stable_audio"):
+        return _drive_stable_audio(pack, pack_id=pack_id, out_dir=out_dir)
 
     return AcquisitionResult(
         ok=False, method="generator", provider=provider,
@@ -697,6 +693,111 @@ def _drive_local_image(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> 
             f"local_image generated {len(results)} batch(es) "
             f"from {len(prompts)} prompt(s) -> {out_dir}"
             + (f"; warnings: {len(errors)}" if errors else "")
+        ),
+    )
+
+
+def _drive_stable_audio(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
+    """Drive stable_audio_runner.run_stable_audio_batch.
+
+    Path B v1.4.1 (2026-05-11): wires Stability AI's Stable Audio Open Small
+    text-to-audio model. RTX 3050 6GB compatible. License: Stability
+    Community License (free under $1M annual revenue).
+
+    Recipe shape:
+      provider: stable_audio_open_small    # or just "stable_audio"
+      acquisition_method: generator
+      prompts:
+        - id: forest_dawn_loop
+          text: "forest at dawn, birds chirping, soft wind through leaves"
+          duration_s: 11                   # optional; default 11 (sweet spot)
+
+    The runner emits a job spec per prompt + invokes the operator's
+    Stable Audio CLI (if STABLE_AUDIO_RUNNER_BIN + STABLE_AUDIO_MODEL_DIR
+    are set). When unavailable, returns ok=False with a helpful setup
+    message. Operator can run the emitted job specs manually.
+    """
+    try:
+        from assetboy.execution.stable_audio_runner import (
+            is_stable_audio_available,
+            run_stable_audio_batch,
+        )
+    except ImportError as exc:
+        return AcquisitionResult(
+            ok=False, method="generator", provider="stable_audio_open_small",
+            error=f"import_failed: {exc}",
+        )
+
+    prompts = pack.get("prompts") or []
+    if not prompts:
+        return AcquisitionResult(
+            ok=False, method="generator", provider="stable_audio_open_small",
+            error="no_prompts_in_pack",
+        )
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    available = is_stable_audio_available()
+
+    results = []
+    errors = []
+    for prompt_entry in prompts:
+        if isinstance(prompt_entry, str):
+            prompt_text = prompt_entry
+            duration_s = 11
+        elif isinstance(prompt_entry, dict):
+            prompt_text = str(prompt_entry.get("text") or prompt_entry.get("prompt") or "")
+            duration_s = int(prompt_entry.get("duration_s", 11))
+        else:
+            continue
+        if not prompt_text:
+            errors.append("empty_prompt_text")
+            continue
+
+        try:
+            batch_result = run_stable_audio_batch(
+                pack_id=pack_id,
+                prompt=prompt_text,
+                duration_s=duration_s,
+                output_dir=out_dir,
+                # Auto-dry-run when the model/runner aren't set up: at least
+                # the job spec lands so operator can invoke later.
+                dry_run=not available,
+            )
+            results.append(batch_result)
+            if batch_result.error:
+                errors.append(f"{prompt_text[:30]}: {batch_result.error}")
+        except Exception as exc:
+            errors.append(f"{prompt_text[:30]}: {exc}")
+
+    if not results:
+        return AcquisitionResult(
+            ok=False, method="generator", provider="stable_audio_open_small",
+            error=f"all_prompts_failed: {'; '.join(errors)[:200]}",
+        )
+
+    # Distinguish "real success" from "spec-only" honestly.
+    succeeded_real = sum(1 for r in results if not r.error and not r.dry_run)
+    spec_only = sum(1 for r in results if r.dry_run or r.error)
+
+    if available and succeeded_real > 0:
+        return AcquisitionResult(
+            ok=True, method="generator", provider="stable_audio_open_small",
+            source_dir=out_dir,
+            notes=f"stable_audio generated {succeeded_real} clip(s) -> {out_dir}",
+        )
+
+    # No real outputs -- only specs. Treat as awaiting-manual-style pause
+    # rather than failure: operator can invoke the emitted job specs.
+    return AcquisitionResult(
+        ok=False, method="generator", provider="stable_audio_open_small",
+        source_dir=out_dir,
+        awaiting_manual=True,
+        notes=(
+            f"stable_audio job specs emitted ({spec_only}); operator must "
+            f"invoke STABLE_AUDIO_RUNNER_BIN against them (see "
+            f"assetboy/data/stable_audio_*.json under {out_dir}). "
+            f"Or set STABLE_AUDIO_MODEL_DIR + STABLE_AUDIO_RUNNER_BIN env "
+            "vars and re-run."
         ),
     )
 
