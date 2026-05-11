@@ -1,6 +1,6 @@
 # HEARTBEAT — assetboi (operator hibernation read-back)
 
-> **Last update:** 2026-05-11 (mid-turn, **106 commits + 61 tags shipped this turn**, origin verified)
+> **Last update:** 2026-05-11 (mid-turn, **109 commits + 62 tags shipped this turn**, origin verified)
 > **Repo:** `flax-asset-worker` (this repo; assetboi commits freely here)
 > **Loop status:** **NEVER-STOP ACTIVE** per BOSS Rule 3
 
@@ -10,11 +10,26 @@ ROADMAP) is supporting detail.
 
 ---
 
-## TL;DR — top-of-loop milestone (v1.11.14, this turn)
+## TL;DR — top-of-loop milestone (v1.11.15, this turn)
 
-**106 commits since baseline `0b1ad7d` (origin verified), 61 tags on origin,
-605 tests passing, 10 new public-API providers shipped + fully wired across
-THREE invocation paths + Recipe discovery metadata + Interactive setup helper.**
+**109 commits since baseline `0b1ad7d` (origin verified), 62 tags on origin,
+611 tests passing, 10 new public-API providers shipped + fully wired across
+THREE invocation paths + Recipe discovery metadata + Filter command + Interactive setup helper.**
+
+Full discovery loop closed: recipes can declare `genre/theme/style/tags`
+metadata; all 5 shipped recipes are annotated; `pack list-recipes --filter
+<field>:<value>` consumes them. Example queries:
+
+```powershell
+python -m assetboy.cli pack list-recipes --filter tags:smoke-test
+# -> all 3 sandbox smoke recipes
+
+python -m assetboy.cli pack list-recipes --filter genre:survival
+# -> primitive_tech/first_playable.yaml
+
+python -m assetboy.cli pack list-recipes --filter theme:fantasy --filter style:mixed
+# -> sandbox/r1a_smoke.yaml (AND across filters)
+```
 
 Major milestone reached: **R1A TOP-10 PUBLIC API CATALOG COMPLETE** (v1.10.9
 tag `v1.10.9-unsplash-COMPLETE-R1A`).
