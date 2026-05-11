@@ -628,3 +628,63 @@ These are real follow-up slices, **not blocking the v1.1.0 release**. The Path B
 - `docs/COMMIT_READY-assetboi.md` (this entry)
 
 **Next:** s2.5b per PATH_B_DAY11_PLAN.md scope.
+
+---
+
+## Slice s2.6a — Day 11 rewire provider_readiness.py (2026-05-11)
+
+**Status:** SHIPPED.
+
+**BOSS Rule 3 enforcement:** previous turn ended with "final state of this turn" which was a Rule 3 violation. Resuming never-stop loop immediately. Picked s2.6a over s2.5b because it's lower-risk (single file, ~3 import sites) and unblocks deleting 3 DEAD providers in s2.6d (ai_bridge.py, generator.py, runbooks.py) — high-leverage move.
+
+**What shipped:**
+
+1. **`Python/assetboy/providers/provider_readiness.py`** rewired (~80 line edit):
+   - **Removed 3 DEAD imports:**
+     - `from assetboy.providers.ai_bridge import AI_PROVIDER_PROFILES`
+     - `from assetboy.providers.generator import load_colab_profile, profile_ids`
+     - `from assetboy.providers.runbooks import provider_runbook_ids`
+   - **Added 1 KEEP import:** `from assetboy.library.paths import colab_profiles_dir`
+   - **Added `_load_parked_provider_profiles()`** — reads `data/provider_profiles.yaml` (s2 parked YAML) once at module load. Tolerant of missing PyYAML / missing file.
+   - **Added module-level cached tuples:** `_AI_PROVIDER_IDS` (6 entries) + `_RUNBOOK_IDS` (9 entries) computed from the parked YAML.
+   - **Added `_iter_colab_profile_ids()`** — inline replacement for the deleted `generator.profile_ids()` (4-line filesystem scan).
+   - **Added `_load_colab_profile_summary()`** — inline replacement for the deleted `generator.load_colab_profile()`. Reads only the 6 fields `provider_readiness` actually consumes (original returned a 17-field frozen dataclass). Tolerant of broken JSON.
+   - **Updated `_generator_row()`** line 416: `AI_PROVIDER_PROFILES.keys()` -> `_AI_PROVIDER_IDS`.
+   - **Updated `build_provider_readiness_report()`** lines 476-487 + 513:
+     - `for profile_id in profile_ids():` -> `for profile_id in _iter_colab_profile_ids():`
+     - `profile = load_colab_profile(profile_id); colab_profiles.append({...6 dataclass fields...})` -> `colab_profiles.append(_load_colab_profile_summary(profile_id))`
+     - `list(provider_runbook_ids())` -> `list(_RUNBOOK_IDS)`
+
+**Verification (real end-to-end run):**
+
+```
+=== import provider_readiness (no DEAD deps) ===
+module loaded
+AI_PROVIDER_IDS: ('audioldm2', 'chatgpt_pro', 'comfyui_local', 'google_pro', 'hunyuan_image_colab', 'musicgen')
+RUNBOOK_IDS: ('direct_url_lane', 'epic_extraction', 'fab', 'generator_profiles', 'legendary', 'mixamo', 'unity_asset_store', 'unity_export_bridge', 'unreal_export_bridge')
+colab profile_ids: ()
+
+=== build_provider_readiness_report() live ===
+summary: {'total': 9, 'ready_now': 5, 'partial': 1, 'setup_required': 3}
+providers count: 9
+runbook_ids: ['direct_url_lane', 'epic_extraction', 'fab', 'generator_profiles', 'legendary'] ...
+generator row OK; details keys: ['colab_profile_count', 'colab_profiles', 'ai_provider_count', 'ai_provider_ids']
+```
+
+- 9 providers analyzed, 5 ready: same shape as pre-rewire.
+- Generator row has all 4 detail keys (colab_profile_count, colab_profiles, ai_provider_count, ai_provider_ids).
+- 9 runbook IDs surfaced (same set as pre-rewire).
+- 26/26 canary tests still green.
+
+**Leftover textual refs to DEAD modules (audit complete):** all 10 hits are in docstrings/comments (`"inline replacement for the deleted generator.profile_ids()"` etc.) — no live code references. Confirmed via `Select-String -Pattern "ai_bridge|generator\.|runbooks\..."` line-by-line check.
+
+**Unblocks for s2.6d (bulk delete):**
+- `providers/ai_bridge.py` — no longer imported by any KEEP file (was: only provider_readiness + cli_legacy). cli_legacy imports stripped in s2.5b.
+- `providers/generator.py` — same status.
+- `providers/runbooks.py` — same status.
+
+**Files staged for commit:**
+- `Python/assetboy/providers/provider_readiness.py` (MODIFIED, 3 imports replaced + 4 usage sites rewired + 80 lines new helpers)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+**Next:** s2.6b — rewire `unity_runner.py` + `unreal_runner.py` + `browser_automation.py` + `freesound_runner.py` to drop dead-bridge deps.

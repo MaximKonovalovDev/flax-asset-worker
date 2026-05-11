@@ -1,24 +1,97 @@
 from __future__ import annotations
 
+import json
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from assetboy.providers.ai_bridge import AI_PROVIDER_PROFILES
+from assetboy.library.paths import colab_profiles_dir
 from assetboy.providers.epic_vault import (
     build_local_epic_extraction_readiness,
     default_epic_launcher_saved_data_dir,
     default_local_fab_library_db_path,
 )
 from assetboy.providers.fab_hybrid import FabHybridDownloader
-from assetboy.providers.generator import load_colab_profile, profile_ids
 from assetboy.providers.lanes import LANE_POLICIES, ProviderLane, adapters_for_lane
 from assetboy.providers.legendary_bridge import build_legendary_status_report
 from assetboy.providers.mixamo_auth import MixamoAuthSession
-from assetboy.providers.runbooks import provider_runbook_ids
 from assetboy.providers.unity_auth import UnityAuthSession
 from assetboy.providers.unity_runner import list_unity_installations
 from assetboy.providers.unreal_runner import list_unreal_installations
+
+
+# ---------------------------------------------------------------------------
+# Path B s2.6a (2026-05-11): inline AI_PROVIDER_PROFILES + profile_ids() +
+# provider_runbook_ids() loading. Reads parked YAML data (s2 extraction) so
+# we can delete ai_bridge.py + generator.py + runbooks.py in s2.6d.
+# ---------------------------------------------------------------------------
+
+def _load_parked_provider_profiles() -> dict[str, object]:
+    """Read assetboy/data/provider_profiles.yaml once (cached).
+
+    Returns the inner `data` dict. Falls back to an empty dict if PyYAML
+    or the file isn't available so this module never blocks import.
+    """
+    try:
+        import yaml
+    except ImportError:
+        return {}
+    yaml_path = Path(__file__).resolve().parent.parent / "data" / "provider_profiles.yaml"
+    if not yaml_path.exists():
+        return {}
+    try:
+        doc = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return dict((doc or {}).get("data") or {})
+
+
+# Cached module-level data — read once, cheap re-reads.
+_PARKED = _load_parked_provider_profiles()
+_AI_PROVIDER_IDS: tuple[str, ...] = tuple(sorted((_PARKED.get("AI_PROVIDER_PROFILES") or {}).keys()))
+_RUNBOOK_IDS: tuple[str, ...] = tuple(sorted((_PARKED.get("STATIC_PROVIDER_RUNBOOKS") or {}).keys()))
+
+
+def _iter_colab_profile_ids() -> tuple[str, ...]:
+    """Inline replacement for the deleted ``generator.profile_ids()``.
+
+    Lists ``*.json`` files under colab_profiles_dir() (skipping ``*.example``).
+    """
+    try:
+        root = colab_profiles_dir()
+    except Exception:
+        return ()
+    if not root.exists():
+        return ()
+    return tuple(
+        sorted(
+            path.stem
+            for path in root.glob("*.json")
+            if not path.stem.endswith(".example")
+        )
+    )
+
+
+def _load_colab_profile_summary(profile_id: str) -> dict[str, object]:
+    """Inline replacement for the deleted ``generator.load_colab_profile()``.
+
+    Reads only the 6 fields ``provider_readiness`` actually consumes
+    (the original returned a 17-field frozen dataclass). Tolerant of
+    missing fields and broken files.
+    """
+    try:
+        root = colab_profiles_dir()
+        payload = json.loads((root / f"{profile_id}.json").read_text(encoding="utf-8"))
+    except Exception:
+        payload = {}
+    return {
+        "profile_id": str(payload.get("profile_id", profile_id)),
+        "display_name": str(payload.get("display_name", profile_id)),
+        "adapter_id": str(payload.get("adapter_id", "")),
+        "model_name": str(payload.get("model_name", "")),
+        "lane": str(payload.get("lane", "")),
+        "asset_kind": str(payload.get("asset_kind", "")),
+    }
 
 
 _STATUS_PRIORITY: dict[str, int] = {
@@ -413,7 +486,7 @@ def _legendary_row(timeout_seconds: float) -> dict[str, object]:
 
 
 def _generator_row(colab_profiles: tuple[dict[str, object], ...]) -> dict[str, object]:
-    ai_provider_ids = tuple(sorted(AI_PROVIDER_PROFILES.keys()))
+    ai_provider_ids = _AI_PROVIDER_IDS  # parked YAML (Path B s2.6a)
     ready = bool(colab_profiles or ai_provider_ids)
     next_action = (
         "Generator profiles are available. Pick a profile or provider runbook before batch emission."
@@ -473,18 +546,8 @@ def build_provider_readiness_report(*, timeout_seconds: float = 15.0) -> dict[st
     unreal_installations = tuple(item.to_dict() for item in list_unreal_installations())
 
     colab_profiles: list[dict[str, object]] = []
-    for profile_id in profile_ids():
-        profile = load_colab_profile(profile_id)
-        colab_profiles.append(
-            {
-                "profile_id": profile.profile_id,
-                "display_name": profile.display_name,
-                "adapter_id": profile.adapter_id,
-                "model_name": profile.model_name,
-                "lane": profile.lane,
-                "asset_kind": profile.asset_kind,
-            }
-        )
+    for profile_id in _iter_colab_profile_ids():  # Path B s2.6a (was generator.profile_ids)
+        colab_profiles.append(_load_colab_profile_summary(profile_id))
 
     providers = [
         _direct_url_row(),
@@ -510,7 +573,7 @@ def build_provider_readiness_report(*, timeout_seconds: float = 15.0) -> dict[st
         "autonomy": _autonomy_summary(providers),
         "lanes": _lane_summary(providers),
         "providers": providers,
-        "available_runbook_ids": list(provider_runbook_ids()),
+        "available_runbook_ids": list(_RUNBOOK_IDS),  # Path B s2.6a (was runbooks.provider_runbook_ids)
         "recommended_actions": _recommended_actions(providers),
     }
 
