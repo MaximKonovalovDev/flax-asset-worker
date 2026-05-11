@@ -96,6 +96,11 @@ namespace FAW.Core
                     // v1.11.s48 — enumerate Python gen sub-app providers (R1A catalog).
                     result = await ProviderRoutes.HandleListGenAsync();
                 }
+                else if (path == "/api/v1/manifest/stats" && method == "POST")
+                {
+                    // v1.12.s73 — aggregate R1A manifests on disk.
+                    result = await ProviderRoutes.HandleManifestStatsAsync();
+                }
                 else if (path.StartsWith("/api/v1/providers/") && path.Contains("/download"))
                 {
                     result = await ProviderRoutes.HandleDownloadAsync(path, ctx);

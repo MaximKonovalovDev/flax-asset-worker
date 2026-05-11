@@ -20,6 +20,59 @@ namespace FAW.Routes
         }
 
         /// <summary>
+        /// v1.12.s73 — manifest-stats: aggregate on-disk R1A manifests
+        /// via subprocess to `python -m assetboy.cli pack manifest-stats --json`.
+        /// Returns: manifests_scanned, sources_seen, total_downloaded/skipped/
+        /// failed/bytes, by_source breakdown.
+        /// </summary>
+        public static async Task<JObject> HandleManifestStatsAsync()
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "python",
+                    Arguments = "-m assetboy.cli pack manifest-stats --json",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8,
+                };
+                var proc = new Process { StartInfo = psi };
+                proc.Start();
+                var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+                var stderrTask = proc.StandardError.ReadToEndAsync();
+                if (!proc.WaitForExit(20000))
+                {
+                    try { proc.Kill(); } catch { }
+                    return ErrorResult("timeout: pack manifest-stats took > 20s");
+                }
+                var stdout = await stdoutTask;
+                var stderr = await stderrTask;
+                // Note: pack manifest-stats exits 1 when --root doesn't exist;
+                // that's a structural failure, not "no manifests yet". We propagate
+                // the JSON error envelope when present.
+                JObject parsed;
+                try
+                {
+                    parsed = JObject.Parse(stdout);
+                }
+                catch
+                {
+                    return ErrorResult($"pack_manifest_stats_unparseable: exit={proc.ExitCode} stderr={stderr}");
+                }
+                parsed["success"] = proc.ExitCode == 0;
+                return parsed;
+            }
+            catch (Exception exc)
+            {
+                return ErrorResult($"manifest_stats_crashed: {exc.Message}");
+            }
+        }
+
+        /// <summary>
         /// v1.11.s48 — list gen sub-app providers (R1A + ComfyUI + sd) via
         /// subprocess to `python -m assetboy.cli gen list-providers --json`.
         /// Returns the same shape as the CLI catalog: providers[] + aggregate
