@@ -104,6 +104,50 @@ namespace FAW.Routes
             };
         }
 
+        /// <summary>
+        /// Path B v1.6.s2 (2026-05-11): single-asset metadata lookup.
+        ///
+        /// GET /api/v1/library/asset/{asset_id}
+        ///   Returns: { success: true, asset: {...} }
+        ///   404:     { success: false, error: "asset_not_found", asset_id: ... }
+        ///
+        /// Linear scan of the library JSON. Library is small (~hundreds of
+        /// entries max for any real game) so O(N) is fine; if it ever grows
+        /// past ~10k entries, switch to a keyed index.
+        /// </summary>
+        public static JObject HandleGetAsset(string assetId)
+        {
+            if (string.IsNullOrWhiteSpace(assetId))
+            {
+                return new JObject
+                {
+                    ["success"] = false,
+                    ["error"] = "missing_asset_id",
+                };
+            }
+
+            var library = LoadLibrary();
+            foreach (var asset in library)
+            {
+                var id = asset["id"]?.ToString() ?? "";
+                if (string.Equals(id, assetId, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    return new JObject
+                    {
+                        ["success"] = true,
+                        ["asset"] = asset,
+                    };
+                }
+            }
+
+            return new JObject
+            {
+                ["success"] = false,
+                ["error"] = "asset_not_found",
+                ["asset_id"] = assetId,
+            };
+        }
+
         private static List<JObject> LoadLibrary()
         {
             if (!File.Exists(LibraryFile)) return new List<JObject>();

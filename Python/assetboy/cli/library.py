@@ -266,5 +266,70 @@ def audit_cmd(
         print(f"library_audit_{k}={v}")
 
 
+# --------------------------------------------------------------------------- #
+# library asset  (v1.6.s2)
+# --------------------------------------------------------------------------- #
+
+@app.command("asset")
+def asset_cmd(
+    asset_id: Annotated[
+        str,
+        typer.Argument(help="Asset ID to look up in the library."),
+    ],
+    base: Annotated[
+        str,
+        typer.Option("--server", help="FAW server base URL."),
+    ] = DEFAULT_BASE,
+    json_out: Annotated[
+        bool,
+        typer.Option("--json", help="Emit JSON output."),
+    ] = False,
+) -> None:
+    """Fetch a single asset's metadata by id (Path B v1.6.s2).
+
+    Calls GET /api/v1/library/asset/{asset_id}. Returns 404-equivalent
+    (`ok=false, error=asset_not_found`) when the id isn't installed.
+    """
+    try:
+        # The HTTP server returns 404 on not-found; requests treats 404 as
+        # an error, but we want to surface the JSON body anyway.
+        if requests is None:
+            raise RuntimeError("requests not installed")
+        r = requests.get(
+            f"{base}/api/v1/library/asset/{asset_id}",
+            timeout=10.0,
+        )
+        # Accept both 200 (found) and 404 (not found); both return JSON
+        if r.status_code not in (200, 404):
+            r.raise_for_status()
+        data = r.json() if r.content else {}
+    except Exception as exc:
+        if json_out:
+            json.dump({"ok": False, "error": str(exc), "asset_id": asset_id},
+                      sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"library_asset_ok=false")
+            print(f"library_asset_error={exc}")
+        raise typer.Exit(code=1)
+
+    if json_out:
+        _emit_json(data, json_out=True)
+        if not data.get("success", False):
+            raise typer.Exit(code=1)
+        return
+
+    if data.get("success"):
+        asset = data.get("asset") or {}
+        print(f"library_asset_ok=true")
+        for k, v in asset.items():
+            print(f"library_asset_{k}={v}")
+    else:
+        print(f"library_asset_ok=false")
+        print(f"library_asset_error={data.get('error', 'unknown')}")
+        print(f"library_asset_id={asset_id}")
+        raise typer.Exit(code=1)
+
+
 if __name__ == "__main__":
     app()

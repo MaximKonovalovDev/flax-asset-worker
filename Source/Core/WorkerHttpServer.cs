@@ -115,6 +115,19 @@ namespace FAW.Core
                 {
                     result = LibraryRoutes.HandleReady();
                 }
+                else if (path.StartsWith("/api/v1/library/asset/") && method == "GET")
+                {
+                    // v1.6.s2: single-asset metadata lookup
+                    var assetId = path.Substring("/api/v1/library/asset/".Length);
+                    // Strip trailing slash if present
+                    if (assetId.EndsWith("/")) assetId = assetId.Substring(0, assetId.Length - 1);
+                    result = LibraryRoutes.HandleGetAsset(assetId);
+                    if (result["success"]?.ToObject<bool>() == false &&
+                        result["error"]?.ToString() == "asset_not_found")
+                    {
+                        ctx.Response.StatusCode = 404;
+                    }
+                }
                 else if (path == "/api/v1/recipes/list" && method == "POST")
                 {
                     result = await RecipeRoutes.HandleListAsync();

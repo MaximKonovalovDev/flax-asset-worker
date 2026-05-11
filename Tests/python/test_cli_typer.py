@@ -237,6 +237,28 @@ class TyperCliSmokeTests(unittest.TestCase):
         )
         self.assertEqual(result.exit_code, 1)
 
+    # ----------------------------------------------------------------- #
+    # library asset (v1.6.s2)
+    # ----------------------------------------------------------------- #
+
+    def test_library_asset_command_exists(self) -> None:
+        """v1.6.s2: library asset <id> command is wired into the library sub-app."""
+        result = self.runner.invoke(self.app, ["library", "asset", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        # The command should describe what it does
+        self.assertIn("Fetch", result.stdout)
+        self.assertIn("asset", result.stdout.lower())
+
+    def test_library_asset_when_server_down_exits_clean(self) -> None:
+        """When FAW server isn't running, library asset must exit cleanly (not crash)."""
+        result = self.runner.invoke(
+            self.app,
+            ["library", "asset", "NONEXISTENT_ID", "--server", "http://localhost:1"],
+        )
+        # Exit code 1 expected (server unreachable)
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("library_asset_ok=false", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
