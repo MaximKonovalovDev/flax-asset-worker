@@ -62,10 +62,12 @@ See git log for v1.10.0-v1.10.9 for concrete examples (one tag per provider).
 
 ### CI / regression-guard concerns
 
-1. `../Tests/python/test_*` — 612 tests as of v1.11.15; offline (mocked urllib)
+1. `../Tests/python/test_*` — 612 tests as of v1.11.17; offline (mocked urllib)
 2. `../Tests/python/test_cli_json_contract.py` — JSON shape contracts consumed by C# routes
-3. `../Tests/python/conftest.py` — fixture setup (no global mocks; each test is self-contained)
-4. `pwsh scripts/setup-r1a-keys.ps1 -List` — verify env-var state for live-API tests
+3. `../Tests/python/conftest.py` — fixture setup; exposes `LIVE_TESTS_SKIP` decorator
+4. `../Tests/python/test_r1a_live_smoke.py` — opt-in live-network tests (set
+   `FAW_RUN_LIVE_TESTS=1` to enable; covers 5 no-key R1A providers)
+5. `pwsh scripts/setup-r1a-keys.ps1 -List` — verify env-var state for live tests
 
 ---
 
