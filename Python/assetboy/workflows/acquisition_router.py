@@ -196,12 +196,17 @@ def _drive_polyhaven(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> Ac
             error="no_assets_in_pack",
         )
     # Categorize: HDRIs go to "hdris", textures to "textures", models to "models".
-    category = "textures"
-    asset_kind = str(pack.get("asset_kind", "")).lower()
-    if asset_kind in ("skybox", "hdr", "hdri"):
-        category = "hdris"
-    elif asset_kind in ("model", "prop_static", "foliage"):
-        category = "models"
+    # v1.8.s20: per-pack `polyhaven_category` field overrides asset_kind inference.
+    explicit_category = str(pack.get("polyhaven_category", "")).strip().lower()
+    if explicit_category in ("textures", "models", "hdris"):
+        category = explicit_category
+    else:
+        category = "textures"
+        asset_kind = str(pack.get("asset_kind", "")).lower()
+        if asset_kind in ("skybox", "hdr", "hdri"):
+            category = "hdris"
+        elif asset_kind in ("model", "prop_static", "foliage"):
+            category = "models"
     try:
         for asset_id in asset_ids:
             run_polyhaven_batch(

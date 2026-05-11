@@ -352,6 +352,90 @@ class AcquisitionRouterTests(unittest.TestCase):
         kw = mock_run.call_args.kwargs
         self.assertEqual(kw["input_image"], "C:/concepts/photo.jpg")
 
+    # ----------------------------------------------------------------- #
+    # v1.8.s20: polyhaven_category override
+    # ----------------------------------------------------------------- #
+
+    def test_polyhaven_category_explicit_override_used(self) -> None:
+        """v1.8.s20: per-pack polyhaven_category overrides asset_kind inference."""
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as tmp_dir:
+            with patch.dict(
+                "os.environ", {"ASSETBOY_FLAX_REPO_ROOT": tmp_dir}, clear=False
+            ):
+                with patch(
+                    "assetboy.execution.polyhaven_runner.run_polyhaven_batch",
+                    return_value=[]
+                ) as mock_run:
+                    self.acquire_source_dir(
+                        {
+                            "id": "TP_PH_OVERRIDE",
+                            "acquisition_method": "direct_url",
+                            "provider": "polyhaven",
+                            "asset_kind": "model",  # would normally => "models"
+                            "polyhaven_category": "hdris",  # but override => "hdris"
+                            "assets": [{"asset_id": "kloofendal_43d_clear_puresky_2k"}],
+                        },
+                        {"recipe": {"game": "test"}},
+                        dry_run=False,
+                    )
+        self.assertEqual(mock_run.call_count, 1)
+        kw = mock_run.call_args.kwargs
+        # Explicit override wins
+        self.assertEqual(kw["category"], "hdris")
+
+    def test_polyhaven_category_inference_when_no_override(self) -> None:
+        """Without polyhaven_category, asset_kind=model still infers 'models'."""
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as tmp_dir:
+            with patch.dict(
+                "os.environ", {"ASSETBOY_FLAX_REPO_ROOT": tmp_dir}, clear=False
+            ):
+                with patch(
+                    "assetboy.execution.polyhaven_runner.run_polyhaven_batch",
+                    return_value=[]
+                ) as mock_run:
+                    self.acquire_source_dir(
+                        {
+                            "id": "TP_PH_INFER",
+                            "acquisition_method": "direct_url",
+                            "provider": "polyhaven",
+                            "asset_kind": "model",
+                            "assets": [{"asset_id": "rock_boulder_dry_01"}],
+                        },
+                        {"recipe": {"game": "test"}},
+                        dry_run=False,
+                    )
+        kw = mock_run.call_args.kwargs
+        self.assertEqual(kw["category"], "models")
+
+    def test_polyhaven_invalid_category_falls_back_to_inference(self) -> None:
+        """Unknown polyhaven_category value -> falls back to asset_kind inference."""
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as tmp_dir:
+            with patch.dict(
+                "os.environ", {"ASSETBOY_FLAX_REPO_ROOT": tmp_dir}, clear=False
+            ):
+                with patch(
+                    "assetboy.execution.polyhaven_runner.run_polyhaven_batch",
+                    return_value=[]
+                ) as mock_run:
+                    self.acquire_source_dir(
+                        {
+                            "id": "TP_PH_BAD_OVERRIDE",
+                            "acquisition_method": "direct_url",
+                            "provider": "polyhaven",
+                            "asset_kind": "hdri",
+                            "polyhaven_category": "garbage_value",  # invalid
+                            "assets": [{"asset_id": "x"}],
+                        },
+                        {"recipe": {"game": "test"}},
+                        dry_run=False,
+                    )
+        kw = mock_run.call_args.kwargs
+        # Falls back to inference (hdri asset_kind -> hdris)
+        self.assertEqual(kw["category"], "hdris")
+
     def test_generator_comfyui_default_input_image_is_none(self) -> None:
         """Plain text-to-image prompts default input_image=None (no img2img)."""
         fake_batch_result = [type("FakeRes", (), {"outputs": ["x.png"]})()]
