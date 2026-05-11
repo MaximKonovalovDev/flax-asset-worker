@@ -669,6 +669,117 @@ def validate_cmd(
 
 
 # --------------------------------------------------------------------------- #
+# pack diff (v1.7.s14)
+# --------------------------------------------------------------------------- #
+
+@app.command("diff")
+def diff_cmd(
+    old_recipe: Annotated[
+        Path,
+        typer.Argument(help="Path to the OLD recipe YAML (baseline)."),
+    ],
+    new_recipe: Annotated[
+        Path,
+        typer.Argument(help="Path to the NEW recipe YAML (compared against old)."),
+    ],
+    json_out: Annotated[
+        bool, typer.Option("--json", help="Emit JSON output."),
+    ] = False,
+) -> None:
+    """Semantic diff between two recipe YAMLs (Path B v1.7.s14).
+
+    Shows what changed at the pack + recipe + gate level:
+      - added / removed packs
+      - per-pack changed fields (provider, acquisition_method, license, ...)
+      - prompts/assets/search_terms COUNT changes
+      - gates required_pack_ids changes
+
+    Unlike a raw `git diff`, this is semantic: a recipe reformat doesn't
+    show up; only meaningful changes do.
+
+    Exit code:
+      0 = no changes
+      1 = changes detected (also when files can't be read/parsed)
+    """
+    # Resolve both recipe paths (accept absolute / cwd-relative / recipes/<game>/<f>.yaml)
+    def _resolve(p: Path) -> Path | None:
+        candidates = [p, Path.cwd() / p, _recipes_dir() / p]
+        return next((c for c in candidates if c.exists()), None)
+
+    old_resolved = _resolve(old_recipe)
+    new_resolved = _resolve(new_recipe)
+
+    if old_resolved is None or new_resolved is None:
+        msg = (
+            f"recipe_not_found: "
+            f"old={'OK' if old_resolved else 'MISSING'} "
+            f"new={'OK' if new_resolved else 'MISSING'}"
+        )
+        if json_out:
+            json.dump(
+                {
+                    "error": msg,
+                    "old_recipe": str(old_recipe),
+                    "new_recipe": str(new_recipe),
+                },
+                sys.stdout,
+                indent=2,
+            )
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_diff_error={msg}")
+        raise typer.Exit(code=1)
+
+    try:
+        old_doc = _load_recipe(old_resolved)
+        new_doc = _load_recipe(new_resolved)
+    except Exception as exc:
+        msg = f"recipe_parse_failed: {exc}"
+        if json_out:
+            json.dump({"error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_diff_error={msg}")
+        raise typer.Exit(code=1)
+
+    from assetboy.workflows.recipe_diff import diff_recipes, diff_result_to_dict
+
+    diff = diff_recipes(old_doc, new_doc)
+
+    if json_out:
+        payload = diff_result_to_dict(diff)
+        payload["old_recipe"] = str(old_resolved)
+        payload["new_recipe"] = str(new_resolved)
+        json.dump(payload, sys.stdout, indent=2, default=str)
+        sys.stdout.write("\n")
+    else:
+        print(f"pack_diff_old={old_resolved}")
+        print(f"pack_diff_new={new_resolved}")
+        print(f"pack_diff_has_changes={'true' if diff.has_changes else 'false'}")
+        print(f"pack_diff_added_count={len(diff.added_packs)}")
+        for pid in diff.added_packs:
+            print(f"pack_diff_added={pid}")
+        print(f"pack_diff_removed_count={len(diff.removed_packs)}")
+        for pid in diff.removed_packs:
+            print(f"pack_diff_removed={pid}")
+        print(f"pack_diff_modified_count={len(diff.modified_packs)}")
+        for mod in diff.modified_packs:
+            print(f"pack_diff_modified  pack_id={mod.pack_id}  fields={len(mod.changed_fields)}")
+            for change in mod.changed_fields:
+                print(f"  pack_diff_field  {change.field}={change.old!r} -> {change.new!r}")
+        if diff.recipe_field_changes:
+            print(f"pack_diff_recipe_fields_count={len(diff.recipe_field_changes)}")
+            for change in diff.recipe_field_changes:
+                print(f"  pack_diff_recipe_field  {change.field}={change.old!r} -> {change.new!r}")
+        for gate_key, gate_ids in diff.gate_changes.items():
+            for gid in gate_ids:
+                print(f"pack_diff_gate  {gate_key}={gid}")
+
+    if diff.has_changes:
+        raise typer.Exit(code=1)
+
+
+# --------------------------------------------------------------------------- #
 # pack rerun-failed (v1.6.s8)
 # --------------------------------------------------------------------------- #
 
