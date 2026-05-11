@@ -8,6 +8,7 @@ routes to each sub-app.
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 from typer.testing import CliRunner
 
@@ -266,6 +267,69 @@ class TyperCliSmokeTests(unittest.TestCase):
     # ----------------------------------------------------------------- #
     # gen comfyui submit-workflow (v1.9.s25)
     # ----------------------------------------------------------------- #
+
+    # ----------------------------------------------------------------- #
+    # gen met-museum fetch (v1.10.s26)
+    # ----------------------------------------------------------------- #
+
+    def test_met_museum_fetch_help_renders(self) -> None:
+        result = self.runner.invoke(
+            self.app, ["gen", "met-museum", "fetch", "--help"]
+        )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Met", result.stdout)
+        self.assertIn("CC0", result.stdout)
+
+    def test_met_museum_fetch_dry_run_no_matches_exits_zero(self) -> None:
+        """Mock the runner to return an empty-match result; CLI should exit 0."""
+        from unittest.mock import patch
+        from assetboy.execution.met_museum_runner import MetMuseumResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = MetMuseumResult(
+                pack_id="TEST", query="zzz", output_dir=Path(tmp),
+                objects_matched=0, ok=True, error="no_matches",
+            )
+            with patch(
+                "assetboy.execution.met_museum_runner.run_met_museum_batch",
+                return_value=fake,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "met-museum", "fetch", "--query", "zzz", "--dry-run"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("gen_met_museum_matched=0", result.stdout)
+        self.assertIn("no_matches", result.stdout)
+
+    def test_met_museum_fetch_json_output_shape(self) -> None:
+        """--json emits parseable JSON with expected keys."""
+        from unittest.mock import patch
+        from assetboy.execution.met_museum_runner import MetMuseumResult
+        import tempfile, json as _json
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = MetMuseumResult(
+                pack_id="PACK", query="q", output_dir=Path(tmp),
+                objects_matched=5, objects_public_domain=3,
+                objects_downloaded=3, objects_skipped_non_pd=2, ok=True,
+            )
+            with patch(
+                "assetboy.execution.met_museum_runner.run_met_museum_batch",
+                return_value=fake,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "met-museum", "fetch", "--query", "q", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        # Strip leading non-JSON noise if any; parse last JSON block.
+        data = _json.loads(result.stdout.strip().split("\n", 0)[0] if False else result.stdout.strip())
+        self.assertEqual(data["pack_id"], "PACK")
+        self.assertEqual(data["objects_downloaded"], 3)
+        self.assertEqual(data["objects_skipped_non_pd"], 2)
+        self.assertTrue(data["ok"])
 
     def test_comfy_submit_workflow_help_renders(self) -> None:
         result = self.runner.invoke(

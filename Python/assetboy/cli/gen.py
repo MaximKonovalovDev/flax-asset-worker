@@ -40,8 +40,16 @@ sd_app = typer.Typer(
     no_args_is_help=True,
 )
 
+met_app = typer.Typer(
+    name="met-museum",
+    help="Metropolitan Museum of Art Open Access (CC0) image fetcher.",
+    add_completion=False,
+    no_args_is_help=True,
+)
+
 app.add_typer(comfy_app, name="comfyui")
 app.add_typer(sd_app, name="sd")
+app.add_typer(met_app, name="met-museum")
 
 
 # --------------------------------------------------------------------------- #
@@ -693,6 +701,124 @@ def comfy_submit_workflow_cmd(
         print(f"gen_comfyui_submit_downloaded_count={len(downloaded)}")
         for d in downloaded:
             print(f"  downloaded={d}")
+
+
+# --------------------------------------------------------------------------- #
+# gen met-museum fetch  (v1.10.s26)
+# --------------------------------------------------------------------------- #
+
+@met_app.command("fetch")
+def met_fetch_cmd(
+    query: Annotated[
+        str,
+        typer.Option("--query", "-q", help="Search term (matches title/artist/medium)."),
+    ],
+    count: Annotated[
+        int, typer.Option("--count", "-n", help="Max public-domain images to download."),
+    ] = 6,
+    pack_id: Annotated[
+        str,
+        typer.Option("--pack-id", help="Pack id for output dir (default: derived from query)."),
+    ] = "",
+    department_id: Annotated[
+        int,
+        typer.Option(
+            "--department",
+            help="Met department filter (e.g. 13=Greek/Roman, 11=European Paintings).",
+        ),
+    ] = -1,
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            help="Override output dir (default: <manual_drop>/met_museum/<pack_id>/).",
+        ),
+    ] = Path(""),
+    small: Annotated[
+        bool,
+        typer.Option("--small", help="Use primaryImageSmall (faster) instead of primaryImage."),
+    ] = False,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Plan only; hit search but skip image downloads."),
+    ] = False,
+    json_out: Annotated[
+        bool, typer.Option("--json", help="Emit JSON output."),
+    ] = False,
+) -> None:
+    """Fetch CC0 reference images from The Met (Path B v1.10.s26).
+
+    The Metropolitan Museum of Art Open Access program publishes ~500K artworks
+    as CC0 public domain. This command searches by free-text query, filters to
+    isPublicDomain=true objects, and downloads up to --count primary images
+    along with a JSON manifest (titles, artists, dates, license).
+
+    Examples:
+      assetboy gen met-museum fetch -q "roman fresco" -n 4
+      assetboy gen met-museum fetch -q "japanese woodblock" --department 6 -n 8
+      assetboy gen met-museum fetch -q "ancient greek vase" --small --dry-run
+
+    Output: <manual_drop>/met_museum/<pack_id>/ contains the image files +
+    met_museum_manifest.json with per-image metadata.
+    """
+    from assetboy.execution.met_museum_runner import run_met_museum_batch
+
+    dep_id: int | None = department_id if department_id >= 0 else None
+    out_dir_arg: Path | None = output_dir if str(output_dir) else None
+    pack_id_arg: str | None = pack_id if pack_id else None
+
+    try:
+        result = run_met_museum_batch(
+            query=query,
+            pack_id=pack_id_arg,
+            count=count,
+            department_id=dep_id,
+            output_dir=out_dir_arg,
+            use_small_image=small,
+            dry_run=dry_run,
+        )
+    except Exception as exc:
+        msg = f"met_museum_runner_crashed: {exc}"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_met_museum_error={msg}")
+        raise typer.Exit(code=1)
+
+    summary = {
+        "ok": result.ok,
+        "pack_id": result.pack_id,
+        "query": result.query,
+        "output_dir": str(result.output_dir),
+        "objects_matched": result.objects_matched,
+        "objects_public_domain": result.objects_public_domain,
+        "objects_downloaded": result.objects_downloaded,
+        "objects_skipped_non_pd": result.objects_skipped_non_pd,
+        "objects_failed": result.objects_failed,
+        "downloaded_paths": [str(p) for p in result.downloaded_paths],
+        "manifest_path": str(result.manifest_path) if result.manifest_path else None,
+        "dry_run": result.dry_run,
+        "error": result.error,
+    }
+
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"gen_met_museum_pack_id={result.pack_id}")
+        print(f"gen_met_museum_query={result.query!r}")
+        print(f"gen_met_museum_matched={result.objects_matched}")
+        print(f"gen_met_museum_downloaded={result.objects_downloaded}")
+        print(f"gen_met_museum_skipped_non_pd={result.objects_skipped_non_pd}")
+        print(f"gen_met_museum_failed={result.objects_failed}")
+        print(f"gen_met_museum_output_dir={result.output_dir}")
+        if result.manifest_path:
+            print(f"gen_met_museum_manifest={result.manifest_path}")
+        if result.error:
+            print(f"gen_met_museum_note={result.error}")
+
+    if not result.ok:
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":
