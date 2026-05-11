@@ -94,6 +94,12 @@ jamendo_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
 )
+unsplash_app = typer.Typer(
+    name="unsplash",
+    help="Unsplash free stock photos (requires UNSPLASH_ACCESS_KEY env).",
+    add_completion=False,
+    no_args_is_help=True,
+)
 
 app.add_typer(comfy_app, name="comfyui")
 app.add_typer(sd_app, name="sd")
@@ -106,6 +112,7 @@ app.add_typer(pexels_app, name="pexels")
 app.add_typer(pixabay_app, name="pixabay")
 app.add_typer(rawg_app, name="rawg")
 app.add_typer(jamendo_app, name="jamendo")
+app.add_typer(unsplash_app, name="unsplash")
 
 
 # --------------------------------------------------------------------------- #
@@ -1834,6 +1841,112 @@ def jamendo_tracks_cmd(
             print(f"gen_jamendo_manifest={result.manifest_path}")
         if result.error:
             print(f"gen_jamendo_note={result.error}")
+
+    if not result.ok:
+        raise typer.Exit(code=1)
+
+
+# --------------------------------------------------------------------------- #
+# gen unsplash photos  (v1.10.s35)
+# --------------------------------------------------------------------------- #
+
+@unsplash_app.command("photos")
+def unsplash_photos_cmd(
+    query: Annotated[str, typer.Option("--query", "-q")],
+    count: Annotated[int, typer.Option("--count", "-n")] = 6,
+    variant: Annotated[
+        str,
+        typer.Option(
+            "--variant",
+            help="raw | full | regular (1080w default) | small | thumb.",
+        ),
+    ] = "regular",
+    orientation: Annotated[
+        str,
+        typer.Option(
+            "--orientation",
+            help="landscape | portrait | squarish (default: any).",
+        ),
+    ] = "",
+    pack_id: Annotated[str, typer.Option("--pack-id")] = "",
+    output_dir: Annotated[Path, typer.Option("--output-dir")] = Path(""),
+    skip_download_ping: Annotated[
+        bool,
+        typer.Option(
+            "--skip-download-ping",
+            help="Skip /photos/<id>/download analytics ping (testing only).",
+        ),
+    ] = False,
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Fetch free stock photos from Unsplash (Path B v1.10.s35).
+
+    Requires UNSPLASH_ACCESS_KEY env var (free dev signup at
+    unsplash.com/developers; 50 req/hour). All photos under Unsplash License:
+    free personal + commercial, attribution appreciated (not required).
+
+    Per Unsplash API guidelines, downloads automatically trigger
+    /photos/<id>/download for usage analytics (suppress with
+    --skip-download-ping for testing).
+
+    Examples:
+      assetboy gen unsplash photos -q "stone wall" -n 4
+      assetboy gen unsplash photos -q "fog forest" --orientation landscape -n 6
+      assetboy gen unsplash photos -q "neon" --variant full -n 3
+    """
+    from assetboy.execution.unsplash_runner import run_unsplash_photo_batch
+
+    out_dir_arg: Path | None = output_dir if str(output_dir) else None
+    pack_id_arg: str | None = pack_id if pack_id else None
+    orientation_arg: str | None = orientation.strip().lower() if orientation.strip() else None
+
+    try:
+        result = run_unsplash_photo_batch(
+            query=query, pack_id=pack_id_arg, count=count, variant=variant,
+            orientation=orientation_arg,
+            output_dir=out_dir_arg, dry_run=dry_run,
+            skip_download_ping=skip_download_ping,
+        )
+    except Exception as exc:
+        msg = f"unsplash_runner_crashed: {exc}"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_unsplash_error={msg}")
+        raise typer.Exit(code=1)
+
+    summary = {
+        "ok": result.ok,
+        "pack_id": result.pack_id,
+        "query": result.query,
+        "output_dir": str(result.output_dir),
+        "photos_matched": result.photos_matched,
+        "photos_downloaded": result.photos_downloaded,
+        "photos_failed": result.photos_failed,
+        "download_pings": result.download_pings,
+        "downloaded_paths": [str(p) for p in result.downloaded_paths],
+        "manifest_path": str(result.manifest_path) if result.manifest_path else None,
+        "dry_run": result.dry_run,
+        "error": result.error,
+    }
+
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"gen_unsplash_pack_id={result.pack_id}")
+        print(f"gen_unsplash_query={result.query!r}")
+        print(f"gen_unsplash_matched={result.photos_matched}")
+        print(f"gen_unsplash_downloaded={result.photos_downloaded}")
+        print(f"gen_unsplash_failed={result.photos_failed}")
+        print(f"gen_unsplash_download_pings={result.download_pings}")
+        print(f"gen_unsplash_output_dir={result.output_dir}")
+        if result.manifest_path:
+            print(f"gen_unsplash_manifest={result.manifest_path}")
+        if result.error:
+            print(f"gen_unsplash_note={result.error}")
 
     if not result.ok:
         raise typer.Exit(code=1)

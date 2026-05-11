@@ -781,6 +781,50 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["tracks_downloaded"], 3)
         self.assertEqual(data["tracks_skipped_restricted"], 2)
 
+    # ----------------------------------------------------------------- #
+    # gen unsplash photos (v1.10.s35)
+    # ----------------------------------------------------------------- #
+
+    def test_unsplash_photos_help_renders(self) -> None:
+        result = self.runner.invoke(self.app, ["gen", "unsplash", "photos", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Unsplash", result.stdout)
+        self.assertIn("UNSPLASH_ACCESS_KEY", result.stdout)
+
+    def test_unsplash_photos_missing_access_key_exits_1(self) -> None:
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("UNSPLASH_ACCESS_KEY", None)
+            result = self.runner.invoke(
+                self.app, ["gen", "unsplash", "photos", "--query", "x", "--dry-run"],
+            )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("missing_access_key", result.stdout)
+
+    def test_unsplash_photos_json_output_shape(self) -> None:
+        from unittest.mock import patch
+        from assetboy.execution.unsplash_runner import UnsplashResult
+        import tempfile, json as _json
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = UnsplashResult(
+                pack_id="P", query="q", output_dir=Path(tmp),
+                photos_matched=4, photos_downloaded=4, download_pings=4, ok=True,
+            )
+            with patch(
+                "assetboy.execution.unsplash_runner.run_unsplash_photo_batch",
+                return_value=fake,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "unsplash", "photos", "--query", "q", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["photos_downloaded"], 4)
+        self.assertEqual(data["download_pings"], 4)
+
     def test_comfy_submit_workflow_help_renders(self) -> None:
         result = self.runner.invoke(
             self.app, ["gen", "comfyui", "submit-workflow", "--help"]
