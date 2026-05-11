@@ -1,6 +1,6 @@
 # HEARTBEAT — assetboi (operator hibernation read-back)
 
-> **Last update:** 2026-05-11 (mid-turn, **116 commits + 64 tags shipped this turn**, origin verified)
+> **Last update:** 2026-05-11 (mid-turn, **128 commits + 75 tags shipped this turn**, origin verified)
 > **Repo:** `flax-asset-worker` (this repo; assetboi commits freely here)
 > **Loop status:** **NEVER-STOP ACTIVE** per BOSS Rule 3
 
@@ -10,11 +10,26 @@ ROADMAP) is supporting detail.
 
 ---
 
-## TL;DR — top-of-loop milestone (v1.11.15, this turn)
+## TL;DR — top-of-loop milestone (v1.12.9, this turn)
 
-**109 commits since baseline `0b1ad7d` (origin verified), 62 tags on origin,
-611 tests passing, 10 new public-API providers shipped + fully wired across
-THREE invocation paths + Recipe discovery metadata + Filter command + Interactive setup helper.**
+**128 commits since baseline `0b1ad7d` (origin verified), 75 tags on origin,
+633 tests passing, 10 R1A public-API providers + full v1.12 wave (async fan-out,
+429-retry across all 10 runners, provider catalog filter, benchmark command,
+manifest stats CLI + HTTP endpoint).**
+
+v1.12 wave additions on top of v1.11 milestone:
+  - v1.12.0 — gen all-no-key --parallel (ThreadPoolExecutor concurrent fan-out)
+  - v1.12.1 — gen all-key --parallel (keyed providers, skip-aware)
+  - v1.12.2 — _http_retry.with_429_retry (exponential backoff helper)
+  - v1.12.3 — Pexels runner: 429-retry integration
+  - v1.12.4 — Pixabay/Unsplash/RAWG/Jamendo: all keyed runners retry
+  - v1.12.5 — Met/Wikimedia/Archive.org/Scryfall/Iconify: all no-key retry
+  - v1.12.6 — gen bench-fanout (sequential vs parallel speedup demo)
+  - v1.12.7 — gen list-providers --filter env_set/env_var
+  - v1.12.8 — pack manifest-stats (aggregate on-disk R1A manifests)
+  - v1.12.9 — POST /api/v1/manifest/stats (14th HTTP endpoint)
+
+The v1.11 milestone reference (R1A wave complete) was:
 
 Full discovery loop closed: recipes can declare `genre/theme/style/tags`
 metadata; all 5 shipped recipes are annotated; `pack list-recipes --filter
