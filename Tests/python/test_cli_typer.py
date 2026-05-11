@@ -1716,6 +1716,50 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("providers", parsed)
         self.assertIsInstance(parsed["providers"], list)
 
+    def test_library_r1a_status_help_renders(self) -> None:
+        """v1.12.s75: library r1a-status --help works."""
+        result = self.runner.invoke(self.app, ["library", "r1a-status", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("R1A", result.stdout)
+
+    def test_library_r1a_status_runs_with_clean_env(self) -> None:
+        """library r1a-status runs without crash even with no env vars set."""
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {}, clear=False):
+            for k in ("PEXELS_API_KEY", "PIXABAY_API_KEY",
+                      "UNSPLASH_ACCESS_KEY", "RAWG_API_KEY", "JAMENDO_CLIENT_ID"):
+                os.environ.pop(k, None)
+            result = self.runner.invoke(self.app, ["library", "r1a-status"])
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        self.assertIn("library_r1a_status_providers_total=10", result.stdout)
+        self.assertIn("library_r1a_status_providers_no_key=5", result.stdout)
+        # 0/5 keys set.
+        self.assertIn("library_r1a_status_providers_key_set=0/5", result.stdout)
+
+    def test_library_r1a_status_json_shape(self) -> None:
+        """JSON mode includes per-provider rows + aggregates."""
+        result = self.runner.invoke(
+            self.app, ["library", "r1a-status", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        for key in (
+            "manifests_scanned", "providers_total", "providers_no_key",
+            "providers_key_set", "providers_key_unset",
+            "total_downloaded_on_disk", "total_bytes_on_disk", "providers",
+        ):
+            self.assertIn(key, data)
+        self.assertEqual(data["providers_total"], 10)
+        self.assertEqual(data["providers_no_key"], 5)
+        # Each provider has merged env + disk data.
+        for p in data["providers"]:
+            for k in ("id", "env_var", "env_set", "license", "asset_class",
+                      "manifest_source", "manifests_on_disk",
+                      "downloaded_on_disk", "bytes_on_disk"):
+                self.assertIn(k, p)
+
     def test_library_asset_when_server_down_exits_clean(self) -> None:
         """When FAW server isn't running, library asset must exit cleanly (not crash)."""
         result = self.runner.invoke(

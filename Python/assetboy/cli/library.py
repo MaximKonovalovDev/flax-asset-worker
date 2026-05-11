@@ -674,5 +674,155 @@ def readiness_cmd(
         )
 
 
+# --------------------------------------------------------------------------- #
+# library r1a-status  (v1.12.s75)
+# --------------------------------------------------------------------------- #
+
+@app.command("r1a-status")
+def r1a_status_cmd(
+    json_out: Annotated[
+        bool, typer.Option("--json", help="Emit JSON output."),
+    ] = False,
+) -> None:
+    """Combined readiness + on-disk-stats check for the R1A provider catalog.
+
+    Pulls together:
+      - gen list-providers (env-key state per provider)
+      - pack manifest-stats (on-disk counts per source)
+
+    Returns a single picture of "what providers are configured" + "what have
+    I actually fetched". No subprocesses; calls the underlying functions
+    directly.
+
+    Examples:
+      assetboy library r1a-status
+      assetboy library r1a-status --json
+    """
+    import os
+    from assetboy.execution.comfyui_runner import manual_drop_dir
+
+    # --- list-providers part ---
+    # (Replicated from gen.py:list_providers_cmd; keep in sync if catalog changes.)
+    providers_catalog = [
+        ("met-museum", None, "CC0", "image:photograph"),
+        ("wikimedia", None, "CC0/CC-BY/SA/PD", "image:any"),
+        ("archive-org", None, "CC/PD per item", "image|audio|video|texts"),
+        ("scryfall", None, "CC-BY-SA-4.0", "image:fantasy_art"),
+        ("iconify", None, "MIT/Apache/CC0/OFL", "image:icon_svg"),
+        ("pexels", "PEXELS_API_KEY", "Pexels License", "image:photo + VIDEO"),
+        ("pixabay", "PIXABAY_API_KEY", "CC0-equivalent", "image:any + VIDEO"),
+        ("unsplash", "UNSPLASH_ACCESS_KEY", "Unsplash License", "image:photo"),
+        ("rawg", "RAWG_API_KEY", "REFERENCE-ONLY", "image:game_screenshot"),
+        ("jamendo", "JAMENDO_CLIENT_ID", "CC-BY/SA", "audio:music_track"),
+    ]
+    providers_state: list[dict] = []
+    for pid, env_var, lic, asset_class in providers_catalog:
+        if env_var is None:
+            env_set = None
+        else:
+            env_set = bool(os.environ.get(env_var, "").strip())
+        providers_state.append({
+            "id": pid,
+            "env_var": env_var,
+            "env_set": env_set,
+            "license": lic,
+            "asset_class": asset_class,
+            # Source key in manifests; some runners use the hyphenated cli name,
+            # others use the underscored runner name. Align here.
+            "manifest_source": {
+                "met-museum": "met_museum",
+                "wikimedia": "wikimedia_commons",
+                "archive-org": "archive_org",
+                "scryfall": "scryfall",
+                "iconify": "iconify",
+                "pexels": "pexels",
+                "pixabay": "pixabay",
+                "unsplash": "unsplash",
+                "rawg": "rawg.io",
+                "jamendo": "jamendo",
+            }.get(pid, pid),
+        })
+
+    # --- manifest-stats part ---
+    scan_root = manual_drop_dir()
+    on_disk_by_source: dict[str, dict] = {}
+    manifests_scanned = 0
+    if scan_root.exists():
+        for mf in sorted(scan_root.rglob("*_manifest.json")):
+            try:
+                doc = json.loads(mf.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            manifests_scanned += 1
+            src = str(doc.get("source", "unknown"))
+            bucket = on_disk_by_source.setdefault(src, {
+                "manifests": 0, "downloaded": 0, "bytes": 0,
+            })
+            bucket["manifests"] += 1
+            for k in ("objects_downloaded", "files_downloaded",
+                      "items_downloaded", "cards_downloaded",
+                      "icons_downloaded", "tracks_downloaded",
+                      "photos_downloaded", "games_downloaded"):
+                v = doc.get(k)
+                if isinstance(v, int):
+                    bucket["downloaded"] += v
+            for entry in (doc.get("entries") or []):
+                if isinstance(entry, dict):
+                    b = entry.get("bytes")
+                    if isinstance(b, int):
+                        bucket["bytes"] += b
+
+    # --- merge: annotate each provider with its on-disk row ---
+    for prov in providers_state:
+        src_key = prov["manifest_source"]
+        disk = on_disk_by_source.get(src_key, {})
+        prov["manifests_on_disk"] = disk.get("manifests", 0)
+        prov["downloaded_on_disk"] = disk.get("downloaded", 0)
+        prov["bytes_on_disk"] = disk.get("bytes", 0)
+
+    no_key_count = sum(1 for p in providers_state if p["env_var"] is None)
+    key_set = sum(1 for p in providers_state if p["env_set"] is True)
+    key_unset = sum(1 for p in providers_state if p["env_set"] is False)
+    total_downloaded = sum(p["downloaded_on_disk"] for p in providers_state)
+    total_bytes = sum(p["bytes_on_disk"] for p in providers_state)
+
+    summary = {
+        "manual_drop_root": str(scan_root),
+        "manifests_scanned": manifests_scanned,
+        "providers_total": len(providers_state),
+        "providers_no_key": no_key_count,
+        "providers_key_set": key_set,
+        "providers_key_unset": key_unset,
+        "total_downloaded_on_disk": total_downloaded,
+        "total_bytes_on_disk": total_bytes,
+        "providers": providers_state,
+    }
+
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+        return
+
+    print(f"library_r1a_status_manual_drop_root={scan_root}")
+    print(f"library_r1a_status_manifests_scanned={manifests_scanned}")
+    print(f"library_r1a_status_providers_total={len(providers_state)}")
+    print(f"library_r1a_status_providers_no_key={no_key_count}")
+    print(f"library_r1a_status_providers_key_set={key_set}/{key_set + key_unset}")
+    print(f"library_r1a_status_total_downloaded_on_disk={total_downloaded}")
+    print(f"library_r1a_status_total_bytes_on_disk={total_bytes}")
+    print()
+    print("Per-provider:")
+    for p in providers_state:
+        env = "(no key)" if p["env_var"] is None else (
+            "SET   " if p["env_set"] else "unset ")
+        print(
+            f"  {p['id']:13s}  env={env}  "
+            f"manifests={p['manifests_on_disk']:2d}  "
+            f"downloaded={p['downloaded_on_disk']:4d}  "
+            f"bytes={p['bytes_on_disk']:>12d}  "
+            f"{p['license']}"
+        )
+
+
 if __name__ == "__main__":
     app()
