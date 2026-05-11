@@ -2288,5 +2288,173 @@ def all_key_cmd(
                   f"downloaded={p['downloaded']:3d}{note}")
 
 
+# --------------------------------------------------------------------------- #
+# gen list-providers  (v1.11.s45)
+# --------------------------------------------------------------------------- #
+
+@app.command("list-providers")
+def list_providers_cmd(
+    json_out: Annotated[
+        bool, typer.Option("--json", help="Emit JSON output."),
+    ] = False,
+) -> None:
+    """Catalog all R1A-and-friends providers reachable from gen sub-app (Path B v1.11.s45).
+
+    Shows each provider's:
+      - cli command
+      - auth requirement (env var or 'none')
+      - env-var detection (set or not)
+      - license summary
+      - asset class
+    """
+    import os
+
+    # Catalog: declarative table. ENV_VAR=None means no key required.
+    providers = [
+        {
+            "id": "met-museum",
+            "cli": "gen met-museum fetch",
+            "env_var": None,
+            "license": "CC0",
+            "asset_class": "image:photograph",
+            "what": "Met Museum Open Access (~500K artworks)",
+        },
+        {
+            "id": "wikimedia",
+            "cli": "gen wikimedia fetch",
+            "env_var": None,
+            "license": "CC0 | CC-BY | CC-BY-SA | PD",
+            "asset_class": "image:any",
+            "what": "Wikimedia Commons (~100M files)",
+        },
+        {
+            "id": "archive-org",
+            "cli": "gen archive-org fetch",
+            "env_var": None,
+            "license": "CC-BY/SA | CC0 | PD",
+            "asset_class": "image|audio|video|texts",
+            "what": "Internet Archive (~50M items)",
+        },
+        {
+            "id": "scryfall",
+            "cli": "gen scryfall fetch",
+            "env_var": None,
+            "license": "CC-BY-SA-4.0",
+            "asset_class": "image:fantasy_art",
+            "what": "Scryfall MTG cards (~25K unique arts)",
+        },
+        {
+            "id": "iconify",
+            "cli": "gen iconify fetch",
+            "env_var": None,
+            "license": "MIT | Apache-2.0 | CC0 | CC-BY | OFL | etc",
+            "asset_class": "image:icon_svg",
+            "what": "Iconify (150+ open-source icon sets)",
+        },
+        {
+            "id": "pexels",
+            "cli": "gen pexels photos|videos",
+            "env_var": "PEXELS_API_KEY",
+            "license": "Pexels License (free personal+commercial)",
+            "asset_class": "image:photo + VIDEO",
+            "what": "Pexels stock photos + videos",
+        },
+        {
+            "id": "pixabay",
+            "cli": "gen pixabay photos|videos",
+            "env_var": "PIXABAY_API_KEY",
+            "license": "CC0-equivalent (Pixabay Content License)",
+            "asset_class": "image:any + VIDEO",
+            "what": "Pixabay photos+illustrations+vectors+videos",
+        },
+        {
+            "id": "unsplash",
+            "cli": "gen unsplash photos",
+            "env_var": "UNSPLASH_ACCESS_KEY",
+            "license": "Unsplash License (free personal+commercial)",
+            "asset_class": "image:photo",
+            "what": "Unsplash high-quality photography",
+        },
+        {
+            "id": "rawg",
+            "cli": "gen rawg games",
+            "env_var": "RAWG_API_KEY",
+            "license": "REFERENCE-ONLY (publisher copyright)",
+            "asset_class": "image:game_screenshot",
+            "what": "RAWG.io game DB (covers + screenshots; reference only)",
+        },
+        {
+            "id": "jamendo",
+            "cli": "gen jamendo tracks",
+            "env_var": "JAMENDO_CLIENT_ID",
+            "license": "CC-BY | CC-BY-SA (commercial-OK)",
+            "asset_class": "audio:music_track",
+            "what": "Jamendo CC music tracks (~500K)",
+        },
+        {
+            "id": "comfyui",
+            "cli": "gen comfyui run|submit-workflow",
+            "env_var": None,
+            "license": "user-generated (depends on prompts)",
+            "asset_class": "image:generated",
+            "what": "ComfyUI workflow runner (local :8188)",
+        },
+        {
+            "id": "sd",
+            "cli": "gen sd run",
+            "env_var": None,
+            "license": "user-generated",
+            "asset_class": "image:generated",
+            "what": "stable-diffusion.cpp CUDA wrapper",
+        },
+    ]
+
+    # Annotate env_var with current detection state.
+    for p in providers:
+        ev = p["env_var"]
+        if ev is None:
+            p["env_set"] = None  # N/A
+        else:
+            p["env_set"] = bool(os.environ.get(ev, "").strip())
+
+    no_key_count = sum(1 for p in providers if p["env_var"] is None)
+    key_required = [p for p in providers if p["env_var"] is not None]
+    key_set = sum(1 for p in key_required if p["env_set"])
+    key_unset = len(key_required) - key_set
+
+    summary = {
+        "providers": providers,
+        "total": len(providers),
+        "no_key_count": no_key_count,
+        "key_required_count": len(key_required),
+        "key_set_count": key_set,
+        "key_unset_count": key_unset,
+    }
+
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+        return
+
+    print(f"gen_list_providers_total={len(providers)}")
+    print(f"gen_list_providers_no_key={no_key_count}")
+    print(f"gen_list_providers_key_set={key_set}/{len(key_required)} "
+          f"(unset: {key_unset})")
+    print()
+    print("Provider                CLI                              Env var                Set  License/Asset class")
+    print("=" * 130)
+    for p in providers:
+        if p["env_var"] is None:
+            envset = " - "
+            envv = "(no key)"
+        else:
+            envset = "YES" if p["env_set"] else "no "
+            envv = p["env_var"]
+        print(
+            f"{p['id']:23s} {p['cli']:32s} {envv:22s} {envset}  "
+            f"{p['license']:38s} {p['asset_class']}"
+        )
+
+
 if __name__ == "__main__":
     app()

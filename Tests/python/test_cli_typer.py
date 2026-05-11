@@ -1035,6 +1035,63 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(ok[0]["matched"], 3)
         self.assertEqual(ok[0]["downloaded"], 3)
 
+    # ----------------------------------------------------------------- #
+    # gen list-providers (v1.11.s45)
+    # ----------------------------------------------------------------- #
+
+    def test_list_providers_help_renders(self) -> None:
+        result = self.runner.invoke(self.app, ["gen", "list-providers", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Catalog", result.stdout)
+
+    def test_list_providers_default_lists_all(self) -> None:
+        """Stdout should list all 12 providers in catalog with header."""
+        result = self.runner.invoke(self.app, ["gen", "list-providers"])
+        self.assertEqual(result.exit_code, 0)
+        # Header counts.
+        self.assertIn("gen_list_providers_total=12", result.stdout)
+        # Each provider id appears.
+        for provider_id in (
+            "met-museum", "wikimedia", "archive-org", "scryfall", "iconify",
+            "pexels", "pixabay", "unsplash", "rawg", "jamendo",
+            "comfyui", "sd",
+        ):
+            self.assertIn(provider_id, result.stdout)
+
+    def test_list_providers_json_shape(self) -> None:
+        import os
+        from unittest.mock import patch
+        # Clear all env vars to test annotation.
+        with patch.dict(os.environ, {}, clear=False):
+            for k in ("PEXELS_API_KEY", "PIXABAY_API_KEY",
+                      "UNSPLASH_ACCESS_KEY", "RAWG_API_KEY", "JAMENDO_CLIENT_ID"):
+                os.environ.pop(k, None)
+            result = self.runner.invoke(self.app, ["gen", "list-providers", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["total"], 12)
+        self.assertEqual(data["no_key_count"], 7)  # 5 R1A no-key + comfyui + sd
+        self.assertEqual(data["key_required_count"], 5)
+        self.assertEqual(data["key_set_count"], 0)  # all cleared
+        self.assertEqual(data["key_unset_count"], 5)
+        # Each provider has expected fields.
+        for p in data["providers"]:
+            for key in ("id", "cli", "env_var", "license", "asset_class", "what", "env_set"):
+                self.assertIn(key, p)
+
+    def test_list_providers_detects_set_env_var(self) -> None:
+        """When PEXELS_API_KEY is set, env_set=True for pexels."""
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {"PEXELS_API_KEY": "test"}, clear=False):
+            result = self.runner.invoke(self.app, ["gen", "list-providers", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        pexels = [p for p in data["providers"] if p["id"] == "pexels"][0]
+        self.assertTrue(pexels["env_set"])
+
     def test_comfy_submit_workflow_help_renders(self) -> None:
         result = self.runner.invoke(
             self.app, ["gen", "comfyui", "submit-workflow", "--help"]
