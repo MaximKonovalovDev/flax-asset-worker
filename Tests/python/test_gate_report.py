@@ -3,7 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from assetboy.cli import _default_gate_path
+from assetboy.cli_legacy import _default_gate_path
 from assetboy.library.paths import project_root
 from assetboy.providers.lanes import ProviderLane
 from assetboy.workflows.gate_report import load_gate_report

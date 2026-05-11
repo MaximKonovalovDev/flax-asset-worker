@@ -555,3 +555,44 @@ The original 8500-line `workflows/roman_first_playable.py` Python tuples are now
 - s11 — pre-pack acquisition router (recipe `acquisition_method` -> `source_dir`)
 
 These are real follow-up slices, **not blocking the v1.1.0 release**. The Path B contract (preserve the moat, ship a clean CLI surface, recipe-driven runs, canary) is fully delivered.
+
+---
+
+## Slice s2.5a — Day-after rename cli.py -> cli_legacy.py (2026-05-10)
+
+**Status:** SHIPPED.
+
+**Trigger:** investigating s2.5 prep revealed that the new `cli/` package (s5+) silently shadows the old `cli.py` in Python's import resolution — packages take precedence over single-file modules with the same name. This means `assetboy.cli` resolves to the new Typer package, and the old 8500-line `cli.py` was already effectively unreachable. 4 test files (`test_publish_filters`, `test_generator_emit`, `test_gate_report`, `test_cli_parser_commands`) had been red since commit `8d2f16d` (s5) because of this collision.
+
+**What shipped:**
+
+1. **Renamed `Python/assetboy/cli.py` -> `Python/assetboy/cli_legacy.py`** (385,002 chars / 386,188 bytes preserved verbatim).
+   - Old file stays alive for s2.5b/s2.6/s10.5 deep cleanup work (they still need to inventory + remove DEAD imports + extract any salvageable handler code).
+   - Naming honest: "legacy" tells the reader this is replaced by the Typer `cli/` package.
+2. **Updated 4 test files** that imported from `assetboy.cli`:
+   - `Tests/python/test_publish_filters.py:3` `_filter_publish_packs, _is_example_pack_id`
+   - `Tests/python/test_generator_emit.py:7` `build_parser`
+   - `Tests/python/test_gate_report.py:6` `_default_gate_path`
+   - `Tests/python/test_cli_parser_commands.py:4` `build_parser`
+   All now import from `assetboy.cli_legacy` instead.
+
+**Verification:**
+- `python -m assetboy.cli --help` still works (Typer 7 sub-apps).
+- `python -c "import assetboy.cli_legacy"` loads OK.
+- `Tests/python/test_publish_filters.py` -> 2 tests collected (was: ImportError).
+- `Tests/python/test_generator_emit.py` -> 4 tests collected (was: ImportError).
+- `Tests/python/test_cli_parser_commands.py` -> 47 tests collected (was: ImportError).
+- `Tests/python/test_gate_report.py` -> still red, but for a DIFFERENT reason (`from tests.helpers import write_roman_fixture` — lowercase `tests` doesn't resolve; pre-existing from s4 notes). Out of s2.5a scope.
+- 26/26 canary tests still green.
+
+**Why this is the right move:** s2.5 spec said "strip 7 eager + 26 lazy imports from cli.py", but the more honest first-step is to make the file's role explicit. Once renamed `cli_legacy`, it's safe to either (a) gut DEAD imports inside it for documentation hygiene (s2.5b) or (b) just delete it whole in s10.5 once we confirm nothing else needs the helper functions. The rename is the **smallest atomic step that unblocks the next decisions**.
+
+**Files staged for commit:**
+- `Python/assetboy/cli.py` -> `cli_legacy.py` (rename)
+- `Tests/python/test_publish_filters.py` (import path fix)
+- `Tests/python/test_generator_emit.py` (import path fix)
+- `Tests/python/test_gate_report.py` (import path fix; test still red for unrelated reason)
+- `Tests/python/test_cli_parser_commands.py` (import path fix)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+**Next:** s2.5b — strip DEAD imports inside `cli_legacy.py` (7 eager + 26 lazy) to document which command handlers are stubs vs live, even though the whole file is on the s10.5 chopping block.

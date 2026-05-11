@@ -4,7 +4,7 @@ import json
 import unittest
 
 from assetboy.providers.generator import emit_generator_setup, profile_ids
-from assetboy.cli import build_parser
+from assetboy.cli_legacy import build_parser
 
 
 class GeneratorEmitTests(unittest.TestCase):

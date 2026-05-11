@@ -1,6 +1,6 @@
 import unittest
 
-from assetboy.cli import _filter_publish_packs, _is_example_pack_id
+from assetboy.cli_legacy import _filter_publish_packs, _is_example_pack_id
 
 
 class PublishFilterTests(unittest.TestCase):

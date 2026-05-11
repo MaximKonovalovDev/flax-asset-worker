@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 
-from assetboy.cli import build_parser
+from assetboy.cli_legacy import build_parser
 
 
 class CliParserCommandsTests(unittest.TestCase):
