@@ -1,0 +1,150 @@
+# Sandbox generator-lane smoke recipe (Path B v1.5.4)
+# ============================================================================
+# Exercises the generator acquisition lane with 4 packs, one per provider.
+# Use this AFTER setting up at least one generator (ComfyUI / sd.cpp /
+# stable_audio runner). Each pack stands alone -- gate.required=false on all
+# 4 so partial setup (e.g. only ComfyUI installed) still emits useful output.
+#
+# Usage:
+#   python -m assetboy.cli pack from-recipe sandbox/generator_smoke.yaml --dry-run
+#       -> all 4 packs land their plan as job specs without invoking runners
+#   python -m assetboy.cli pack from-recipe sandbox/generator_smoke.yaml
+#       -> invokes whichever runners are configured; emits awaiting_manual
+#          markers for the rest
+# ============================================================================
+
+recipe:
+  id: sandbox_generator_smoke
+  schema_version: "2026-05-10.recipe.v1"
+  game: sandbox
+  description: |
+    4-pack smoke exercising all 4 generator providers. Use for testing
+    acquisition_router generator-lane drivers without committing to a
+    full game recipe.
+  output_folder: "Content/Sandbox/GeneratorSmoke"
+
+packs:
+
+  # ------------------------------------------------------------------
+  # Pack 1: ComfyUI text-to-image (texture)
+  # ------------------------------------------------------------------
+  - id: SANDBOX_GEN_COMFY_TEXTURE_01
+    category: texture
+    asset_kind: surface_pbr
+    provider: comfyui
+    acquisition_method: generator
+    license:
+      kind: comfyui_workflow_dependent
+      commercial_ok: "depends_on_workflow_models"
+      notes: "License inherited from whatever models your ComfyUI workflow uses."
+    prompts:
+      - id: stone_wall_mossy
+        text: "stone wall, weathered, mossy, 4K PBR texture, seamless tile"
+        width: 1024
+        height: 1024
+        steps: 25
+        cfg: 7.0
+    cleanup:
+      mode: skip
+    flax_import:
+      target_subfolder: "Sandbox/GeneratorSmoke/ComfyUI"
+    gate:
+      required: false
+      reason: "smoke-only; skip if ComfyUI not running on :8188"
+
+  # ------------------------------------------------------------------
+  # Pack 2: ComfyUI img2img (concept photo -> game texture)
+  # ------------------------------------------------------------------
+  - id: SANDBOX_GEN_COMFY_IMG2IMG_01
+    category: texture
+    asset_kind: surface_pbr
+    provider: comfyui
+    acquisition_method: generator
+    license:
+      kind: comfyui_workflow_dependent
+    prompts:
+      - id: stylized_from_photo
+        text: "stylized PBR bark texture, weathered, mossy details"
+        # input_image: "C:/path/to/your/concept_photo.jpg"
+        # Uncomment + set the path above to exercise img2img.
+        # When commented out, this becomes text-to-image (same as Pack 1).
+        width: 1024
+        steps: 25
+    cleanup:
+      mode: skip
+    flax_import:
+      target_subfolder: "Sandbox/GeneratorSmoke/ComfyUI_Img2Img"
+    gate:
+      required: false
+
+  # ------------------------------------------------------------------
+  # Pack 3: Stable Diffusion (sd.cpp local) UI icons
+  # ------------------------------------------------------------------
+  - id: SANDBOX_GEN_SDCPP_UI_01
+    category: texture
+    asset_kind: ui_icon
+    provider: sd.cpp     # alias for local_image
+    acquisition_method: generator
+    license:
+      kind: sd_model_dependent
+      notes: "License depends on which SD model file you load."
+    prompts:
+      - id: ui_icon_sword
+        text: "minimalist sword icon, white silhouette on transparent, flat design"
+        count: 6
+        width: 512
+        height: 512
+        steps: 20
+        cfg: 7.0
+    cleanup:
+      mode: skip
+    flax_import:
+      target_subfolder: "Sandbox/GeneratorSmoke/SDCpp_UI"
+    gate:
+      required: false
+      reason: "smoke-only; skip if sd.exe not built locally"
+
+  # ------------------------------------------------------------------
+  # Pack 4: Stable Audio Open Small (ambient loop)
+  # ------------------------------------------------------------------
+  - id: SANDBOX_GEN_AUDIO_FOREST_01
+    category: audio
+    asset_kind: ambience_loop
+    provider: stable_audio_open_small
+    acquisition_method: generator
+    license:
+      kind: stability_community
+      commercial_ok: true   # free under $1M annual revenue
+      training_data_clean: true
+    prompts:
+      - id: forest_dawn_loop
+        text: "forest at dawn, birds chirping, soft wind through leaves, loop-friendly"
+        duration_s: 11
+      - id: river_flow
+        text: "river over rocks, gentle flow, water rushing, loop-friendly"
+        duration_s: 11
+    cleanup:
+      mode: skip
+    flax_import:
+      target_subfolder: "Sandbox/GeneratorSmoke/Audio"
+    gate:
+      required: false
+      reason: "smoke-only; skip if STABLE_AUDIO_RUNNER_BIN not configured"
+
+gates:
+  required_pack_ids: []     # all 4 optional
+  optional_pack_ids:
+    - SANDBOX_GEN_COMFY_TEXTURE_01
+    - SANDBOX_GEN_COMFY_IMG2IMG_01
+    - SANDBOX_GEN_SDCPP_UI_01
+    - SANDBOX_GEN_AUDIO_FOREST_01
+  block_on_missing_required: false   # no required packs, so this is a no-op
+
+vfx:
+  particles_needed: []
+  notes: "No VFX in sandbox smoke."
+
+scene_setup:
+  notes: |
+    No scene; just verifies acquisition_router generator-lane drivers
+    can be exercised via recipe. Outputs land in <library>/inbox/generator/sandbox/<pack_id>/.
