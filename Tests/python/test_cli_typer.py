@@ -164,6 +164,79 @@ class TyperCliSmokeTests(unittest.TestCase):
         ):
             self.assertIn(key, parsed)
 
+    # ----------------------------------------------------------------- #
+    # pack from-recipe: v1.6.s1 inline-yaml + stdin modes
+    # ----------------------------------------------------------------- #
+
+    INLINE_RECIPE = (
+        "recipe:\n"
+        "  id: inline_test\n"
+        "  game: sandbox\n"
+        "packs:\n"
+        "  - id: INLINE_PACK_01\n"
+        "    provider: polyhaven\n"
+        "    acquisition_method: direct_url\n"
+        "    assets:\n"
+        "      - asset_id: test_asset\n"
+    )
+
+    def test_pack_from_recipe_inline_yaml_accepts_string(self) -> None:
+        """v1.6.s1: --inline-yaml lets the facade send recipe content directly."""
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "from-recipe", "--inline-yaml", self.INLINE_RECIPE, "--dry-run", "--json"],
+        )
+        # In dry-run, the pack will fail at pack_pipeline level (no real source_dir)
+        # but the CLI should accept the inline YAML cleanly and return JSON.
+        import json
+        try:
+            parsed = json.loads(result.stdout)
+        except json.JSONDecodeError as e:
+            self.fail(f"stdout not valid JSON: {e}\nstdout: {result.stdout[:300]}")
+        self.assertEqual(parsed["recipe_id"], "inline_test")
+        self.assertEqual(parsed["game"], "sandbox")
+        self.assertEqual(parsed["total_packs"], 1)
+
+    def test_pack_from_recipe_no_source_errors_cleanly(self) -> None:
+        """Missing both path and --inline-yaml -> clean error, not crash."""
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "from-recipe", "--json"],
+        )
+        # Empty string positional + no inline-yaml = missing source
+        self.assertEqual(result.exit_code, 1)
+        import json
+        try:
+            parsed = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            # accept that some Typer versions exit before JSON output;
+            # the important thing is non-zero exit
+            return
+        self.assertIn("missing_recipe_source", parsed.get("error", ""))
+
+    def test_pack_from_recipe_inline_yaml_malformed_errors_cleanly(self) -> None:
+        """Malformed inline YAML -> clean error, not crash."""
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "from-recipe", "--inline-yaml", "not: valid: yaml: shape:", "--json"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        import json
+        try:
+            parsed = json.loads(result.stdout)
+            self.assertIn("inline_yaml_parse_failed", parsed.get("error", ""))
+        except json.JSONDecodeError:
+            # Non-zero exit alone is the key contract
+            pass
+
+    def test_pack_from_recipe_inline_yaml_non_dict_root_errors(self) -> None:
+        """Inline YAML that parses to a list (not dict) -> clean error."""
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "from-recipe", "--inline-yaml", "- foo\n- bar\n", "--json"],
+        )
+        self.assertEqual(result.exit_code, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

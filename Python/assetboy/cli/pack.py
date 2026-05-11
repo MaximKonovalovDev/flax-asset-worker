@@ -115,11 +115,25 @@ def list_recipes_cmd(
 @app.command("from-recipe")
 def from_recipe_cmd(
     recipe_path: Annotated[
-        Path,
+        str,
         typer.Argument(
-            help="Path to a YAML recipe (or a recipe_id resolvable under recipes/).",
+            help=(
+                "Path to a YAML recipe (or a recipe_id resolvable under recipes/). "
+                "Pass '-' to read YAML from stdin. Ignored when --inline-yaml is set."
+            ),
         ),
-    ],
+    ] = "",
+    inline_yaml: Annotated[
+        str,
+        typer.Option(
+            "--inline-yaml",
+            help=(
+                "YAML recipe content as a string (Path B v1.6.s1). When set, "
+                "recipe_path is ignored. Used by the flax-mcp facade to avoid "
+                "on-disk recipe dependency."
+            ),
+        ),
+    ] = "",
     dry_run: Annotated[
         bool,
         typer.Option(
@@ -158,19 +172,99 @@ def from_recipe_cmd(
     A summary is printed (or emitted as JSON) at the end with one line per
     pack covering: gate, status, current_state.
 
+    Recipe source (one of three modes):
+      1. File path argument: `pack from-recipe path/to/recipe.yaml`
+      2. Stdin: `cat recipe.yaml | pack from-recipe -`
+      3. Inline string: `pack from-recipe --inline-yaml "recipe: {...}\\npacks: [...]"`
+
     Failure semantics:
       * `block_on_missing_required=true` + a required pack red  -> exit 1.
       * `block_on_missing_required=false` -> always exit 0 with summary.
     """
-    # Resolve recipe path: accept absolute, repo-relative, or recipes/<game>/<name>.yaml.
-    candidates = [
-        recipe_path,
-        Path.cwd() / recipe_path,
-        _recipes_dir() / recipe_path,
-    ]
-    resolved = next((c for c in candidates if c.exists()), None)
-    if resolved is None:
-        msg = f"recipe_not_found: tried {[str(c) for c in candidates]}"
+    # ----- Path B v1.6.s1: resolve recipe source (3 modes) ------------------
+    doc = None
+    source_label = ""
+
+    if inline_yaml:
+        # Mode 3: --inline-yaml content takes precedence over recipe_path.
+        if yaml is None:
+            msg = "pyyaml_not_installed (pip install pyyaml)"
+            if json_out:
+                json.dump({"error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"pack_from_recipe_error={msg}")
+            raise typer.Exit(code=1)
+        try:
+            doc = yaml.safe_load(inline_yaml)
+            source_label = "<inline-yaml>"
+        except Exception as exc:
+            msg = f"inline_yaml_parse_failed: {exc}"
+            if json_out:
+                json.dump({"error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"pack_from_recipe_error={msg}")
+            raise typer.Exit(code=1)
+    elif recipe_path == "-":
+        # Mode 2: stdin
+        if yaml is None:
+            msg = "pyyaml_not_installed (pip install pyyaml)"
+            if json_out:
+                json.dump({"error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"pack_from_recipe_error={msg}")
+            raise typer.Exit(code=1)
+        try:
+            stdin_text = sys.stdin.read()
+            if not stdin_text.strip():
+                raise ValueError("stdin is empty")
+            doc = yaml.safe_load(stdin_text)
+            source_label = "<stdin>"
+        except Exception as exc:
+            msg = f"stdin_recipe_parse_failed: {exc}"
+            if json_out:
+                json.dump({"error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"pack_from_recipe_error={msg}")
+            raise typer.Exit(code=1)
+    elif recipe_path:
+        # Mode 1: file path (original behavior)
+        recipe_path_obj = Path(recipe_path)
+        candidates = [
+            recipe_path_obj,
+            Path.cwd() / recipe_path_obj,
+            _recipes_dir() / recipe_path_obj,
+        ]
+        resolved = next((c for c in candidates if c.exists()), None)
+        if resolved is None:
+            msg = f"recipe_not_found: tried {[str(c) for c in candidates]}"
+            if json_out:
+                json.dump({"error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"pack_from_recipe_error={msg}")
+            raise typer.Exit(code=1)
+
+        try:
+            doc = _load_recipe(resolved)
+            source_label = str(resolved)
+        except Exception as exc:
+            msg = f"recipe_parse_failed: {exc}"
+            if json_out:
+                json.dump({"error": msg, "path": str(resolved)}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"pack_from_recipe_error={msg}")
+            raise typer.Exit(code=1)
+    else:
+        # No source given
+        msg = (
+            "missing_recipe_source: pass a path, '-' for stdin, "
+            "or use --inline-yaml"
+        )
         if json_out:
             json.dump({"error": msg}, sys.stdout, indent=2)
             sys.stdout.write("\n")
@@ -178,12 +272,10 @@ def from_recipe_cmd(
             print(f"pack_from_recipe_error={msg}")
         raise typer.Exit(code=1)
 
-    try:
-        doc = _load_recipe(resolved)
-    except Exception as exc:
-        msg = f"recipe_parse_failed: {exc}"
+    if not isinstance(doc, dict):
+        msg = f"recipe_must_be_a_mapping (got {type(doc).__name__})"
         if json_out:
-            json.dump({"error": msg, "path": str(resolved)}, sys.stdout, indent=2)
+            json.dump({"error": msg, "source": source_label}, sys.stdout, indent=2)
             sys.stdout.write("\n")
         else:
             print(f"pack_from_recipe_error={msg}")
