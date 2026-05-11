@@ -457,6 +457,94 @@ def status_cmd(
 
 
 # --------------------------------------------------------------------------- #
+# pack audit
+# --------------------------------------------------------------------------- #
+
+@app.command("audit")
+def audit_cmd(
+    include_ledgers: Annotated[
+        bool,
+        typer.Option(
+            "--ledgers/--no-ledgers",
+            help="Include per-ledger summary entries (default: yes).",
+        ),
+    ] = True,
+    max_ledgers: Annotated[
+        int,
+        typer.Option(
+            "--max",
+            help="Cap on number of ledger entries returned (response size).",
+        ),
+    ] = 1000,
+    game: Annotated[
+        str,
+        typer.Option(
+            "--game",
+            help="Filter to one game_scope (default: all games).",
+        ),
+    ] = "",
+    json_out: Annotated[
+        bool, typer.Option("--json", help="Emit JSON output."),
+    ] = False,
+) -> None:
+    """Inventory all pack_pipeline ledgers + aggregate status counts.
+
+    Path B v1.6.s3 (2026-05-11). Useful for ops dashboards: shows what
+    ran across all games + per-game status breakdown. Tolerant of broken
+    ledgers (they're counted under `status: unreadable`).
+
+    The same report is exposed over HTTP at `GET /api/v1/packs/audit`.
+    """
+    from assetboy.workflows.pack_audit import build_pack_audit_report
+
+    report = build_pack_audit_report(
+        include_ledgers=include_ledgers,
+        max_ledgers=max_ledgers,
+    )
+
+    # Apply --game filter post-hoc (keep the shape unified)
+    if game:
+        report["games"] = {
+            k: v for k, v in (report.get("games") or {}).items() if k == game
+        }
+        if report.get("ledgers"):
+            report["ledgers"] = [
+                e for e in report["ledgers"] if e.get("game_scope") == game
+            ]
+        # Recompute summary for the filtered scope
+        from collections import Counter
+        filtered_status = Counter()
+        for entry in (report.get("ledgers") or []):
+            filtered_status[entry.get("status", "unknown")] += 1
+        report["summary"] = {
+            "total_ledgers": sum(filtered_status.values()),
+            "by_status": dict(filtered_status),
+            "filtered_to_game": game,
+        }
+
+    if json_out:
+        json.dump(report, sys.stdout, indent=2, default=str)
+        sys.stdout.write("\n")
+        return
+
+    summary = report.get("summary", {})
+    print(f"pack_audit_pipeline_dir={report.get('pipeline_dir', '?')}")
+    print(f"pack_audit_total_ledgers={summary.get('total_ledgers', 0)}")
+    by_status = summary.get("by_status") or {}
+    for status, count in sorted(by_status.items()):
+        print(f"pack_audit_status_{status}={count}")
+    games = report.get("games") or {}
+    print(f"pack_audit_game_count={len(games)}")
+    for game_scope, game_data in sorted(games.items()):
+        total = game_data.get("total", 0)
+        statuses = game_data.get("by_status") or {}
+        status_str = ", ".join(
+            f"{s}={c}" for s, c in sorted(statuses.items())
+        ) or "(none)"
+        print(f"pack_audit_game  {game_scope}  total={total}  {status_str}")
+
+
+# --------------------------------------------------------------------------- #
 # pack validate
 # --------------------------------------------------------------------------- #
 

@@ -161,6 +161,62 @@ namespace FAW.Routes
             }
         }
 
+        /// <summary>
+        /// Path B v1.6.s3 (2026-05-11): inventory all pack_pipeline ledgers.
+        ///
+        /// GET /api/v1/packs/audit
+        ///   Query string: ?game=&lt;game_scope&gt; (optional filter)
+        ///                 ?include_ledgers=false (default: true)
+        ///                 ?max=&lt;int&gt; (default: 1000)
+        /// Returns: { summary: {total_ledgers, by_status}, games: {...}, ledgers: [...] }
+        /// </summary>
+        public static async Task<JObject> HandleAuditAsync(
+            string gameFilter, bool includeLedgers, int maxLedgers)
+        {
+            try
+            {
+                var args = new System.Collections.Generic.List<string>
+                {
+                    "pack", "audit", "--json",
+                };
+                if (!includeLedgers)
+                {
+                    args.Add("--no-ledgers");
+                }
+                if (maxLedgers > 0 && maxLedgers != 1000)
+                {
+                    args.Add("--max");
+                    args.Add(maxLedgers.ToString());
+                }
+                if (!string.IsNullOrWhiteSpace(gameFilter))
+                {
+                    args.Add("--game");
+                    args.Add(gameFilter);
+                }
+                var output = await RunPackCliAsync(args.ToArray());
+                if (output.ExitCode != 0)
+                {
+                    return new JObject
+                    {
+                        ["success"] = false,
+                        ["error"] = $"cli_exit_{output.ExitCode}",
+                        ["stderr"] = output.Stderr,
+                    };
+                }
+                var parsed = JObject.Parse(output.Stdout);
+                parsed["success"] = true;
+                return parsed;
+            }
+            catch (Exception ex)
+            {
+                return new JObject
+                {
+                    ["success"] = false,
+                    ["error"] = $"pack_audit_failed: {ex.Message}",
+                };
+            }
+        }
+
         // ----------------------------------------------------------------- //
         // Subprocess helper
         // ----------------------------------------------------------------- //

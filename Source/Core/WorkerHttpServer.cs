@@ -123,6 +123,21 @@ namespace FAW.Core
                 {
                     result = await RecipeRoutes.HandleRunAsync(ctx);
                 }
+                else if (path == "/api/v1/packs/audit" && method == "GET")
+                {
+                    // v1.6.s3: inventory all pack_pipeline ledgers
+                    var gameFilter = ctx.Request.QueryString["game"] ?? "";
+                    var includeLedgersStr = ctx.Request.QueryString["include_ledgers"] ?? "true";
+                    var includeLedgers = !string.Equals(includeLedgersStr, "false",
+                        StringComparison.OrdinalIgnoreCase);
+                    int maxLedgers = 1000;
+                    var maxStr = ctx.Request.QueryString["max"];
+                    if (!string.IsNullOrWhiteSpace(maxStr) && int.TryParse(maxStr, out var parsed))
+                    {
+                        maxLedgers = parsed;
+                    }
+                    result = await RecipeRoutes.HandleAuditAsync(gameFilter, includeLedgers, maxLedgers);
+                }
                 else if (path.StartsWith("/api/v1/packs/") && path.EndsWith("/status") && method == "GET")
                 {
                     // Parse /api/v1/packs/{pack_id}/status
