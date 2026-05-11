@@ -328,7 +328,88 @@ rather than depending on the recipe file being on the FAW server's disk.
 
 **Status:** PENDING.
 
-### v1.6.s5 — Recipe schema validator ✅ SHIPPED 2026-05-11
+### v1.6.s5 — Recipe schema validator ✅ SHIPPED 2026-05-11 v1.6.0
+
+### v1.6.s1 — pack from-recipe inline-yaml ✅ SHIPPED 2026-05-11 v1.6.1
+
+### v1.6.s3 — pack audit endpoint ✅ SHIPPED 2026-05-11 v1.6.2
+
+### v1.6.s2 — single-asset lookup ✅ SHIPPED 2026-05-11 v1.6.3
+
+### v1.6.s6 — pack run-pack single-pack execution ✅ SHIPPED 2026-05-11 v1.6.5
+
+### v1.6.s7 — POST /api/v1/packs/run-pack ✅ SHIPPED 2026-05-11 v1.6.6
+
+### v1.6.s8 — pack rerun-failed ✅ SHIPPED 2026-05-11 v1.6.7
+
+### v1.6.s9 — Pin EXPECTED_EPIC_SCHEMA_VERSION ✅ SHIPPED 2026-05-11 v1.6.8
+
+---
+
+## v1.7 backlog (s11-s15) — written 2026-05-11
+
+5 more candidate slices, ranked by ROI:
+
+### v1.7.s11 — `manage_asset_worker` mega-tool atomics map doc (~1 hr)
+
+**Trigger:** `MONOREPO_FACADE_DESIGN.md` lists 6 MCP atomics + 1 mega-tool. The mega-tool's action -> atomic dispatch table is implicit. Make it explicit so the Lane E broker can copy-paste the wiring.
+
+**Scope:** new `docs/MEGA_TOOL_DISPATCH.md` with the canonical action enum + per-action argument shape + per-action target atomic + per-action policy class (Safe / Mutating / Destructive).
+
+**Tests:** N/A (doc-only).
+
+**Status:** PENDING.
+
+### v1.7.s12 — `canary --since` flag + history pruning (~2 hr)
+
+**Trigger:** `state/canary/canary_*.json` history accumulates one file per run. Operator running weekly canary for a year = 52 files. Add `--since <iso_date>` to list recent runs + `--prune <N>` to keep only the last N history files.
+
+**Scope:**
+- `canary.py`: new `--list-history`, `--since`, `--prune` flags.
+- New CLI sub-command `python -m assetboy.canary history --prune 50`.
+
+**Tests:** 3-4 (history file emit, since filter, prune cap).
+
+**Status:** PENDING.
+
+### v1.7.s13 — `provider readiness` CLI command (~2 hr)
+
+**Trigger:** Path B has `providers/provider_readiness.py` with `build_provider_readiness_report()` (KEEP, rewired in s2.6a) but no CLI surface. Add `python -m assetboy.cli library readiness` (under library sub-app) so operators can quickly see "what's set up vs missing" without writing Python.
+
+**Scope:**
+- `cli/library.py`: new `readiness` command.
+- `--json` + per-provider summary in human mode.
+
+**Tests:** 2-3 (smoke, --json shape).
+
+**Status:** PENDING.
+
+### v1.7.s14 — Recipe diff command (~3 hr)
+
+**Trigger:** When operators iterate on recipes (e.g. add 3 packs, change provider on 2), git diff shows raw YAML changes but not "what packs are new / removed / changed shape." A semantic diff helps.
+
+**Scope:**
+- New `workflows/recipe_diff.py`: `diff_recipes(old_doc, new_doc) -> DiffResult` with `added_packs`, `removed_packs`, `modified_packs` (per-field change list).
+- `cli/pack.py`: new `pack diff <old.yaml> <new.yaml>` command.
+
+**Tests:** 5-6 (added/removed/modified cases).
+
+**Status:** PENDING.
+
+### v1.7.s15 — Quaternius direct_url provider (the s4 carve-out) (~3 hr)
+
+**Trigger:** v1.6.s4 was "Quaternius + OGA"; the OGA half is complex (HTML scraping + per-asset license parsing). Ship Quaternius alone — CC0, predictable ZIP URLs, similar pattern to Kenney.
+
+**Scope:**
+- `execution/quaternius_runner.py` (REVIVE — was DEAD in s2.6d, but a clean rewrite is doable now): ZIP download + extract.
+- `acquisition_router._drive_quaternius` handler.
+- Wire into `DIRECT_URL_PROVIDERS` whitelist in recipe_validator.
+
+**Tests:** 4-5 (download URL resolution, ZIP extract, invalid pack_id, license manifest).
+
+**Status:** PENDING.
+
+
 
 `Python/assetboy/workflows/recipe_validator.py` + `pack validate` CLI command.
 Lints recipe YAML against the v1 schema. 27 tests + integration tests against all 4 shipped recipes. Caught 16 legitimate warnings in primitive_tech + roman recipes (Mixamo packs missing `source_url`).
