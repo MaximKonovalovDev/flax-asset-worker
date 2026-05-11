@@ -49,6 +49,12 @@ DIRECT_URL_PROVIDERS = {
     "archive_org", "archive-org", "archiveorg",
     "scryfall",
     "iconify",
+    # v1.11.s43: R1A key-required providers (env-var-aware).
+    "pexels", "pexels_photos", "pexels_videos",
+    "pixabay", "pixabay_photos", "pixabay_videos",
+    "unsplash",
+    "rawg",
+    "jamendo",
 }
 MANUAL_BROWSER_PROVIDERS = {
     "fab", "mixamo", "unity", "epic",

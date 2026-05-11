@@ -255,6 +255,209 @@ class PackHelperTests(_BaseRouterR1aTest):
         self.assertEqual(self.mod._pack_count({}, default=12), 12)
 
 
+class PexelsRouterTests(_BaseRouterR1aTest):
+    def test_pexels_photos_routes_to_driver(self) -> None:
+        from assetboy.execution.pexels_runner import PexelsResult
+        pack = {
+            "id": "PX", "provider": "pexels",
+            "acquisition_method": "direct_url",
+            "search_terms": ["fire"], "count": 3,
+            "pexels_variant": "large",
+        }
+        captured: dict = {}
+
+        def capture(*a: object, **kwargs: object):  # type: ignore[no-untyped-def]
+            captured.update(kwargs)
+            return PexelsResult(
+                pack_id="PX", query="fire", output_dir=Path("."),
+                kind="photos", items_matched=3, items_downloaded=3, ok=True,
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            with self._patch_workspace_dir(out):
+                with patch(
+                    "assetboy.execution.pexels_runner.run_pexels_photo_batch",
+                    side_effect=capture,
+                ):
+                    result = self.mod._acquire_direct_url(
+                        pack=pack, recipe=self._recipe(),
+                        pack_id="PX", provider="pexels", dry_run=False,
+                    )
+        self.assertTrue(result.ok)
+        self.assertEqual(captured["variant"], "large")
+
+    def test_pexels_videos_routes_with_max_height(self) -> None:
+        from assetboy.execution.pexels_runner import PexelsResult
+        pack = {
+            "id": "PV", "provider": "pexels_videos",
+            "acquisition_method": "direct_url",
+            "search_terms": ["fire"],
+            "count": 2, "pexels_max_height": 720,
+        }
+        captured: dict = {}
+
+        def capture(*a: object, **kwargs: object):  # type: ignore[no-untyped-def]
+            captured.update(kwargs)
+            return PexelsResult(
+                pack_id="PV", query="fire", output_dir=Path("."),
+                kind="videos", items_matched=2, items_downloaded=2, ok=True,
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            with self._patch_workspace_dir(out):
+                with patch(
+                    "assetboy.execution.pexels_runner.run_pexels_video_batch",
+                    side_effect=capture,
+                ):
+                    result = self.mod._acquire_direct_url(
+                        pack=pack, recipe=self._recipe(),
+                        pack_id="PV", provider="pexels_videos", dry_run=False,
+                    )
+        self.assertTrue(result.ok)
+        self.assertEqual(captured["max_height"], 720)
+
+
+class PixabayRouterTests(_BaseRouterR1aTest):
+    def test_pixabay_photos_routes_with_image_type(self) -> None:
+        from assetboy.execution.pixabay_runner import PixabayResult
+        pack = {
+            "id": "PB", "provider": "pixabay",
+            "acquisition_method": "direct_url",
+            "search_terms": ["leaf"],
+            "count": 5,
+            "pixabay_image_type": "vector",
+        }
+        captured: dict = {}
+
+        def capture(*a: object, **kwargs: object):  # type: ignore[no-untyped-def]
+            captured.update(kwargs)
+            return PixabayResult(
+                pack_id="PB", query="leaf", output_dir=Path("."),
+                kind="photos", items_matched=5, items_downloaded=5, ok=True,
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            with self._patch_workspace_dir(out):
+                with patch(
+                    "assetboy.execution.pixabay_runner.run_pixabay_photo_batch",
+                    side_effect=capture,
+                ):
+                    result = self.mod._acquire_direct_url(
+                        pack=pack, recipe=self._recipe(),
+                        pack_id="PB", provider="pixabay", dry_run=False,
+                    )
+        self.assertTrue(result.ok)
+        self.assertEqual(captured["image_type"], "vector")
+
+
+class UnsplashRouterTests(_BaseRouterR1aTest):
+    def test_unsplash_routes_with_orientation(self) -> None:
+        from assetboy.execution.unsplash_runner import UnsplashResult
+        pack = {
+            "id": "US", "provider": "unsplash",
+            "acquisition_method": "direct_url",
+            "search_terms": ["mountain"],
+            "count": 3,
+            "unsplash_orientation": "landscape",
+        }
+        captured: dict = {}
+
+        def capture(*a: object, **kwargs: object):  # type: ignore[no-untyped-def]
+            captured.update(kwargs)
+            return UnsplashResult(
+                pack_id="US", query="mountain", output_dir=Path("."),
+                photos_matched=3, photos_downloaded=3, ok=True,
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            with self._patch_workspace_dir(out):
+                with patch(
+                    "assetboy.execution.unsplash_runner.run_unsplash_photo_batch",
+                    side_effect=capture,
+                ):
+                    result = self.mod._acquire_direct_url(
+                        pack=pack, recipe=self._recipe(),
+                        pack_id="US", provider="unsplash", dry_run=False,
+                    )
+        self.assertTrue(result.ok)
+        self.assertEqual(captured["orientation"], "landscape")
+
+
+class RawgRouterTests(_BaseRouterR1aTest):
+    def test_rawg_routes_with_genres_and_screenshots(self) -> None:
+        from assetboy.execution.rawg_runner import RawgResult
+        pack = {
+            "id": "RG", "provider": "rawg",
+            "acquisition_method": "direct_url",
+            "search_terms": ["roguelike"],
+            "count": 4,
+            "rawg_genres": "strategy,role-playing-games-rpg",
+            "rawg_max_screenshots": 5,
+        }
+        captured: dict = {}
+
+        def capture(*a: object, **kwargs: object):  # type: ignore[no-untyped-def]
+            captured.update(kwargs)
+            return RawgResult(
+                pack_id="RG", query="roguelike", output_dir=Path("."),
+                games_matched=4, games_downloaded=4, screenshots_downloaded=20, ok=True,
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            with self._patch_workspace_dir(out):
+                with patch(
+                    "assetboy.execution.rawg_runner.run_rawg_games_batch",
+                    side_effect=capture,
+                ):
+                    result = self.mod._acquire_direct_url(
+                        pack=pack, recipe=self._recipe(),
+                        pack_id="RG", provider="rawg", dry_run=False,
+                    )
+        self.assertTrue(result.ok)
+        self.assertEqual(captured["genres"], "strategy,role-playing-games-rpg")
+        self.assertEqual(captured["max_screenshots_per_game"], 5)
+        self.assertIn("REFERENCE-ONLY", result.notes)
+
+
+class JamendoRouterTests(_BaseRouterR1aTest):
+    def test_jamendo_routes_with_allow_restrictive(self) -> None:
+        from assetboy.execution.jamendo_runner import JamendoResult
+        pack = {
+            "id": "JM", "provider": "jamendo",
+            "acquisition_method": "direct_url",
+            "search_terms": ["ambient"],
+            "count": 2,
+            "jamendo_allow_restrictive": True,
+        }
+        captured: dict = {}
+
+        def capture(*a: object, **kwargs: object):  # type: ignore[no-untyped-def]
+            captured.update(kwargs)
+            return JamendoResult(
+                pack_id="JM", query="ambient", output_dir=Path("."),
+                tracks_matched=2, tracks_downloaded=2, ok=True,
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            with self._patch_workspace_dir(out):
+                with patch(
+                    "assetboy.execution.jamendo_runner.run_jamendo_tracks_batch",
+                    side_effect=capture,
+                ):
+                    result = self.mod._acquire_direct_url(
+                        pack=pack, recipe=self._recipe(),
+                        pack_id="JM", provider="jamendo", dry_run=False,
+                    )
+        self.assertTrue(result.ok)
+        self.assertTrue(captured["allow_restrictive"])
+
+
 class UnsupportedProviderTests(_BaseRouterR1aTest):
     def test_unknown_provider_lists_all_supported_in_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -266,7 +469,10 @@ class UnsupportedProviderTests(_BaseRouterR1aTest):
                     pack_id="X", provider="mystery", dry_run=False,
                 )
         self.assertFalse(result.ok)
-        for p in ("polyhaven", "met_museum", "wikimedia", "iconify"):
+        for p in (
+            "polyhaven", "met_museum", "wikimedia", "iconify",
+            "pexels", "pixabay", "unsplash", "rawg", "jamendo",
+        ):
             self.assertIn(p, result.error)
 
 

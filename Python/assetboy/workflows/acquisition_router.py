@@ -172,6 +172,21 @@ def _acquire_direct_url(
         return _drive_scryfall(pack, pack_id=pack_id, out_dir=out_dir)
     if provider == "iconify":
         return _drive_iconify(pack, pack_id=pack_id, out_dir=out_dir)
+    # v1.11.s43: R1A key-required providers
+    if provider in ("pexels", "pexels_photos"):
+        return _drive_pexels(pack, pack_id=pack_id, out_dir=out_dir, kind="photos")
+    if provider == "pexels_videos":
+        return _drive_pexels(pack, pack_id=pack_id, out_dir=out_dir, kind="videos")
+    if provider in ("pixabay", "pixabay_photos"):
+        return _drive_pixabay(pack, pack_id=pack_id, out_dir=out_dir, kind="photos")
+    if provider == "pixabay_videos":
+        return _drive_pixabay(pack, pack_id=pack_id, out_dir=out_dir, kind="videos")
+    if provider == "unsplash":
+        return _drive_unsplash(pack, pack_id=pack_id, out_dir=out_dir)
+    if provider == "rawg":
+        return _drive_rawg(pack, pack_id=pack_id, out_dir=out_dir)
+    if provider == "jamendo":
+        return _drive_jamendo(pack, pack_id=pack_id, out_dir=out_dir)
 
     return AcquisitionResult(
         ok=False,
@@ -180,9 +195,200 @@ def _acquire_direct_url(
         error=(
             f"unsupported_provider: {provider!r}. "
             "direct_url lane supports: polyhaven, kenney, ambientcg, freesound, "
-            "quaternius, met_museum, wikimedia, archive_org, scryfall, iconify. "
-            "For others, set acquisition_method: manual_browser or generator."
+            "quaternius, met_museum, wikimedia, archive_org, scryfall, iconify, "
+            "pexels[_photos|_videos], pixabay[_photos|_videos], unsplash, "
+            "rawg, jamendo. For others, set acquisition_method: manual_browser "
+            "or generator."
         ),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# v1.11.s43 — R1A key-required provider drivers
+# Each returns ok=False with error='missing_env_key' if the env var is unset,
+# rather than crashing the pipeline.
+# --------------------------------------------------------------------------- #
+
+def _drive_pexels(
+    pack: dict[str, Any], *, pack_id: str, out_dir: Path, kind: str,
+) -> AcquisitionResult:
+    try:
+        from assetboy.execution.pexels_runner import (
+            run_pexels_photo_batch, run_pexels_video_batch,
+        )
+    except ImportError as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider=f"pexels_{kind}",
+            error=f"import_failed: {exc}",
+        )
+    query = _pack_search_query(pack)
+    count = _pack_count(pack, default=4 if kind == "photos" else 2)
+    try:
+        if kind == "videos":
+            result = run_pexels_video_batch(
+                query=query, pack_id=pack_id, count=count,
+                max_height=int(pack.get("pexels_max_height", 1080) or 1080),
+                output_dir=out_dir,
+            )
+        else:
+            result = run_pexels_photo_batch(
+                query=query, pack_id=pack_id, count=count,
+                variant=str(pack.get("pexels_variant", "large")),
+                output_dir=out_dir,
+            )
+    except Exception as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider=f"pexels_{kind}",
+            error=f"runner_crashed: {exc}",
+        )
+    return AcquisitionResult(
+        ok=result.ok, method="direct_url", provider=f"pexels_{kind}",
+        source_dir=out_dir,
+        notes=f"pexels_{kind}: matched={result.items_matched} downloaded={result.items_downloaded}",
+        error=result.error if not result.ok else None,
+    )
+
+
+def _drive_pixabay(
+    pack: dict[str, Any], *, pack_id: str, out_dir: Path, kind: str,
+) -> AcquisitionResult:
+    try:
+        from assetboy.execution.pixabay_runner import (
+            run_pixabay_photo_batch, run_pixabay_video_batch,
+        )
+    except ImportError as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider=f"pixabay_{kind}",
+            error=f"import_failed: {exc}",
+        )
+    query = _pack_search_query(pack)
+    count = _pack_count(pack, default=4 if kind == "photos" else 2)
+    try:
+        if kind == "videos":
+            result = run_pixabay_video_batch(
+                query=query, pack_id=pack_id, count=count,
+                variant=str(pack.get("pixabay_variant", "medium")),
+                output_dir=out_dir,
+            )
+        else:
+            result = run_pixabay_photo_batch(
+                query=query, pack_id=pack_id, count=count,
+                image_type=str(pack.get("pixabay_image_type", "photo")),
+                variant=str(pack.get("pixabay_variant", "largeImageURL")),
+                output_dir=out_dir,
+            )
+    except Exception as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider=f"pixabay_{kind}",
+            error=f"runner_crashed: {exc}",
+        )
+    return AcquisitionResult(
+        ok=result.ok, method="direct_url", provider=f"pixabay_{kind}",
+        source_dir=out_dir,
+        notes=f"pixabay_{kind}: matched={result.items_matched} downloaded={result.items_downloaded}",
+        error=result.error if not result.ok else None,
+    )
+
+
+def _drive_unsplash(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
+    try:
+        from assetboy.execution.unsplash_runner import run_unsplash_photo_batch
+    except ImportError as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider="unsplash",
+            error=f"import_failed: {exc}",
+        )
+    query = _pack_search_query(pack)
+    count = _pack_count(pack, default=4)
+    orientation = pack.get("unsplash_orientation")
+    try:
+        result = run_unsplash_photo_batch(
+            query=query, pack_id=pack_id, count=count,
+            variant=str(pack.get("unsplash_variant", "regular")),
+            orientation=(str(orientation).lower() if orientation else None),
+            output_dir=out_dir,
+        )
+    except Exception as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider="unsplash",
+            error=f"runner_crashed: {exc}",
+        )
+    return AcquisitionResult(
+        ok=result.ok, method="direct_url", provider="unsplash",
+        source_dir=out_dir,
+        notes=(
+            f"unsplash: matched={result.photos_matched} "
+            f"downloaded={result.photos_downloaded} pings={result.download_pings}"
+        ),
+        error=result.error if not result.ok else None,
+    )
+
+
+def _drive_rawg(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
+    try:
+        from assetboy.execution.rawg_runner import run_rawg_games_batch
+    except ImportError as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider="rawg",
+            error=f"import_failed: {exc}",
+        )
+    query = _pack_search_query(pack)
+    count = _pack_count(pack, default=4)
+    try:
+        result = run_rawg_games_batch(
+            query=query, pack_id=pack_id, count=count,
+            genres=pack.get("rawg_genres"),
+            max_screenshots_per_game=int(pack.get("rawg_max_screenshots", 3) or 3),
+            include_screenshots=bool(pack.get("rawg_include_screenshots", True)),
+            output_dir=out_dir,
+        )
+    except Exception as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider="rawg",
+            error=f"runner_crashed: {exc}",
+        )
+    return AcquisitionResult(
+        ok=result.ok, method="direct_url", provider="rawg",
+        source_dir=out_dir,
+        notes=(
+            f"rawg: matched={result.games_matched} "
+            f"covers={result.games_downloaded} "
+            f"screenshots={result.screenshots_downloaded} (REFERENCE-ONLY)"
+        ),
+        error=result.error if not result.ok else None,
+    )
+
+
+def _drive_jamendo(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
+    try:
+        from assetboy.execution.jamendo_runner import run_jamendo_tracks_batch
+    except ImportError as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider="jamendo",
+            error=f"import_failed: {exc}",
+        )
+    query = _pack_search_query(pack)
+    count = _pack_count(pack, default=3)
+    try:
+        result = run_jamendo_tracks_batch(
+            query=query, pack_id=pack_id, count=count,
+            allow_restrictive=bool(pack.get("jamendo_allow_restrictive", False)),
+            output_dir=out_dir,
+        )
+    except Exception as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider="jamendo",
+            error=f"runner_crashed: {exc}",
+        )
+    return AcquisitionResult(
+        ok=result.ok, method="direct_url", provider="jamendo",
+        source_dir=out_dir,
+        notes=(
+            f"jamendo: matched={result.tracks_matched} "
+            f"downloaded={result.tracks_downloaded} "
+            f"skipped_restricted={result.tracks_skipped_restricted}"
+        ),
+        error=result.error if not result.ok else None,
     )
 
 
