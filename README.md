@@ -1,10 +1,10 @@
 # flax-asset-worker
 
 Modular asset pipeline for Flax Engine. C# HTTP hub (:8790) + Python sidecar
-with Typer CLI (7 sub-apps, 25 commands), recipe-driven pack runs (3 working
-recipes), 3-lane acquisition router (direct_url / manual_browser / generator),
-4 wired generator providers (ComfyUI + sd.cpp + Stable Audio Open Small + local_image),
-and a weekly external-API canary.
+with Typer CLI (18 sub-apps, 40+ commands), recipe-driven pack runs (5 working
+recipes including R1A smoke), 3-lane acquisition router (direct_url /
+manual_browser / generator), 19 wired direct_url providers (4 CC0 sites + 10 R1A
+public APIs + 5 generators), and a weekly external-API canary.
 
 > **Renamed 2026-05-06:** previously published as `diklaaltman91-ux/faw`.
 > Now at `flax-game-studio/flax-asset-worker`.
@@ -12,9 +12,50 @@ and a weekly external-API canary.
 > **Path B refactors 2026-05-10 → 2026-05-11:** slim-down + Typer rewrite
 > + acquisition router + 4 generator drivers + C# server endpoints +
 > contract regression tests. Net code reduction: **-24,487 LOC** (from
-> ~50k to ~25k). Test growth: 26 → 285 passing. See
+> ~50k to ~25k). Test growth: 26 → **589 passing**.
+>
+> **R1A public-API integration COMPLETE (v1.10.x + v1.11.x):** 10 new
+> public-API providers shipped (Met Museum, Wikimedia, Archive.org,
+> Scryfall, Iconify, Pexels, Pixabay, Unsplash, RAWG, Jamendo) with
+> THREE invocation paths each (standalone `gen X` CLI, recipe pipeline,
+> SOURCE_ADAPTERS lookup). FAW's first VIDEO providers (Pexels+Pixabay).
+> FAW's first MUSIC track provider (Jamendo). See
 > `docs/COMMIT_READY-assetboi.md` for full slice log + `docs/HEARTBEAT-assetboi.md`
-> for operator hibernation summary.
+> for operator hibernation summary + `docs/SETUP.md` §5.5 for env-key setup.
+
+## Public-API providers (R1A, v1.10–v1.11)
+
+| Provider | License | Auth | What it returns |
+|---|---|---|---|
+| Met Museum | CC0 | none | Open Access art works (paintings, sculpture refs) |
+| Wikimedia Commons | CC0/CC-BY/SA/PD | none | Massive open-license image corpus |
+| Archive.org | CC/PD per item | none | Books, audio, video, images |
+| Scryfall | CC-BY-SA-4.0 | none | MTG card art (fantasy creature refs) |
+| Iconify | MIT/Apache/CC0/OFL | none | 150+ open-source icon sets |
+| Pexels | Pexels License | `PEXELS_API_KEY` | Stock photos + **VIDEOS** |
+| Pixabay | CC0-equivalent | `PIXABAY_API_KEY` | Photos+illustrations+vectors+videos |
+| Unsplash | Unsplash License | `UNSPLASH_ACCESS_KEY` | Stock photos |
+| RAWG.io | reference-only | `RAWG_API_KEY` | Game covers + screenshots (ideation only) |
+| Jamendo | CC-BY/SA | `JAMENDO_CLIENT_ID` | **CC MUSIC TRACKS** (3–5min) |
+
+### Quick scout commands
+
+```powershell
+# 5 no-key providers in one shot:
+python -m assetboy.cli gen all-no-key -q "stone wall" -n 2 --dry-run
+
+# 5 key-required (skips missing keys gracefully) + optional video providers:
+python -m assetboy.cli gen all-key -q "fire" --include-video --dry-run
+
+# Single provider examples:
+python -m assetboy.cli gen met-museum fetch -q "roman fresco" -n 4
+python -m assetboy.cli gen iconify fetch -q "sword" --width 64 -n 20
+python -m assetboy.cli gen pexels videos -q "fire crackling" -n 2
+python -m assetboy.cli gen jamendo tracks -q "ambient cinematic" -n 3
+
+# End-to-end recipe smoke (5 no-key providers in one recipe):
+python -m assetboy.cli pack from-recipe sandbox/r1a_smoke.yaml --dry-run
+```
 
 ---
 
