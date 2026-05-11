@@ -253,6 +253,81 @@ class WarningsTests(unittest.TestCase):
         self.assertTrue(any("no 'license' block" in w for w in r.warnings))
 
 
+class RecipeMetadataFieldTests(unittest.TestCase):
+    """v1.11.s51: recipe.genre/theme/style/tags optional metadata fields."""
+
+    def setUp(self) -> None:
+        from assetboy.workflows.recipe_validator import validate_recipe_doc
+        self.validate = validate_recipe_doc
+
+    def _doc(self, **recipe_extra: object) -> dict:
+        return {
+            "recipe": {"id": "r", "game": "test", **recipe_extra},
+            "packs": [{
+                "id": "P", "provider": "polyhaven",
+                "acquisition_method": "direct_url",
+                "license": {"kind": "cc0"},
+                "asset_kind": "texture",
+                "assets": [{"asset_id": "x"}],
+            }],
+        }
+
+    def test_string_genre_accepted(self) -> None:
+        r = self.validate(self._doc(genre="rpg"))
+        self.assertTrue(r.ok, msg=str(r.errors))
+
+    def test_list_genre_accepted(self) -> None:
+        r = self.validate(self._doc(genre=["rpg", "roguelite"]))
+        self.assertTrue(r.ok, msg=str(r.errors))
+
+    def test_string_theme_accepted(self) -> None:
+        r = self.validate(self._doc(theme="medieval fantasy"))
+        self.assertTrue(r.ok)
+
+    def test_style_list_accepted(self) -> None:
+        r = self.validate(self._doc(style=["lowpoly", "stylized"]))
+        self.assertTrue(r.ok)
+
+    def test_tags_accepted(self) -> None:
+        r = self.validate(self._doc(tags=["demo", "first-playable", "v1"]))
+        self.assertTrue(r.ok)
+
+    def test_int_genre_is_error(self) -> None:
+        r = self.validate(self._doc(genre=42))
+        self.assertFalse(r.ok)
+        self.assertTrue(any("genre" in e for e in r.errors))
+
+    def test_dict_theme_is_error(self) -> None:
+        r = self.validate(self._doc(theme={"primary": "rpg"}))
+        self.assertFalse(r.ok)
+
+    def test_mixed_list_entry_is_error(self) -> None:
+        r = self.validate(self._doc(tags=["ok", 42, None]))
+        self.assertFalse(r.ok)
+        # Two non-string entries -> 2 errors.
+        tag_errs = [e for e in r.errors if "tags" in e]
+        self.assertEqual(len(tag_errs), 2)
+
+    def test_empty_string_metadata_is_warning(self) -> None:
+        r = self.validate(self._doc(genre=""))
+        self.assertTrue(r.ok)
+        self.assertTrue(any("genre" in w and "empty" in w for w in r.warnings))
+
+    def test_empty_string_in_list_is_error(self) -> None:
+        r = self.validate(self._doc(tags=["a", "  ", "c"]))
+        self.assertFalse(r.ok)
+        self.assertTrue(any("tags[1]" in e for e in r.errors))
+
+    def test_metadata_fields_absent_no_complaint(self) -> None:
+        r = self.validate(self._doc())  # no metadata fields
+        self.assertTrue(r.ok)
+        for w in r.warnings:
+            self.assertNotIn("genre", w)
+            self.assertNotIn("theme", w)
+            self.assertNotIn("style", w)
+            self.assertNotIn("tags", w)
+
+
 class RefsFieldTests(unittest.TestCase):
     """v1.11.s36: video_refs / music_refs / icon_refs / reference_image_urls."""
 

@@ -126,6 +126,21 @@ def validate_recipe_doc(doc: Any, source_label: str = "<recipe>") -> ValidationR
                 result.errors.append(
                     f"{source_label}: recipe.{k} is required but missing/empty"
                 )
+        # v1.11.s51: optional discovery metadata fields. Each must be a
+        # string OR list of strings when present. Used by future
+        # `pack list-recipes --filter genre:rpg` style queries.
+        _validate_recipe_metadata_field(
+            recipe, "genre", source_label, result
+        )
+        _validate_recipe_metadata_field(
+            recipe, "theme", source_label, result
+        )
+        _validate_recipe_metadata_field(
+            recipe, "style", source_label, result
+        )
+        _validate_recipe_metadata_field(
+            recipe, "tags", source_label, result
+        )
 
     packs = doc.get("packs")
     if not isinstance(packs, list):
@@ -263,6 +278,57 @@ def _validate_pack(
     _validate_refs_field(pack, "music_refs", pack_label, pack_id, result)
     _validate_refs_field(pack, "icon_refs", pack_label, pack_id, result)
     _validate_refs_field(pack, "reference_image_urls", pack_label, pack_id, result)
+
+
+def _validate_recipe_metadata_field(
+    recipe: dict[str, Any],
+    field_name: str,
+    source_label: str,
+    result: ValidationResult,
+) -> None:
+    """Validate optional recipe-level discovery metadata fields (v1.11.s51).
+
+    Each metadata field (genre, theme, style, tags) must be one of:
+      - string (single value): 'rpg' or 'fantasy'
+      - list[str] (multiple values): ['rpg', 'roguelite']
+      - omitted/null (no validation)
+
+    Anything else (int, dict, mixed list) -> ERROR.
+    Empty string -> WARNING (field present but no value).
+    """
+    if field_name not in recipe:
+        return
+    value = recipe[field_name]
+    if value is None:
+        return
+    if isinstance(value, str):
+        if not value.strip():
+            result.warnings.append(
+                f"{source_label}: recipe.{field_name} is empty string; "
+                "consider removing or filling"
+            )
+        return
+    if isinstance(value, list):
+        for i, entry in enumerate(value):
+            if not isinstance(entry, str):
+                result.ok = False
+                result.errors.append(
+                    f"{source_label}: recipe.{field_name}[{i}] must be a "
+                    f"string; got {type(entry).__name__}"
+                )
+            elif not entry.strip():
+                result.ok = False
+                result.errors.append(
+                    f"{source_label}: recipe.{field_name}[{i}]: empty string "
+                    "not allowed"
+                )
+        return
+    # Not str, not list, not None — wrong type.
+    result.ok = False
+    result.errors.append(
+        f"{source_label}: recipe.{field_name} must be a string or list of "
+        f"strings; got {type(value).__name__}"
+    )
 
 
 def _validate_refs_field(
