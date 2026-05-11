@@ -2145,13 +2145,19 @@ def all_key_cmd(
         bool,
         typer.Option("--include-video", help="Also fan out to Pexels+Pixabay video providers."),
     ] = False,
+    parallel: Annotated[
+        bool,
+        typer.Option(
+            "--parallel",
+            help="v1.12.s65: dispatch keyed runners concurrently (ThreadPoolExecutor).",
+        ),
+    ] = False,
     json_out: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Fan out one query across key-required R1A providers (Path B v1.11.s38).
 
-    Probes env vars and SKIPS any provider whose key is missing (rather
-    than failing the whole batch). Reports per-provider status: ok, skipped,
-    or failed.
+    Probes env vars and SKIPS any provider whose key is missing.
+    Use --parallel (v1.12.s65) for concurrent dispatch.
 
     Providers (gated on env var presence):
       Pexels photos        PEXELS_API_KEY
@@ -2164,7 +2170,7 @@ def all_key_cmd(
 
     Examples:
       assetboy gen all-key -q "fire" -n 2 --include-video --dry-run
-      assetboy gen all-key -q "ambient" -n 1  # photos+music only
+      assetboy gen all-key -q "ambient" -n 1 --parallel
     """
     from assetboy.execution.pexels_runner import (
         get_api_key as _pexels_key, run_pexels_photo_batch, run_pexels_video_batch,
@@ -2185,8 +2191,6 @@ def all_key_cmd(
     out_dir_arg: Path | None = output_dir if str(output_dir) else None
     base_pack_id = pack_id or f"ALL_KEY_{query.replace(' ', '_').upper()}"
 
-    providers_run: list[dict] = []
-
     def _get_count(r, *attrs: str) -> int:
         for a in attrs:
             v = getattr(r, a, 0)
@@ -2194,82 +2198,112 @@ def all_key_cmd(
                 return int(v)
         return 0
 
-    def _run_with_key(
-        provider: str, key_getter, fn, **kwargs,
-    ) -> None:
-        key = key_getter()
-        if not key:
-            providers_run.append({
-                "provider": provider, "ok": False, "skipped": True,
-                "matched": 0, "downloaded": 0,
-                "manifest_path": None, "error": "missing_env_key",
-                "output_dir": "",
-            })
-            return
-        try:
-            r = fn(**kwargs)
-            providers_run.append({
-                "provider": provider, "ok": r.ok, "skipped": False,
-                "matched": _get_count(r, "items_matched", "games_matched",
-                                      "tracks_matched", "photos_matched"),
-                "downloaded": _get_count(r, "items_downloaded", "games_downloaded",
-                                         "tracks_downloaded", "photos_downloaded"),
-                "manifest_path": str(r.manifest_path) if getattr(r, "manifest_path", None) else None,
-                "error": r.error,
-                "output_dir": str(r.output_dir),
-            })
-        except Exception as exc:
-            providers_run.append({
-                "provider": provider, "ok": False, "skipped": False,
-                "matched": 0, "downloaded": 0,
-                "manifest_path": None, "error": f"crashed: {exc}",
-                "output_dir": "",
-            })
+    def _ok_record(provider: str, r) -> dict:
+        return {
+            "provider": provider, "ok": r.ok, "skipped": False,
+            "matched": _get_count(r, "items_matched", "games_matched",
+                                  "tracks_matched", "photos_matched"),
+            "downloaded": _get_count(r, "items_downloaded", "games_downloaded",
+                                     "tracks_downloaded", "photos_downloaded"),
+            "manifest_path": str(r.manifest_path) if getattr(r, "manifest_path", None) else None,
+            "error": r.error,
+            "output_dir": str(r.output_dir),
+        }
 
-    _run_with_key(
-        "pexels_photos", _pexels_key, run_pexels_photo_batch,
-        query=query, pack_id=f"{base_pack_id}_PXP", count=count,
-        output_dir=(out_dir_arg / "pexels_photos") if out_dir_arg else None,
-        dry_run=dry_run,
-    )
+    def _skipped_record(provider: str) -> dict:
+        return {
+            "provider": provider, "ok": False, "skipped": True,
+            "matched": 0, "downloaded": 0,
+            "manifest_path": None, "error": "missing_env_key",
+            "output_dir": "",
+        }
+
+    def _crashed_record(provider: str, exc: Exception) -> dict:
+        return {
+            "provider": provider, "ok": False, "skipped": False,
+            "matched": 0, "downloaded": 0,
+            "manifest_path": None, "error": f"crashed: {exc}",
+            "output_dir": "",
+        }
+
+    # Build dispatch tasks. Each entry: (pid, key_getter, runner, kwargs).
+    tasks: list[tuple[str, object, object, dict]] = [
+        ("pexels_photos", _pexels_key, run_pexels_photo_batch, dict(
+            query=query, pack_id=f"{base_pack_id}_PXP", count=count,
+            output_dir=(out_dir_arg / "pexels_photos") if out_dir_arg else None,
+            dry_run=dry_run,
+        )),
+    ]
     if include_video:
-        _run_with_key(
-            "pexels_videos", _pexels_key, run_pexels_video_batch,
+        tasks.append(("pexels_videos", _pexels_key, run_pexels_video_batch, dict(
             query=query, pack_id=f"{base_pack_id}_PXV", count=count,
             output_dir=(out_dir_arg / "pexels_videos") if out_dir_arg else None,
             dry_run=dry_run,
-        )
-    _run_with_key(
-        "pixabay_photos", _pixabay_key, run_pixabay_photo_batch,
+        )))
+    tasks.append(("pixabay_photos", _pixabay_key, run_pixabay_photo_batch, dict(
         query=query, pack_id=f"{base_pack_id}_PBP", count=count,
         output_dir=(out_dir_arg / "pixabay_photos") if out_dir_arg else None,
         dry_run=dry_run,
-    )
+    )))
     if include_video:
-        _run_with_key(
-            "pixabay_videos", _pixabay_key, run_pixabay_video_batch,
+        tasks.append(("pixabay_videos", _pixabay_key, run_pixabay_video_batch, dict(
             query=query, pack_id=f"{base_pack_id}_PBV", count=count,
             output_dir=(out_dir_arg / "pixabay_videos") if out_dir_arg else None,
             dry_run=dry_run,
-        )
-    _run_with_key(
-        "unsplash", _unsplash_key, run_unsplash_photo_batch,
+        )))
+    tasks.append(("unsplash", _unsplash_key, run_unsplash_photo_batch, dict(
         query=query, pack_id=f"{base_pack_id}_US", count=count,
         output_dir=(out_dir_arg / "unsplash") if out_dir_arg else None,
         dry_run=dry_run,
-    )
-    _run_with_key(
-        "rawg", _rawg_key, run_rawg_games_batch,
+    )))
+    tasks.append(("rawg", _rawg_key, run_rawg_games_batch, dict(
         query=query, pack_id=f"{base_pack_id}_RAWG", count=count,
         output_dir=(out_dir_arg / "rawg") if out_dir_arg else None,
         dry_run=dry_run,
-    )
-    _run_with_key(
-        "jamendo", _jamendo_key, run_jamendo_tracks_batch,
+    )))
+    tasks.append(("jamendo", _jamendo_key, run_jamendo_tracks_batch, dict(
         query=query, pack_id=f"{base_pack_id}_JAM", count=count,
         output_dir=(out_dir_arg / "jamendo") if out_dir_arg else None,
         dry_run=dry_run,
-    )
+    )))
+
+    providers_run: list[dict] = []
+
+    if parallel:
+        # v1.12.s65 — parallel dispatch for tasks with non-missing keys.
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        # First: classify each task by env-key presence; skipped tasks are
+        # pre-recorded (no futures needed for them).
+        results_by_idx: dict[int, dict] = {}
+        futures: dict = {}
+        with ThreadPoolExecutor(max_workers=max(1, len(tasks))) as pool:
+            for i, (pid, key_getter, fn, kwargs) in enumerate(tasks):
+                key = key_getter()
+                if not key:
+                    results_by_idx[i] = _skipped_record(pid)
+                    continue
+                fut = pool.submit(fn, **kwargs)
+                futures[fut] = (i, pid)
+            for fut in as_completed(futures):
+                idx, pid = futures[fut]
+                try:
+                    r = fut.result()
+                    results_by_idx[idx] = _ok_record(pid, r)
+                except Exception as exc:
+                    results_by_idx[idx] = _crashed_record(pid, exc)
+        for i in range(len(tasks)):
+            providers_run.append(results_by_idx[i])
+    else:
+        for pid, key_getter, fn, kwargs in tasks:
+            key = key_getter()
+            if not key:
+                providers_run.append(_skipped_record(pid))
+                continue
+            try:
+                r = fn(**kwargs)
+                providers_run.append(_ok_record(pid, r))
+            except Exception as exc:
+                providers_run.append(_crashed_record(pid, exc))
 
     providers_ok = sum(1 for p in providers_run if p["ok"])
     providers_skipped = sum(1 for p in providers_run if p["skipped"])
@@ -2282,6 +2316,7 @@ def all_key_cmd(
         "count_per_provider": count,
         "dry_run": dry_run,
         "include_video": include_video,
+        "parallel": parallel,
         "providers_run": len(providers_run),
         "providers_ok": providers_ok,
         "providers_skipped": providers_skipped,
@@ -2298,6 +2333,7 @@ def all_key_cmd(
         print(f"gen_all_key_query={query!r}")
         print(f"gen_all_key_dry_run={dry_run}")
         print(f"gen_all_key_include_video={include_video}")
+        print(f"gen_all_key_parallel={parallel}")
         print(f"gen_all_key_providers_ok={providers_ok}/{len(providers_run)}")
         print(f"gen_all_key_providers_skipped={providers_skipped}")
         print(f"gen_all_key_providers_failed={providers_failed}")

@@ -1196,6 +1196,45 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["providers_run"], 7)
         self.assertTrue(data["include_video"])
 
+    def test_all_key_parallel_preserves_order_and_skips(self) -> None:
+        """v1.12.s65: --parallel preserves task order; missing keys still SKIP."""
+        import os
+        from unittest.mock import patch
+        from assetboy.execution.pexels_runner import PexelsResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(os.environ, {"PEXELS_API_KEY": "k"}, clear=False):
+                # Clear all others.
+                for k in ("PIXABAY_API_KEY", "UNSPLASH_ACCESS_KEY",
+                          "RAWG_API_KEY", "JAMENDO_CLIENT_ID"):
+                    os.environ.pop(k, None)
+                fake = PexelsResult(
+                    pack_id="P", query="q", output_dir=Path(tmp),
+                    kind="photos", items_matched=2, items_downloaded=2, ok=True,
+                )
+                with patch(
+                    "assetboy.execution.pexels_runner.run_pexels_photo_batch",
+                    return_value=fake,
+                ):
+                    result = self.runner.invoke(
+                        self.app,
+                        ["gen", "all-key", "--query", "q", "--parallel", "--json"],
+                    )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertTrue(data["parallel"])
+        self.assertEqual(data["providers_ok"], 1)
+        self.assertEqual(data["providers_skipped"], 4)
+        # Order: pexels_photos first, then pixabay_photos, unsplash, rawg, jamendo.
+        expected_order = ["pexels_photos", "pixabay_photos", "unsplash", "rawg", "jamendo"]
+        self.assertEqual([p["provider"] for p in data["providers"]], expected_order)
+        # Only pexels_photos has ok=True; others skipped.
+        ok = [p for p in data["providers"] if p["ok"]]
+        self.assertEqual(len(ok), 1)
+        self.assertEqual(ok[0]["provider"], "pexels_photos")
+
     def test_all_key_partial_env_runs_only_keyed_providers(self) -> None:
         """Set only PEXELS_API_KEY; mock its runner; others should still be SKIP."""
         import os
