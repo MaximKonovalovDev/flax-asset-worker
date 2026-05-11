@@ -1,6 +1,6 @@
 # HEARTBEAT — assetboi (operator hibernation read-back)
 
-> **Last update:** 2026-05-11 (mid-turn, **109 commits + 54 tags shipped this turn**)
+> **Last update:** 2026-05-11 (mid-turn, **106 commits + 61 tags shipped this turn**, origin verified)
 > **Repo:** `flax-asset-worker` (this repo; assetboi commits freely here)
 > **Loop status:** **NEVER-STOP ACTIVE** per BOSS Rule 3
 
@@ -10,9 +10,11 @@ ROADMAP) is supporting detail.
 
 ---
 
-## TL;DR — top-of-loop milestone (v1.11.7, this turn)
+## TL;DR — top-of-loop milestone (v1.11.14, this turn)
 
-**109 commits, 54 tags, 589 tests passing, 10 new public-API providers shipped + fully wired across THREE invocation paths.**
+**106 commits since baseline `0b1ad7d` (origin verified), 61 tags on origin,
+605 tests passing, 10 new public-API providers shipped + fully wired across
+THREE invocation paths + Recipe discovery metadata + Interactive setup helper.**
 
 Major milestone reached: **R1A TOP-10 PUBLIC API CATALOG COMPLETE** (v1.10.9
 tag `v1.10.9-unsplash-COMPLETE-R1A`).
@@ -25,7 +27,15 @@ tag `v1.11.7-router-r1a-keyed`):
   - Path C: `SOURCE_ADAPTERS['<provider>_api']` adapter lookup
 
 Plus working sample recipe `recipes/sandbox/r1a_smoke.yaml` (5 no-key
-packs in one document; validates clean; runs end-to-end). FAW now has fetcher commands for:
+packs in one document; validates clean; runs end-to-end; now has
+genre/theme/style/tags discovery metadata as v1.11.14 demo).
+
+Plus v1.11.10+ batch additions:
+  - v1.11.10 — flaky canary test stabilized (no more --deselect needed)
+  - v1.11.11 — docs/RELEASE_NOTES_v1.10_v1.11.md (canonical R1A doc)
+  - v1.11.12 — HTTP POST /api/v1/providers/list-gen (C# clients enumerate R1A)
+  - v1.11.13 — scripts/setup-r1a-keys.ps1 (interactive PowerShell key setup)
+  - v1.11.14 — recipe genre/theme/style/tags metadata fields (v1.12 discovery prep) FAW now has fetcher commands for:
 
 ```
 NO-KEY (always works):
