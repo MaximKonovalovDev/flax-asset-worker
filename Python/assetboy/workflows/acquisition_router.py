@@ -475,23 +475,7 @@ def _acquire_generator(
         )
 
     if provider == "comfyui":
-        try:
-            from assetboy.execution.comfyui_runner import is_comfyui_running
-        except ImportError as exc:
-            return AcquisitionResult(
-                ok=False, method="generator", provider="comfyui",
-                error=f"import_failed: {exc}",
-            )
-        if not is_comfyui_running():
-            return AcquisitionResult(
-                ok=False, method="generator", provider="comfyui",
-                error="comfyui_not_running (start ComfyUI on :8188 then re-run)",
-            )
-        return AcquisitionResult(
-            ok=False, method="generator", provider="comfyui",
-            error="comfyui_workflow_routing_TBD_in_s11.1 "
-                  "(server is up; full workflow integration deferred)",
-        )
+        return _drive_comfyui(pack, pack_id=pack_id, out_dir=out_dir)
 
     if provider in ("stable_audio_open_small", "local_image", "sd.cpp"):
         return AcquisitionResult(
@@ -502,6 +486,124 @@ def _acquire_generator(
     return AcquisitionResult(
         ok=False, method="generator", provider=provider,
         error=f"unsupported_generator_provider: {provider}",
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Generator drivers
+# --------------------------------------------------------------------------- #
+
+def _drive_comfyui(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
+    """Drive comfyui_runner.run_comfyui_batch with the pack's prompts.
+
+    Path B s11.1 (2026-05-11): wires real ComfyUI workflow execution.
+
+    Recipe shape expected:
+      provider: comfyui
+      acquisition_method: generator
+      asset_kind: texture | model | hdr   (mapped to comfyui_runner asset_type)
+      prompts:
+        - id: <preset_id>
+          text: "your text-to-image prompt"
+          width: 1024              # optional, default 1024
+          height: 1024             # optional
+          steps: 25                # optional
+          cfg: 7.0                 # optional
+
+    Per-prompt fields override defaults. The runner emits one ComfyUIResult
+    per prompt under out_dir.
+
+    Returns ok=True when at least one prompt completed without error;
+    aggregates errors into the notes string otherwise.
+    """
+    try:
+        from assetboy.execution.comfyui_runner import (
+            is_comfyui_running,
+            run_comfyui_batch,
+        )
+    except ImportError as exc:
+        return AcquisitionResult(
+            ok=False, method="generator", provider="comfyui",
+            error=f"import_failed: {exc}",
+        )
+
+    if not is_comfyui_running():
+        return AcquisitionResult(
+            ok=False, method="generator", provider="comfyui",
+            error="comfyui_not_running (start ComfyUI on :8188 then re-run)",
+        )
+
+    prompts = pack.get("prompts") or []
+    if not prompts:
+        return AcquisitionResult(
+            ok=False, method="generator", provider="comfyui",
+            error="no_prompts_in_pack (add prompts: [...] to the recipe pack)",
+        )
+
+    # Map recipe asset_kind to comfyui_runner asset_type vocabulary.
+    asset_kind = str(pack.get("asset_kind", "")).lower()
+    asset_type_map = {
+        "surface_pbr": "texture",
+        "texture": "texture",
+        "skybox": "texture",
+        "hdr": "texture",
+        "model": "model",
+        "prop_static": "model",
+        "foliage": "model",
+        "character_static": "model",
+        "character_animated": "model",
+    }
+    asset_type = asset_type_map.get(asset_kind, "texture")
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    results = []
+    errors = []
+    for prompt_entry in prompts:
+        if isinstance(prompt_entry, str):
+            prompt_text = prompt_entry
+            width, height, steps, cfg = 1024, 1024, 25, 7.0
+        elif isinstance(prompt_entry, dict):
+            prompt_text = str(prompt_entry.get("text") or prompt_entry.get("prompt") or "")
+            width = int(prompt_entry.get("width", 1024))
+            height = int(prompt_entry.get("height", 1024))
+            steps = int(prompt_entry.get("steps", 25))
+            cfg = float(prompt_entry.get("cfg", 7.0))
+        else:
+            continue
+        if not prompt_text:
+            errors.append("empty_prompt_text")
+            continue
+
+        try:
+            batch_results = run_comfyui_batch(
+                prompt=prompt_text,
+                pack_id=pack_id,
+                asset_type=asset_type,
+                width=width,
+                height=height,
+                steps=steps,
+                cfg=cfg,
+                output_dir=out_dir,
+            )
+            results.extend(batch_results)
+        except Exception as exc:
+            errors.append(f"{prompt_text[:40]}: {exc}")
+
+    if not results:
+        return AcquisitionResult(
+            ok=False, method="generator", provider="comfyui",
+            error=f"all_prompts_failed: {'; '.join(errors)[:200]}",
+        )
+
+    return AcquisitionResult(
+        ok=True, method="generator", provider="comfyui",
+        source_dir=out_dir,
+        notes=(
+            f"comfyui generated {len(results)} output(s) "
+            f"from {len(prompts)} prompt(s) -> {out_dir}"
+            + (f"; warnings: {len(errors)}" if errors else "")
+        ),
     )
 
 

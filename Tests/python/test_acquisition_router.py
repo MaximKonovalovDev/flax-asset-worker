@@ -259,6 +259,114 @@ class AcquisitionRouterTests(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertIn("unsupported_generator_provider", result.error)
 
+    # ----------------------------------------------------------------- #
+    # s11.1 ComfyUI driver
+    # ----------------------------------------------------------------- #
+
+    def test_generator_comfyui_with_prompts_calls_runner(self) -> None:
+        """When ComfyUI is up and pack has prompts, the runner is invoked."""
+        fake_batch_result = [
+            type("FakeRes", (), {
+                "pack_id": "TP_GEN_COMFY",
+                "prompt": "stone wall mossy",
+                "asset_type": "texture",
+                "output_dir": Path("/tmp/fake"),
+                "outputs": ["fake_output.png"],
+                "job_spec_path": None,
+                "dry_run": False,
+                "error": None,
+            })()
+        ]
+        with TemporaryDirectory() as tmp_dir:
+            with patch.dict(
+                "os.environ", {"ASSETBOY_FLAX_REPO_ROOT": tmp_dir}, clear=False
+            ):
+                with patch(
+                    "assetboy.execution.comfyui_runner.is_comfyui_running",
+                    return_value=True,
+                ):
+                    with patch(
+                        "assetboy.execution.comfyui_runner.run_comfyui_batch",
+                        return_value=fake_batch_result,
+                    ) as mock_run:
+                        result = self.acquire_source_dir(
+                            {
+                                "id": "TP_GEN_COMFY",
+                                "acquisition_method": "generator",
+                                "provider": "comfyui",
+                                "asset_kind": "surface_pbr",
+                                "prompts": [
+                                    {"id": "p1", "text": "stone wall mossy", "width": 512},
+                                    {"id": "p2", "text": "weathered wood planks"},
+                                ],
+                            },
+                            {"recipe": {"game": "test"}},
+                            dry_run=False,
+                        )
+
+        self.assertTrue(result.ok, f"expected ok=True, got: {result.error}")
+        self.assertEqual(mock_run.call_count, 2)  # 2 prompts -> 2 invocations
+        # First call should map surface_pbr -> "texture" asset_type
+        first_call_kwargs = mock_run.call_args_list[0].kwargs
+        self.assertEqual(first_call_kwargs["asset_type"], "texture")
+        self.assertEqual(first_call_kwargs["width"], 512)  # override applied
+        # Second call uses default width
+        second_call_kwargs = mock_run.call_args_list[1].kwargs
+        self.assertEqual(second_call_kwargs["width"], 1024)
+
+    def test_generator_comfyui_no_prompts_returns_clean_error(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            with patch.dict(
+                "os.environ", {"ASSETBOY_FLAX_REPO_ROOT": tmp_dir}, clear=False
+            ):
+                with patch(
+                    "assetboy.execution.comfyui_runner.is_comfyui_running",
+                    return_value=True,
+                ):
+                    result = self.acquire_source_dir(
+                        {
+                            "id": "TP_GEN_COMFY_NOPROMPTS",
+                            "acquisition_method": "generator",
+                            "provider": "comfyui",
+                        },
+                        {"recipe": {"game": "test"}},
+                        dry_run=False,
+                    )
+
+        self.assertFalse(result.ok)
+        self.assertIn("no_prompts_in_pack", result.error)
+
+    def test_generator_comfyui_string_prompts_also_work(self) -> None:
+        """Recipes can supply prompts as plain strings (not dicts)."""
+        with TemporaryDirectory() as tmp_dir:
+            with patch.dict(
+                "os.environ", {"ASSETBOY_FLAX_REPO_ROOT": tmp_dir}, clear=False
+            ):
+                with patch(
+                    "assetboy.execution.comfyui_runner.is_comfyui_running",
+                    return_value=True,
+                ):
+                    with patch(
+                        "assetboy.execution.comfyui_runner.run_comfyui_batch",
+                        return_value=[type("FakeRes", (), {"outputs": ["x.png"]})()],
+                    ) as mock_run:
+                        result = self.acquire_source_dir(
+                            {
+                                "id": "TP_GEN_COMFY_STR",
+                                "acquisition_method": "generator",
+                                "provider": "comfyui",
+                                "prompts": ["just a string prompt"],
+                            },
+                            {"recipe": {"game": "test"}},
+                            dry_run=False,
+                        )
+
+        self.assertTrue(result.ok)
+        self.assertEqual(mock_run.call_count, 1)
+        kw = mock_run.call_args.kwargs
+        self.assertEqual(kw["prompt"], "just a string prompt")
+        self.assertEqual(kw["width"], 1024)  # default kicks in for string prompts
+
 
 if __name__ == "__main__":
     unittest.main()

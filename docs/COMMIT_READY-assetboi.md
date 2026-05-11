@@ -1433,3 +1433,69 @@ Path B v1.2/v1.3 net-new code (canary + cli/* + acquisition_router + paths fallb
 - `docs/COMMIT_READY-assetboi.md` (this entry)
 
 **Next:** s11.1 (real generator integration — ComfyUI workflow exec + Stable Audio Open Small + sd.cpp UI prompt batches), OR a HEARTBEAT summary doc for the operator's read-back when they wake up. Continue.
+
+---
+
+## Slice v1.3.2.s11.1-comfyui — real ComfyUI workflow execution (2026-05-11)
+
+**Status:** SHIPPED. **217 passed, 1 skipped, 0 failed** (was 214).
+
+**What shipped:**
+
+### 1. `_drive_comfyui` in `acquisition_router.py` (~100 lines)
+
+Replaces the v1.2.1 placeholder ("server is up; full workflow integration deferred") with a real driver that wires `comfyui_runner.run_comfyui_batch` into the generator lane.
+
+**Recipe contract:**
+```yaml
+- id: SHARED_GEN_TEX_FOREST_BARK
+  acquisition_method: generator
+  provider: comfyui
+  asset_kind: surface_pbr        # mapped to comfyui_runner asset_type
+  prompts:
+    - id: bark_oak
+      text: "weathered oak bark, mossy, 4K PBR"
+      width: 1024                # optional; defaults to 1024
+      height: 1024
+      steps: 25
+      cfg: 7.0
+    - "or just a plain string prompt"  # also accepted
+```
+
+**Driver behavior:**
+- Checks `is_comfyui_running()` first (clear error if server down).
+- Validates `prompts: [...]` is non-empty.
+- Maps recipe `asset_kind` to comfyui_runner's `asset_type` vocabulary: `surface_pbr|texture|hdr|skybox -> "texture"`, `model|prop_static|foliage|character_* -> "model"`.
+- Iterates prompts (dict or string), per-prompt invokes `run_comfyui_batch(prompt=text, asset_type=..., width=..., height=..., steps=..., cfg=..., output_dir=out_dir, pack_id=...)`.
+- Aggregates results: ok=True if ≥1 prompt produced output; per-prompt failures collected as warnings in the notes string.
+
+### 2. Three new tests in `test_acquisition_router.py`
+
+- `test_generator_comfyui_with_prompts_calls_runner` — mocks `is_comfyui_running=True` + `run_comfyui_batch`; verifies 2 prompts → 2 runner invocations + correct asset_type mapping + per-prompt width override applied.
+- `test_generator_comfyui_no_prompts_returns_clean_error` — pack without `prompts: [...]` → `ok=False, error contains "no_prompts_in_pack"`.
+- `test_generator_comfyui_string_prompts_also_work` — recipe with `prompts: ["plain string"]` → runner called with default width=1024.
+
+### Verification
+
+```
+=== full test suite ===
+217 passed, 1 skipped in 6.25s
+(was 214 passed at v1.3.1)
+```
+
+Net gain: +3 tests, +110 lines production code (the s11.1 driver), -10 lines stub.
+
+### Files staged for commit
+
+- `Python/assetboy/workflows/acquisition_router.py` (MODIFIED, +100 lines `_drive_comfyui` + replaced placeholder)
+- `Tests/python/test_acquisition_router.py` (MODIFIED, +3 tests)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+**Recipes can now actually use ComfyUI for generation.** Operator workflow:
+1. Start ComfyUI on `:8188` (whichever workflow they want loaded).
+2. Add a `generator` pack to a recipe with `provider: comfyui` + `prompts: [...]`.
+3. Run `python -m assetboy.cli pack from-recipe <recipe>`.
+4. ComfyUI generates outputs into `<asset_library>/inbox/generator/<game>/<pack_id>/`.
+5. pack_pipeline picks them up like any other `source_dir`.
+
+**Next:** s11.1 for Stable Audio Open Small + local sd.cpp, OR new sandbox recipe (1-pack quick-iter), OR fold s2.6 cleanup into a smaller v1.4 polish slice. Continue the loop.
