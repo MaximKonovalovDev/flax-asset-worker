@@ -238,41 +238,114 @@ def sd_run_cmd(
 
 @app.command("list-presets")
 def list_presets_cmd(
+    provider: Annotated[
+        str,
+        typer.Option(
+            "--provider",
+            "-p",
+            help=(
+                "Filter to one provider: comfyui | local_image | stable_audio. "
+                "Default: list all 3."
+            ),
+        ),
+    ] = "",
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
 ) -> None:
-    """Show available ComfyUI material presets + local-SD UI prompt templates."""
+    """List preset prompts available per generator provider.
+
+    Pulls from the 3 KEEP runner modules:
+      - comfyui_runner.ROMAN_MATERIAL_PRESETS  (dict per preset: pack_id/type/prompt)
+      - local_image_runner.UI_PROMPT_TEMPLATES (dict per preset)
+      - stable_audio_runner.STABLE_AUDIO_PRESETS (tuple: id/text/duration_s)
+
+    The --provider filter restricts the listing to one source.
+    """
     from assetboy.execution.comfyui_runner import ROMAN_MATERIAL_PRESETS
     from assetboy.execution.local_image_runner import UI_PROMPT_TEMPLATES
+    from assetboy.execution.stable_audio_runner import STABLE_AUDIO_PRESETS
+
+    provider = (provider or "").strip().lower()
+
+    def _normalize_dict_preset(p, fallback_idx):
+        if isinstance(p, dict):
+            return {
+                "id": p.get("id") or p.get("pack_id") or p.get("name") or f"preset_{fallback_idx}",
+                "type": p.get("type") or p.get("asset_type", ""),
+                "prompt": p.get("prompt") or p.get("text", ""),
+            }
+        if hasattr(p, "__dict__"):
+            return p.__dict__
+        return {"raw": str(p)}
+
+    comfyui_presets = (
+        [
+            _normalize_dict_preset(p, i)
+            for i, p in enumerate(ROMAN_MATERIAL_PRESETS or [])
+        ]
+        if not provider or provider == "comfyui"
+        else []
+    )
+    # UI_PROMPT_TEMPLATES is a dict[str, dict]: {preset_id: {prompt, width, ...}}
+    if not provider or provider in ("local_image", "sd.cpp", "sd"):
+        local_image_presets = []
+        for preset_id, preset_data in (UI_PROMPT_TEMPLATES or {}).items():
+            if isinstance(preset_data, dict):
+                local_image_presets.append({
+                    "id": str(preset_id),
+                    "prompt": preset_data.get("prompt", ""),
+                    "width": preset_data.get("width"),
+                    "height": preset_data.get("height"),
+                })
+            else:
+                local_image_presets.append({"id": str(preset_id), "prompt": str(preset_data)})
+    else:
+        local_image_presets = []
+    stable_audio_presets = (
+        [
+            {"id": entry[0], "text": entry[1], "duration_s": entry[2]}
+            for entry in (STABLE_AUDIO_PRESETS or [])
+        ]
+        if not provider or provider in ("stable_audio", "stable_audio_open_small")
+        else []
+    )
 
     payload = {
-        "comfyui_material_presets": [
-            getattr(p, "__dict__", p) if hasattr(p, "__dict__") else p
-            for p in (ROMAN_MATERIAL_PRESETS or [])
-        ],
-        "local_sd_ui_prompts": list(UI_PROMPT_TEMPLATES or []),
+        "comfyui_material_presets": comfyui_presets,
+        "local_image_ui_prompts": local_image_presets,
+        "stable_audio_presets": stable_audio_presets,
     }
 
     if json_out:
         json.dump(payload, sys.stdout, indent=2, default=str)
         sys.stdout.write("\n")
-    else:
-        print(
-            f"gen_comfyui_preset_count={len(payload['comfyui_material_presets'])}"
-        )
-        for idx, preset in enumerate(payload["comfyui_material_presets"], start=1):
-            if isinstance(preset, dict):
-                name = preset.get("id") or preset.get("name") or "?"
-            else:
-                name = str(preset)
-            print(f"gen_comfyui_preset={idx}  name={name}")
-        print(
-            f"gen_sd_prompt_count={len(payload['local_sd_ui_prompts'])}"
-        )
-        for idx, prompt in enumerate(payload["local_sd_ui_prompts"], start=1):
-            preview = prompt[:60] + "..." if len(str(prompt)) > 60 else prompt
-            print(f"gen_sd_prompt={idx}  preview={preview!r}")
+        return
+
+    # Human-readable output
+    if comfyui_presets:
+        print(f"gen_comfyui_preset_count={len(comfyui_presets)}")
+        for idx, preset in enumerate(comfyui_presets, start=1):
+            print(
+                f"gen_comfyui_preset={idx}  "
+                f"id={preset.get('id', '?')}  "
+                f"type={preset.get('type', '')}"
+            )
+    if local_image_presets:
+        print(f"gen_local_image_preset_count={len(local_image_presets)}")
+        for idx, preset in enumerate(local_image_presets, start=1):
+            print(
+                f"gen_local_image_preset={idx}  "
+                f"id={preset.get('id', '?')}"
+            )
+    if stable_audio_presets:
+        print(f"gen_stable_audio_preset_count={len(stable_audio_presets)}")
+        for idx, preset in enumerate(stable_audio_presets, start=1):
+            print(
+                f"gen_stable_audio_preset={idx}  "
+                f"id={preset.get('id', '?')}  "
+                f"duration_s={preset.get('duration_s', 0)}"
+            )
 
 
 if __name__ == "__main__":
