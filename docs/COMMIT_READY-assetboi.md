@@ -596,3 +596,35 @@ These are real follow-up slices, **not blocking the v1.1.0 release**. The Path B
 - `docs/COMMIT_READY-assetboi.md` (this entry)
 
 **Next:** s2.5b — strip DEAD imports inside `cli_legacy.py` (7 eager + 26 lazy) to document which command handlers are stubs vs live, even though the whole file is on the s10.5 chopping block.
+
+---
+
+## Slice s10.x — Day 10+ self-audit doc PATH_B_DAY11_PLAN.md (2026-05-10)
+
+**Status:** SHIPPED.
+
+**Trigger:** 11-commit turn was getting heavy; s2.5b requires 33 edits to a single 8500-line file (cli_legacy.py) which would trigger Rule 2 thrash if not pre-planned. Smart never-stop response per BOSS Rule 3 "self-audit pack: fix those" branch: write a written continuation plan that future assetboi turns (or Zod-recovery sessions) can pick up cleanly.
+
+**What shipped:**
+
+1. **`docs/PATH_B_DAY11_PLAN.md`** (~350 lines) — written continuation plan for s2.5b / s2.6a-d / s10.5 / s11.
+   - State summary at end of v1.1.0-path-b-cleanup (11 commits, 1 tag, +6118/-669 lines).
+   - Per-slice trigger + precise scope (file targets, line numbers from peer-opus traces) + Rule 2 thrash-avoidance strategy + estimated subagent budget + gate verification.
+   - Lists the 8 KEEP-file rewires needed before any DEAD deletes can land.
+   - Lists the 21 DEAD files that will eventually be deleted, organized by sub-slice (s2.6a-d).
+   - s10.5 plan: 3 new tests required (v1 ledger roundtrip, cleanup-pause-called-once, degraded-canonicalization-still-publishes) before mechanical pack_pipeline extraction.
+   - s11 plan: pre-pack acquisition router connecting `acquisition_method` recipe field to real downloads/generation.
+   - Resumption protocol for future turns.
+
+**Why this is the right slice:**
+
+- Path B Days 1-10 + s2.5a == 11 commits in one turn. Context budget is real.
+- The next deferred slices each need careful pre-planning to avoid Rule 2 thrash (s2.5b alone: 33 edits to one file).
+- BOSS Rule 3 explicitly says "If you finish 10 slices and nothing else makes sense: Audit your own pack: dead atomics? stale tests? unused imports? Fix those." This is the self-audit.
+- A future assetboi turn (or one recovering from Zod kill) can read 2 docs (this one + COMMIT_READY) and resume cleanly, without having to re-derive the Day 11+ plan.
+
+**Files staged for commit:**
+- `docs/PATH_B_DAY11_PLAN.md` (NEW, ~350 lines)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+**Next:** s2.5b per PATH_B_DAY11_PLAN.md scope.
