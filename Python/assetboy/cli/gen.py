@@ -2519,5 +2519,107 @@ def list_providers_cmd(
         )
 
 
+# --------------------------------------------------------------------------- #
+# gen bench-fanout  (v1.12.s70)
+# --------------------------------------------------------------------------- #
+
+@app.command("bench-fanout")
+def bench_fanout_cmd(
+    query: Annotated[
+        str, typer.Option("--query", "-q", help="Search query for the benchmark."),
+    ],
+    count: Annotated[
+        int, typer.Option("--count", "-n", help="Per-provider count."),
+    ] = 1,
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Benchmark sequential vs parallel fan-out for the 5 no-key R1A providers.
+
+    Runs `gen all-no-key` TWICE (sequential then parallel) with the SAME
+    query + count, both in --dry-run mode (no downloads). Reports
+    per-mode wall time and the speedup factor.
+
+    Examples:
+      assetboy gen bench-fanout -q "stone wall" -n 1
+    """
+    import time
+    from assetboy.execution.met_museum_runner import run_met_museum_batch
+    from assetboy.execution.wikimedia_runner import run_wikimedia_batch
+    from assetboy.execution.archive_org_runner import run_archive_org_batch
+    from assetboy.execution.scryfall_runner import run_scryfall_batch
+    from assetboy.execution.iconify_runner import run_iconify_batch
+    from concurrent.futures import ThreadPoolExecutor
+
+    tasks = [
+        ("met_museum", run_met_museum_batch, dict(
+            query=query, pack_id="BENCH_MET", count=count, dry_run=True,
+        )),
+        ("wikimedia", run_wikimedia_batch, dict(
+            query=query, pack_id="BENCH_WM", count=count, dry_run=True,
+        )),
+        ("archive_org", run_archive_org_batch, dict(
+            query=query, mediatype="image", pack_id="BENCH_AO", count=count, dry_run=True,
+        )),
+        ("scryfall", run_scryfall_batch, dict(
+            query=query, pack_id="BENCH_SF", count=count, dry_run=True,
+        )),
+        ("iconify", run_iconify_batch, dict(
+            query=query, pack_id="BENCH_IC", count=count, dry_run=True,
+        )),
+    ]
+
+    # Sequential run.
+    seq_t0 = time.perf_counter()
+    seq_per_provider: dict[str, float] = {}
+    for pid, fn, kwargs in tasks:
+        t = time.perf_counter()
+        try:
+            fn(**kwargs)
+        except Exception:
+            pass
+        seq_per_provider[pid] = time.perf_counter() - t
+    seq_total = time.perf_counter() - seq_t0
+
+    # Parallel run.
+    par_t0 = time.perf_counter()
+    with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
+        futures = [pool.submit(fn, **kwargs) for _, fn, kwargs in tasks]
+        for f in futures:
+            try:
+                f.result()
+            except Exception:
+                pass
+    par_total = time.perf_counter() - par_t0
+
+    speedup = seq_total / par_total if par_total > 0 else 0.0
+
+    summary = {
+        "query": query,
+        "count_per_provider": count,
+        "providers": [pid for pid, _, _ in tasks],
+        "sequential_total_s": round(seq_total, 3),
+        "parallel_total_s": round(par_total, 3),
+        "speedup_x": round(speedup, 2),
+        "sequential_per_provider_s": {
+            pid: round(t, 3) for pid, t in seq_per_provider.items()
+        },
+    }
+
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"gen_bench_fanout_query={query!r}")
+        print(f"gen_bench_fanout_count={count}")
+        print(f"gen_bench_fanout_providers={len(tasks)}")
+        print(f"gen_bench_fanout_sequential_total_s={seq_total:.3f}")
+        print(f"gen_bench_fanout_parallel_total_s={par_total:.3f}")
+        print(f"gen_bench_fanout_speedup_x={speedup:.2f}")
+        print()
+        print("Per-provider sequential timing:")
+        for pid, t in seq_per_provider.items():
+            print(f"  {pid:14s} {t:.3f}s")
+
+
 if __name__ == "__main__":
     app()

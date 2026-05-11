@@ -1086,6 +1086,73 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertFalse(wm["ok"])
         self.assertIn("crashed", wm["error"])
 
+    # ----------------------------------------------------------------- #
+    # gen bench-fanout (v1.12.s70)
+    # ----------------------------------------------------------------- #
+
+    def test_bench_fanout_help_renders(self) -> None:
+        result = self.runner.invoke(self.app, ["gen", "bench-fanout", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Benchmark", result.stdout)
+        self.assertIn("sequential", result.stdout.lower())
+        self.assertIn("parallel", result.stdout.lower())
+
+    def test_bench_fanout_runs_both_modes_with_mocked_runners(self) -> None:
+        """Mock all 5 runners as no-ops; verify both modes execute + JSON shape."""
+        from unittest.mock import patch
+        from assetboy.execution.met_museum_runner import MetMuseumResult
+        from assetboy.execution.wikimedia_runner import WikimediaResult
+        from assetboy.execution.archive_org_runner import ArchiveOrgResult
+        from assetboy.execution.scryfall_runner import ScryfallResult
+        from assetboy.execution.iconify_runner import IconifyResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch(
+                "assetboy.execution.met_museum_runner.run_met_museum_batch",
+                return_value=MetMuseumResult(
+                    pack_id="x", query="q", output_dir=Path(tmp), ok=True,
+                ),
+            ), patch(
+                "assetboy.execution.wikimedia_runner.run_wikimedia_batch",
+                return_value=WikimediaResult(
+                    pack_id="x", query="q", output_dir=Path(tmp), ok=True,
+                ),
+            ), patch(
+                "assetboy.execution.archive_org_runner.run_archive_org_batch",
+                return_value=ArchiveOrgResult(
+                    pack_id="x", query="q", output_dir=Path(tmp), ok=True,
+                ),
+            ), patch(
+                "assetboy.execution.scryfall_runner.run_scryfall_batch",
+                return_value=ScryfallResult(
+                    pack_id="x", query="q", output_dir=Path(tmp), ok=True,
+                ),
+            ), patch(
+                "assetboy.execution.iconify_runner.run_iconify_batch",
+                return_value=IconifyResult(
+                    pack_id="x", query="q", output_dir=Path(tmp), ok=True,
+                ),
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "bench-fanout", "--query", "q", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        for key in (
+            "query", "providers", "sequential_total_s",
+            "parallel_total_s", "speedup_x", "sequential_per_provider_s",
+        ):
+            self.assertIn(key, data)
+        self.assertEqual(data["query"], "q")
+        self.assertEqual(len(data["providers"]), 5)
+        # With mocked no-op runners, both times will be near zero — verify type + non-negative.
+        self.assertGreaterEqual(data["sequential_total_s"], 0.0)
+        self.assertGreaterEqual(data["parallel_total_s"], 0.0)
+        self.assertGreaterEqual(data["speedup_x"], 0.0)
+
     def test_all_no_key_handles_one_provider_failure(self) -> None:
         """One provider crashes mid-fanout; others still complete."""
         from unittest.mock import patch
