@@ -511,6 +511,66 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["cards_downloaded"], 4)
         self.assertTrue(data["ok"])
 
+    # ----------------------------------------------------------------- #
+    # gen iconify fetch (v1.10.s30)
+    # ----------------------------------------------------------------- #
+
+    def test_iconify_fetch_help_renders(self) -> None:
+        result = self.runner.invoke(
+            self.app, ["gen", "iconify", "fetch", "--help"]
+        )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Iconify", result.stdout)
+        self.assertIn("MIT", result.stdout)
+
+    def test_iconify_fetch_dry_run_no_matches_exits_zero(self) -> None:
+        from unittest.mock import patch
+        from assetboy.execution.iconify_runner import IconifyResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = IconifyResult(
+                pack_id="T", query="zzz", output_dir=Path(tmp),
+                icons_matched=0, ok=True, error="no_matches",
+            )
+            with patch(
+                "assetboy.execution.iconify_runner.run_iconify_batch",
+                return_value=fake,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "iconify", "fetch", "--query", "zzz", "--dry-run"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("gen_iconify_matched=0", result.stdout)
+        self.assertIn("no_matches", result.stdout)
+
+    def test_iconify_fetch_json_output_shape(self) -> None:
+        from unittest.mock import patch
+        from assetboy.execution.iconify_runner import IconifyResult
+        import tempfile, json as _json
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = IconifyResult(
+                pack_id="P", query="q", output_dir=Path(tmp),
+                icons_matched=30, icons_accepted_license=20,
+                icons_downloaded=20, icons_skipped_restricted=10, ok=True,
+            )
+            with patch(
+                "assetboy.execution.iconify_runner.run_iconify_batch",
+                return_value=fake,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "iconify", "fetch", "--query", "q", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["pack_id"], "P")
+        self.assertEqual(data["icons_downloaded"], 20)
+        self.assertEqual(data["icons_skipped_restricted"], 10)
+        self.assertTrue(data["ok"])
+
     def test_comfy_submit_workflow_help_renders(self) -> None:
         result = self.runner.invoke(
             self.app, ["gen", "comfyui", "submit-workflow", "--help"]

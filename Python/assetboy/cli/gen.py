@@ -64,6 +64,12 @@ scryfall_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
 )
+iconify_app = typer.Typer(
+    name="iconify",
+    help="Iconify open-source icon fetcher (MIT/Apache/CC0/OFL).",
+    add_completion=False,
+    no_args_is_help=True,
+)
 
 app.add_typer(comfy_app, name="comfyui")
 app.add_typer(sd_app, name="sd")
@@ -71,6 +77,7 @@ app.add_typer(met_app, name="met-museum")
 app.add_typer(wikimedia_app, name="wikimedia")
 app.add_typer(archive_app, name="archive-org")
 app.add_typer(scryfall_app, name="scryfall")
+app.add_typer(iconify_app, name="iconify")
 
 
 # --------------------------------------------------------------------------- #
@@ -1177,6 +1184,124 @@ def scryfall_fetch_cmd(
             print(f"gen_scryfall_manifest={result.manifest_path}")
         if result.error:
             print(f"gen_scryfall_note={result.error}")
+
+    if not result.ok:
+        raise typer.Exit(code=1)
+
+
+# --------------------------------------------------------------------------- #
+# gen iconify fetch  (v1.10.s30)
+# --------------------------------------------------------------------------- #
+
+@iconify_app.command("fetch")
+def iconify_fetch_cmd(
+    query: Annotated[
+        str, typer.Option("--query", "-q", help="Free-text icon search."),
+    ],
+    count: Annotated[
+        int, typer.Option("--count", "-n", help="Max icons to download."),
+    ] = 16,
+    width: Annotated[
+        int, typer.Option("--width", help="Render width in pixels (height auto-scales)."),
+    ] = 64,
+    color: Annotated[
+        str,
+        typer.Option(
+            "--color",
+            help="Hex color override like '#FF6600' (default: original colors).",
+        ),
+    ] = "",
+    pack_id: Annotated[
+        str, typer.Option("--pack-id"),
+    ] = "",
+    output_dir: Annotated[
+        Path, typer.Option("--output-dir"),
+    ] = Path(""),
+    skip_collections_check: Annotated[
+        bool,
+        typer.Option(
+            "--skip-license-check",
+            help="DANGER: skip /collections license filter; download all matches.",
+        ),
+    ] = False,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Plan only; skip SVG downloads."),
+    ] = False,
+    json_out: Annotated[
+        bool, typer.Option("--json", help="Emit JSON output."),
+    ] = False,
+) -> None:
+    """Fetch open-licensed icons from Iconify (Path B v1.10.s30).
+
+    Iconify aggregates 150+ open-source icon sets (Material, Tabler, Lucide,
+    Phosphor, Game-Icons, Carbon, Heroicons, etc.). This command searches,
+    filters to MIT/Apache/CC0/CC-BY/OFL/GPL licenses, and downloads SVGs.
+
+    Examples:
+      assetboy gen iconify fetch -q "sword" -n 20
+      assetboy gen iconify fetch -q "inventory" --width 128 --color "#FFAA00" -n 12
+      assetboy gen iconify fetch -q "dragon" --skip-license-check -n 30
+
+    Output: <manual_drop>/iconify/<pack_id>/*.svg plus iconify_manifest.json
+    with per-icon collection + license SPDX + source URL.
+    """
+    from assetboy.execution.iconify_runner import run_iconify_batch
+
+    out_dir_arg: Path | None = output_dir if str(output_dir) else None
+    pack_id_arg: str | None = pack_id if pack_id else None
+    color_arg: str | None = color if color.strip() else None
+
+    try:
+        result = run_iconify_batch(
+            query=query,
+            pack_id=pack_id_arg,
+            count=count,
+            width=width,
+            color=color_arg,
+            output_dir=out_dir_arg,
+            skip_collections_check=skip_collections_check,
+            dry_run=dry_run,
+        )
+    except Exception as exc:
+        msg = f"iconify_runner_crashed: {exc}"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_iconify_error={msg}")
+        raise typer.Exit(code=1)
+
+    summary = {
+        "ok": result.ok,
+        "pack_id": result.pack_id,
+        "query": result.query,
+        "output_dir": str(result.output_dir),
+        "icons_matched": result.icons_matched,
+        "icons_accepted_license": result.icons_accepted_license,
+        "icons_downloaded": result.icons_downloaded,
+        "icons_skipped_restricted": result.icons_skipped_restricted,
+        "icons_failed": result.icons_failed,
+        "downloaded_paths": [str(p) for p in result.downloaded_paths],
+        "manifest_path": str(result.manifest_path) if result.manifest_path else None,
+        "dry_run": result.dry_run,
+        "error": result.error,
+    }
+
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"gen_iconify_pack_id={result.pack_id}")
+        print(f"gen_iconify_query={result.query!r}")
+        print(f"gen_iconify_matched={result.icons_matched}")
+        print(f"gen_iconify_downloaded={result.icons_downloaded}")
+        print(f"gen_iconify_skipped_restricted={result.icons_skipped_restricted}")
+        print(f"gen_iconify_failed={result.icons_failed}")
+        print(f"gen_iconify_output_dir={result.output_dir}")
+        if result.manifest_path:
+            print(f"gen_iconify_manifest={result.manifest_path}")
+        if result.error:
+            print(f"gen_iconify_note={result.error}")
 
     if not result.ok:
         raise typer.Exit(code=1)
