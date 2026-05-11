@@ -1973,21 +1973,23 @@ def all_no_key_cmd(
             help="Plan only across all providers; recommended default for scouting.",
         ),
     ] = True,
+    parallel: Annotated[
+        bool,
+        typer.Option(
+            "--parallel",
+            help="v1.12.s64: dispatch all 5 providers concurrently (ThreadPoolExecutor); ~5x faster wall time.",
+        ),
+    ] = False,
     json_out: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Fan out one query across all 5 no-key R1A providers (Path B v1.11.s37).
 
     Hits Met Museum, Wikimedia Commons, Archive.org (image mediatype),
-    Scryfall, and Iconify in sequence. Returns aggregated counts +
-    per-provider manifest paths.
-
-    This is the FAST SCOUTING command: get a feel for what's available
-    across every no-key source in one shot. Add --no-dry-run to actually
-    download (will take longer).
+    Scryfall, and Iconify. Use --parallel for concurrent dispatch (v1.12.s64).
 
     Examples:
       assetboy gen all-no-key -q "dragon" -n 2 --dry-run
-      assetboy gen all-no-key -q "stone wall" -n 1 --no-dry-run
+      assetboy gen all-no-key -q "stone wall" -n 1 --parallel --no-dry-run
     """
     from assetboy.execution.met_museum_runner import run_met_museum_batch
     from assetboy.execution.wikimedia_runner import run_wikimedia_batch
@@ -1998,70 +2000,93 @@ def all_no_key_cmd(
     out_dir_arg: Path | None = output_dir if str(output_dir) else None
     base_pack_id = pack_id or f"ALL_NO_KEY_{query.replace(' ', '_').upper()}"
 
+    def _result_to_record(provider: str, r) -> dict:
+        return {
+            "provider": provider,
+            "ok": r.ok,
+            "matched": getattr(r, "items_matched", 0)
+                       or getattr(r, "objects_matched", 0)
+                       or getattr(r, "files_matched", 0)
+                       or getattr(r, "cards_matched", 0)
+                       or getattr(r, "icons_matched", 0),
+            "downloaded": getattr(r, "items_downloaded", 0)
+                          or getattr(r, "objects_downloaded", 0)
+                          or getattr(r, "files_downloaded", 0)
+                          or getattr(r, "cards_downloaded", 0)
+                          or getattr(r, "icons_downloaded", 0),
+            "manifest_path": str(r.manifest_path) if getattr(r, "manifest_path", None) else None,
+            "error": r.error,
+            "output_dir": str(r.output_dir),
+        }
+
+    def _crashed_record(provider: str, exc: Exception) -> dict:
+        return {
+            "provider": provider, "ok": False,
+            "matched": 0, "downloaded": 0,
+            "manifest_path": None,
+            "error": f"crashed: {exc}",
+            "output_dir": "",
+        }
+
+    # Build dispatch table: (provider_id, runner, kwargs).
+    tasks: list[tuple[str, object, dict]] = [
+        ("met_museum", run_met_museum_batch, dict(
+            query=query, pack_id=f"{base_pack_id}_MET", count=count,
+            output_dir=(out_dir_arg / "met_museum") if out_dir_arg else None,
+            dry_run=dry_run,
+        )),
+        ("wikimedia", run_wikimedia_batch, dict(
+            query=query, pack_id=f"{base_pack_id}_WM", count=count,
+            output_dir=(out_dir_arg / "wikimedia") if out_dir_arg else None,
+            dry_run=dry_run,
+        )),
+        ("archive_org", run_archive_org_batch, dict(
+            query=query, mediatype="image",
+            pack_id=f"{base_pack_id}_AO", count=count,
+            output_dir=(out_dir_arg / "archive_org") if out_dir_arg else None,
+            dry_run=dry_run,
+        )),
+        ("scryfall", run_scryfall_batch, dict(
+            query=query, pack_id=f"{base_pack_id}_SF", count=count,
+            output_dir=(out_dir_arg / "scryfall") if out_dir_arg else None,
+            dry_run=dry_run,
+        )),
+        ("iconify", run_iconify_batch, dict(
+            query=query, pack_id=f"{base_pack_id}_IC", count=count,
+            output_dir=(out_dir_arg / "iconify") if out_dir_arg else None,
+            dry_run=dry_run,
+        )),
+    ]
+
     providers_run: list[dict] = []
 
-    def _run_safely(provider: str, fn, **kwargs) -> None:
-        """Call a provider runner; capture any exception into the report."""
-        try:
-            r = fn(**kwargs)
-            providers_run.append({
-                "provider": provider,
-                "ok": r.ok,
-                "matched": getattr(r, "items_matched", 0)
-                           or getattr(r, "objects_matched", 0)
-                           or getattr(r, "files_matched", 0)
-                           or getattr(r, "cards_matched", 0)
-                           or getattr(r, "icons_matched", 0),
-                "downloaded": getattr(r, "items_downloaded", 0)
-                              or getattr(r, "objects_downloaded", 0)
-                              or getattr(r, "files_downloaded", 0)
-                              or getattr(r, "cards_downloaded", 0)
-                              or getattr(r, "icons_downloaded", 0),
-                "manifest_path": str(r.manifest_path) if getattr(r, "manifest_path", None) else None,
-                "error": r.error,
-                "output_dir": str(r.output_dir),
-            })
-        except Exception as exc:
-            providers_run.append({
-                "provider": provider,
-                "ok": False,
-                "matched": 0, "downloaded": 0,
-                "manifest_path": None,
-                "error": f"crashed: {exc}",
-                "output_dir": "",
-            })
-
-    _run_safely(
-        "met_museum", run_met_museum_batch,
-        query=query, pack_id=f"{base_pack_id}_MET", count=count,
-        output_dir=(out_dir_arg / "met_museum") if out_dir_arg else None,
-        dry_run=dry_run,
-    )
-    _run_safely(
-        "wikimedia", run_wikimedia_batch,
-        query=query, pack_id=f"{base_pack_id}_WM", count=count,
-        output_dir=(out_dir_arg / "wikimedia") if out_dir_arg else None,
-        dry_run=dry_run,
-    )
-    _run_safely(
-        "archive_org", run_archive_org_batch,
-        query=query, mediatype="image",
-        pack_id=f"{base_pack_id}_AO", count=count,
-        output_dir=(out_dir_arg / "archive_org") if out_dir_arg else None,
-        dry_run=dry_run,
-    )
-    _run_safely(
-        "scryfall", run_scryfall_batch,
-        query=query, pack_id=f"{base_pack_id}_SF", count=count,
-        output_dir=(out_dir_arg / "scryfall") if out_dir_arg else None,
-        dry_run=dry_run,
-    )
-    _run_safely(
-        "iconify", run_iconify_batch,
-        query=query, pack_id=f"{base_pack_id}_IC", count=count,
-        output_dir=(out_dir_arg / "iconify") if out_dir_arg else None,
-        dry_run=dry_run,
-    )
+    if parallel:
+        # v1.12.s64 — concurrent dispatch via ThreadPoolExecutor.
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        # Preserve original task order via index.
+        results_by_idx: dict[int, dict] = {}
+        with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
+            future_to_idx = {
+                pool.submit(fn, **kwargs): (i, pid)
+                for i, (pid, fn, kwargs) in enumerate(tasks)
+            }
+            for fut in as_completed(future_to_idx):
+                idx, pid = future_to_idx[fut]
+                try:
+                    r = fut.result()
+                    results_by_idx[idx] = _result_to_record(pid, r)
+                except Exception as exc:
+                    results_by_idx[idx] = _crashed_record(pid, exc)
+        for i in range(len(tasks)):
+            providers_run.append(results_by_idx[i])
+    else:
+        # Original sequential path.
+        for pid, fn, kwargs in tasks:
+            try:
+                r = fn(**kwargs)
+                providers_run.append(_result_to_record(pid, r))
+            except Exception as exc:
+                providers_run.append(_crashed_record(pid, exc))
 
     total_matched = sum(p["matched"] for p in providers_run)
     total_downloaded = sum(p["downloaded"] for p in providers_run)
@@ -2072,6 +2097,7 @@ def all_no_key_cmd(
         "query": query,
         "count_per_provider": count,
         "dry_run": dry_run,
+        "parallel": parallel,
         "providers_run": len(providers_run),
         "providers_ok": providers_ok,
         "providers_failed": providers_failed,
@@ -2086,6 +2112,7 @@ def all_no_key_cmd(
     else:
         print(f"gen_all_no_key_query={query!r}")
         print(f"gen_all_no_key_dry_run={dry_run}")
+        print(f"gen_all_no_key_parallel={parallel}")
         print(f"gen_all_no_key_providers_ok={providers_ok}/{len(providers_run)}")
         print(f"gen_all_no_key_total_matched={total_matched}")
         print(f"gen_all_no_key_total_downloaded={total_downloaded}")

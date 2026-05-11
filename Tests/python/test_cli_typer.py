@@ -973,6 +973,119 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["total_matched"], 10 + 20 + 5 + 30 + 50)
         self.assertEqual(data["total_downloaded"], 10)
 
+    def test_all_no_key_parallel_dispatch_preserves_order(self) -> None:
+        """v1.12.s64: --parallel returns same shape + preserves task order."""
+        from unittest.mock import patch
+        from assetboy.execution.met_museum_runner import MetMuseumResult
+        from assetboy.execution.wikimedia_runner import WikimediaResult
+        from assetboy.execution.archive_org_runner import ArchiveOrgResult
+        from assetboy.execution.scryfall_runner import ScryfallResult
+        from assetboy.execution.iconify_runner import IconifyResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch(
+                "assetboy.execution.met_museum_runner.run_met_museum_batch",
+                return_value=MetMuseumResult(
+                    pack_id="MET", query="q", output_dir=Path(tmp),
+                    objects_matched=1, objects_downloaded=1, ok=True,
+                ),
+            ), patch(
+                "assetboy.execution.wikimedia_runner.run_wikimedia_batch",
+                return_value=WikimediaResult(
+                    pack_id="WM", query="q", output_dir=Path(tmp),
+                    files_matched=2, files_downloaded=2, ok=True,
+                ),
+            ), patch(
+                "assetboy.execution.archive_org_runner.run_archive_org_batch",
+                return_value=ArchiveOrgResult(
+                    pack_id="AO", query="q", output_dir=Path(tmp),
+                    items_matched=3, items_downloaded=3, ok=True,
+                ),
+            ), patch(
+                "assetboy.execution.scryfall_runner.run_scryfall_batch",
+                return_value=ScryfallResult(
+                    pack_id="SF", query="q", output_dir=Path(tmp),
+                    cards_matched=4, cards_downloaded=4, ok=True,
+                ),
+            ), patch(
+                "assetboy.execution.iconify_runner.run_iconify_batch",
+                return_value=IconifyResult(
+                    pack_id="IC", query="q", output_dir=Path(tmp),
+                    icons_matched=5, icons_downloaded=5, ok=True,
+                ),
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "all-no-key", "--query", "q", "--parallel", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertTrue(data["parallel"])
+        self.assertEqual(data["providers_run"], 5)
+        self.assertEqual(data["providers_ok"], 5)
+        # Order must be: met_museum, wikimedia, archive_org, scryfall, iconify.
+        expected_order = ["met_museum", "wikimedia", "archive_org", "scryfall", "iconify"]
+        self.assertEqual([p["provider"] for p in data["providers"]], expected_order)
+        # Counts (matched=1,2,3,4,5) preserved per provider.
+        self.assertEqual([p["matched"] for p in data["providers"]], [1, 2, 3, 4, 5])
+
+    def test_all_no_key_parallel_isolates_crash(self) -> None:
+        """--parallel: one provider crashing doesn't break the others."""
+        from unittest.mock import patch
+        from assetboy.execution.met_museum_runner import MetMuseumResult
+        from assetboy.execution.wikimedia_runner import WikimediaResult
+        from assetboy.execution.archive_org_runner import ArchiveOrgResult
+        from assetboy.execution.scryfall_runner import ScryfallResult
+        from assetboy.execution.iconify_runner import IconifyResult
+        import tempfile
+
+        def crash(*a, **kw):
+            raise RuntimeError("simulated parallel crash")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ok = MetMuseumResult(
+                pack_id="P", query="q", output_dir=Path(tmp),
+                objects_matched=1, objects_downloaded=1, ok=True,
+            )
+            with patch(
+                "assetboy.execution.met_museum_runner.run_met_museum_batch",
+                return_value=ok,
+            ), patch(
+                "assetboy.execution.wikimedia_runner.run_wikimedia_batch",
+                side_effect=crash,
+            ), patch(
+                "assetboy.execution.archive_org_runner.run_archive_org_batch",
+                return_value=ArchiveOrgResult(
+                    pack_id="A", query="q", output_dir=Path(tmp),
+                    items_matched=0, items_downloaded=0, ok=True,
+                ),
+            ), patch(
+                "assetboy.execution.scryfall_runner.run_scryfall_batch",
+                return_value=ScryfallResult(
+                    pack_id="S", query="q", output_dir=Path(tmp),
+                    cards_matched=0, cards_downloaded=0, ok=True,
+                ),
+            ), patch(
+                "assetboy.execution.iconify_runner.run_iconify_batch",
+                return_value=IconifyResult(
+                    pack_id="I", query="q", output_dir=Path(tmp),
+                    icons_matched=0, icons_downloaded=0, ok=True,
+                ),
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "all-no-key", "--query", "q", "--parallel", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["providers_failed"], 1)
+        wm = [p for p in data["providers"] if p["provider"] == "wikimedia"][0]
+        self.assertFalse(wm["ok"])
+        self.assertIn("crashed", wm["error"])
+
     def test_all_no_key_handles_one_provider_failure(self) -> None:
         """One provider crashes mid-fanout; others still complete."""
         from unittest.mock import patch
