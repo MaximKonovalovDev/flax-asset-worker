@@ -197,3 +197,32 @@ $ python -m assetboy.cli pack list-recipes
 Loop still running. Next picks from this point: stable_audio_open_small driver
 (needs new ~150 LOC `execution/stable_audio_runner.py` first), more recipe
 variants, OR v1.4 tag once the audio driver lands.
+
+---
+
+## Update 2026-05-11 (mid-turn rev 2, 3 more tags + ~5 more commits)
+
+**+ Tags shipped since last update:**
+- `v1.4.0-recipes-trio` (`8c3766a`) — 3 recipes (primitive_tech + roman + sandbox), 220 tests
+- `v1.4.1-stable-audio` (`536aa32`) — Stable Audio Open Small driver; **4/4 generator providers complete**; 227 tests
+
+**All 4 canonical generator providers wired** (s11.1 COMPLETE):
+
+| Provider | Driver | Shipped at |
+|---|---|---|
+| ComfyUI (local :8188) | `_drive_comfyui` | v1.3.2 |
+| Stable Diffusion (sd.cpp / local_image) | `_drive_local_image` | v1.3.3 |
+| Stable Audio Open Small | `_drive_stable_audio` | v1.4.1 |
+
+Recipe authors can now express any text-to-image or text-to-audio
+generation pack and acquisition_router drives the appropriate runner.
+For runners that aren't installed yet (e.g. operator hasn't set up
+`STABLE_AUDIO_RUNNER_BIN` env var), the driver gracefully emits a job
+spec to disk + returns `awaiting_manual=True` so the operator sees a
+clean `[WAIT]` state instead of a hard `[RED]`.
+
+**Test suite progression this turn:** 26 → 172 → 187 → 190 → 214 → 217 → 220 → 227 passing.
+
+**7 tags on origin now:** v1.1.0, v1.2.0, v1.2.1, v1.3.0, v1.3.2, v1.4.0, v1.4.1.
+
+Loop continues per Rule 3. No pause.
