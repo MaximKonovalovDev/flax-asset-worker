@@ -364,5 +364,102 @@ def status_cmd(
                 print(f"pack_status_{k}={ledger[k]}")
 
 
+# --------------------------------------------------------------------------- #
+# pack validate
+# --------------------------------------------------------------------------- #
+
+@app.command("validate")
+def validate_cmd(
+    recipe_path: Annotated[
+        Path,
+        typer.Argument(
+            help="Path to a YAML recipe (or a recipe_id resolvable under recipes/).",
+        ),
+    ],
+    json_out: Annotated[
+        bool, typer.Option("--json", help="Emit JSON output."),
+    ] = False,
+    strict: Annotated[
+        bool,
+        typer.Option(
+            "--strict",
+            help="Treat warnings as errors (exit 1 if any warning).",
+        ),
+    ] = False,
+) -> None:
+    """Lint a recipe YAML against the v1 schema.
+
+    Path B v1.6.s5 (2026-05-11). Catches shape bugs BEFORE pack from-recipe
+    runs them:
+      - missing required fields (id, provider, acquisition_method)
+      - unknown acquisition_method (must be one of: direct_url / manual_browser / generator)
+      - lane-specific provider whitelist violations (warning)
+      - generator packs missing 'prompts: [...]' (error)
+      - direct_url packs with no assets[] AND no search_terms[] (error)
+      - manual_browser packs with no source_url AND no assets[] (warning)
+      - duplicate pack ids within the recipe (error)
+      - gates referencing pack ids not in the packs[] list (error)
+      - missing recommended fields (asset_kind, license) -> warning only
+
+    Exit code: 0 if ok; 1 if errors; 1 also if --strict and any warnings.
+    """
+    # Resolve the recipe path: accept absolute, repo-relative, or recipes/<game>/<name>.yaml
+    candidates = [
+        recipe_path,
+        Path.cwd() / recipe_path,
+        _recipes_dir() / recipe_path,
+    ]
+    resolved = next((c for c in candidates if c.exists()), None)
+    if resolved is None:
+        if json_out:
+            json.dump(
+                {"ok": False, "error": "recipe_not_found",
+                 "candidates": [str(c) for c in candidates]},
+                sys.stdout, indent=2,
+            )
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_validate_error=recipe_not_found")
+            print(f"pack_validate_tried={'; '.join(str(c) for c in candidates)}")
+        raise typer.Exit(code=1)
+
+    from assetboy.workflows.recipe_validator import validate_recipe_file
+
+    result = validate_recipe_file(resolved)
+
+    if json_out:
+        json.dump(
+            {
+                "ok": result.ok,
+                "recipe_id": result.recipe_id,
+                "pack_count": result.pack_count,
+                "errors": result.errors,
+                "warnings": result.warnings,
+                "path": str(resolved),
+                "strict_mode": strict,
+            },
+            sys.stdout,
+            indent=2,
+        )
+        sys.stdout.write("\n")
+    else:
+        print(f"pack_validate_path={resolved}")
+        print(f"pack_validate_ok={'true' if result.ok else 'false'}")
+        print(f"pack_validate_recipe_id={result.recipe_id}")
+        print(f"pack_validate_pack_count={result.pack_count}")
+        print(f"pack_validate_error_count={len(result.errors)}")
+        print(f"pack_validate_warning_count={len(result.warnings)}")
+        for idx, err in enumerate(result.errors, start=1):
+            print(f"pack_validate_error_{idx}={err}")
+        for idx, warn in enumerate(result.warnings, start=1):
+            print(f"pack_validate_warning_{idx}={warn}")
+
+    exit_code = 0 if result.ok else 1
+    if strict and result.warnings:
+        exit_code = 1
+    if exit_code:
+        raise typer.Exit(code=exit_code)
+
+
 if __name__ == "__main__":
     app()

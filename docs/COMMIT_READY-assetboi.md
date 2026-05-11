@@ -2085,3 +2085,87 @@ Notably the `SANDBOX_GEN_COMFY_IMG2IMG_01` pack documents the **v1.5.2 input_ima
 - **5 docs shipped:** README + ROADMAP + COMMIT_READY + PATH_B_DAY11_PLAN + MONOREPO_FACADE_DESIGN + SETUP + HEARTBEAT (7 actually)
 
 **Next:** loop continues per Rule 3.
+
+---
+
+## Slice v1.6.s5 — Recipe schema validator + `pack validate` CLI (2026-05-11 BOSS-resumed)
+
+**Status:** SHIPPED. **269 passed, 1 skipped, 0 failed** (was 242).
+
+**Trigger:** BOSS message "Day 11+ slack: write 5 new FAW v1.6 slices and ship one." Picked s5 first (purely Python, no C# touch, immediate value for operators writing recipes).
+
+**What shipped:**
+
+### 1. `Python/assetboy/workflows/recipe_validator.py` (NEW, ~280 lines)
+
+Lints recipe YAML against the v1 schema BEFORE pack_from_recipe runs them. Catches:
+
+| Check | Severity |
+|---|---|
+| `recipe` block missing/non-dict | ERROR |
+| `recipe.id` or `recipe.game` missing | ERROR |
+| `packs` not a list | ERROR |
+| `packs` empty | WARN |
+| Pack missing `id`/`provider`/`acquisition_method` | ERROR |
+| Duplicate pack IDs | ERROR |
+| `acquisition_method` not in `{direct_url, manual_browser, generator}` | ERROR |
+| `direct_url` pack with no `assets[]` AND no `search_terms[]` | ERROR |
+| `generator` pack with no `prompts[]` | ERROR |
+| `manual_browser` pack with no `source_url` AND no `assets[]` | WARN |
+| Unknown provider for the lane | WARN |
+| Gates referencing pack IDs not in `packs[]` | ERROR |
+| Missing `asset_kind` | WARN |
+| Missing `license` block | WARN |
+
+**Surface:** `ValidationResult` dataclass + `validate_recipe_doc(doc, source_label)` + `validate_recipe_file(path)` + 4 provider whitelist constants.
+
+### 2. `Python/assetboy/cli/pack.py` — new `pack validate` command
+
+```
+python -m assetboy.cli pack validate <recipe.yaml> [--json] [--strict]
+```
+
+- Same path-resolver as `pack from-recipe` (absolute / cwd-relative / `recipes/<game>/<file>.yaml`).
+- Per-error/per-warning lines as `pack_validate_error_N=...` / `pack_validate_warning_N=...`.
+- Exit 0 if no errors; 1 if errors OR `--strict` and any warnings.
+- `--json` mode emits structured output.
+
+### 3. `Tests/python/test_recipe_validator.py` (NEW, ~260 lines, 27 tests)
+
+9 test classes: happy-path / root-schema / pack-fields / acquisition-method / direct_url-lane / generator-lane / manual_browser-lane / gates / warnings / **real-recipe integration** (all 4 shipped recipes pass).
+
+### Real recipe validation results
+
+```
+sandbox/one_pack_smoke.yaml         ok=true   0 errors, 0 warnings
+sandbox/generator_smoke.yaml        ok=true   0 errors, 0 warnings
+primitive_tech/first_playable.yaml  ok=true   0 errors, 1 warning
+roman/first_playable.yaml           ok=true   0 errors, 15 warnings
+```
+
+The 16 warnings are legitimate hints (Mixamo manual_browser packs lack `source_url`).
+
+### v1.6 backlog (5 slices) — written into PATH_B_DAY11_PLAN.md
+
+- s1 `pack from-yaml-string` (inline YAML for facade)
+- s2 `GET /api/v1/library/asset/{id}` (single-asset metadata)
+- s3 `GET /api/v1/packs/audit` (ledger inventory dashboard)
+- s4 Quaternius + OpenGameArt direct_url providers
+- s5 ✅ Recipe validator (THIS slice)
+
+### Files staged for commit
+
+- `Python/assetboy/workflows/recipe_validator.py` (NEW)
+- `Python/assetboy/cli/pack.py` (MODIFIED, +95 lines)
+- `Tests/python/test_recipe_validator.py` (NEW, 27 tests)
+- `docs/PATH_B_DAY11_PLAN.md` (MODIFIED, +75 lines: v1.6 backlog)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+### Turn metrics (post-v1.6.s5)
+
+- **46 commits** since `0b1ad7d` baseline this turn
+- **11 tags** (will tag v1.6.0 after this commit)
+- **269 tests** passing (started at 26; net +243)
+- Test surface coverage tightens further: recipe authors get immediate feedback.
+
+**Next:** tag v1.6.0-recipe-validator. Then loop continues with v1.6.s1.

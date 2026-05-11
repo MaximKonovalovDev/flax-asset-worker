@@ -1,0 +1,321 @@
+"""Recipe YAML schema validator (Path B v1.6.s5, 2026-05-11).
+
+Lints `recipes/<game>/<recipe>.yaml` against the v1 schema BEFORE
+`pack from-recipe` runs them. Catches:
+
+  - Missing top-level `recipe` or `packs` keys
+  - Missing required pack fields (id, provider, acquisition_method)
+  - Unknown acquisition_method values (anything outside the 3 canonical lanes)
+  - Unknown provider for the given lane (e.g. `provider: mystery` on direct_url)
+  - generator packs missing `prompts: [...]`
+  - manual_browser packs missing `source_url` AND no `assets:` list
+  - direct_url packs missing `assets: [...]` (and no `search_terms` either)
+  - gates referencing pack IDs that don't exist in the recipe
+  - Duplicate pack IDs within the recipe
+
+Returns a `ValidationResult` with:
+  ok: bool
+  errors: list[str]    (HARD failures - recipe will not run correctly)
+  warnings: list[str]  (likely-wrong but not blocking)
+
+This is a SHALLOW validator: it checks shape, not semantics. It does NOT
+verify provider IDs are installed/configured or that assets exist on
+external services. For that, run the actual `pack from-recipe`.
+
+CLI integration: `python -m assetboy.cli pack validate <recipe.yaml>`
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+
+# --------------------------------------------------------------------------- #
+# Schema constants
+# --------------------------------------------------------------------------- #
+
+VALID_ACQUISITION_METHODS = {"direct_url", "manual_browser", "generator"}
+
+# Known providers per lane (sourced from acquisition_router.py's dispatch tables).
+# Empty set in any value = no per-provider whitelist (we accept anything and
+# let the runtime fail if unsupported).
+DIRECT_URL_PROVIDERS = {
+    "polyhaven", "kenney", "ambientcg", "freesound",
+}
+MANUAL_BROWSER_PROVIDERS = {
+    "fab", "mixamo", "unity", "epic",
+    # Aliases the router accepts:
+    "unity_asset_store", "epic_games", "epic_vault",
+}
+GENERATOR_PROVIDERS = {
+    "comfyui",
+    "local_image", "sd.cpp", "sd",
+    "stable_audio_open_small", "stable_audio",
+}
+
+REQUIRED_RECIPE_KEYS = {"id", "game"}
+REQUIRED_PACK_KEYS = {"id", "provider", "acquisition_method"}
+
+
+# --------------------------------------------------------------------------- #
+# Result type
+# --------------------------------------------------------------------------- #
+
+@dataclass
+class ValidationResult:
+    """Outcome of validating a recipe.
+
+    `ok` is True iff there are zero errors. Warnings don't flip ok.
+    `pack_count` and `recipe_id` are populated when the recipe parses
+    far enough to know them (helps CLI output regardless of failure).
+    """
+    ok: bool
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    recipe_id: str = ""
+    pack_count: int = 0
+
+
+# --------------------------------------------------------------------------- #
+# Validators
+# --------------------------------------------------------------------------- #
+
+def validate_recipe_doc(doc: Any, source_label: str = "<recipe>") -> ValidationResult:
+    """Validate a parsed recipe dict. Returns ValidationResult never raises.
+
+    Args:
+        doc:           the parsed YAML document (top-level)
+        source_label:  human-readable identifier for the recipe (file path or "stdin")
+    """
+    result = ValidationResult(ok=True)
+
+    if not isinstance(doc, dict):
+        result.ok = False
+        result.errors.append(
+            f"{source_label}: recipe root must be a mapping; "
+            f"got {type(doc).__name__}"
+        )
+        return result
+
+    recipe = doc.get("recipe")
+    if not isinstance(recipe, dict):
+        result.ok = False
+        result.errors.append(
+            f"{source_label}: missing or non-dict top-level 'recipe' key"
+        )
+        # Continue checking packs even without recipe block (may be salvageable)
+    else:
+        result.recipe_id = str(recipe.get("id", ""))
+        for k in REQUIRED_RECIPE_KEYS:
+            if k not in recipe or not str(recipe[k]).strip():
+                result.ok = False
+                result.errors.append(
+                    f"{source_label}: recipe.{k} is required but missing/empty"
+                )
+
+    packs = doc.get("packs")
+    if not isinstance(packs, list):
+        result.ok = False
+        result.errors.append(
+            f"{source_label}: top-level 'packs' must be a list; "
+            f"got {type(packs).__name__}"
+        )
+        return result
+
+    result.pack_count = len(packs)
+    if not packs:
+        result.warnings.append(
+            f"{source_label}: 'packs' list is empty; recipe will do nothing"
+        )
+
+    seen_pack_ids: set[str] = set()
+    for idx, pack in enumerate(packs):
+        if not isinstance(pack, dict):
+            result.ok = False
+            result.errors.append(
+                f"{source_label}: packs[{idx}] must be a mapping; "
+                f"got {type(pack).__name__}"
+            )
+            continue
+        _validate_pack(pack, idx, seen_pack_ids, source_label, result)
+
+    _validate_gates(doc.get("gates"), seen_pack_ids, source_label, result)
+    return result
+
+
+def _validate_pack(
+    pack: dict[str, Any],
+    idx: int,
+    seen_ids: set[str],
+    source_label: str,
+    result: ValidationResult,
+) -> None:
+    pack_label = f"{source_label}: packs[{idx}]"
+    pack_id = pack.get("id")
+
+    if not pack_id or not str(pack_id).strip():
+        result.ok = False
+        result.errors.append(f"{pack_label}: missing required 'id' field")
+        # No further checks possible without an id
+        return
+
+    pack_id = str(pack_id)
+    if pack_id in seen_ids:
+        result.ok = False
+        result.errors.append(
+            f"{pack_label}: duplicate pack id {pack_id!r} (already declared earlier)"
+        )
+    seen_ids.add(pack_id)
+
+    # Required fields
+    for k in REQUIRED_PACK_KEYS:
+        if k not in pack or not str(pack[k]).strip():
+            result.ok = False
+            result.errors.append(
+                f"{pack_label} ({pack_id}): required field {k!r} missing or empty"
+            )
+
+    method = str(pack.get("acquisition_method", "")).strip().lower()
+    provider = str(pack.get("provider", "")).strip().lower()
+
+    # Method must be one of the 3 canonical lanes
+    if method and method not in VALID_ACQUISITION_METHODS:
+        result.ok = False
+        result.errors.append(
+            f"{pack_label} ({pack_id}): unknown acquisition_method {method!r}; "
+            f"expected one of {sorted(VALID_ACQUISITION_METHODS)}"
+        )
+
+    # Lane-specific provider whitelist + per-lane field requirements
+    if method == "direct_url":
+        if provider and provider not in DIRECT_URL_PROVIDERS:
+            result.warnings.append(
+                f"{pack_label} ({pack_id}): provider {provider!r} not in "
+                f"known direct_url providers {sorted(DIRECT_URL_PROVIDERS)} "
+                "(will fail at runtime unless router gains support)"
+            )
+        assets = pack.get("assets") or []
+        search_terms = pack.get("search_terms") or []
+        if not assets and not search_terms:
+            result.ok = False
+            result.errors.append(
+                f"{pack_label} ({pack_id}): direct_url pack must have "
+                "either 'assets: [...]' or 'search_terms: [...]'"
+            )
+    elif method == "manual_browser":
+        if provider and provider not in MANUAL_BROWSER_PROVIDERS:
+            result.warnings.append(
+                f"{pack_label} ({pack_id}): provider {provider!r} not in "
+                f"known manual_browser providers {sorted(MANUAL_BROWSER_PROVIDERS)}"
+            )
+        source_url = pack.get("source_url")
+        assets = pack.get("assets") or []
+        if not source_url and not assets:
+            result.warnings.append(
+                f"{pack_label} ({pack_id}): manual_browser pack should have "
+                "'source_url' or 'assets: [...]' for operator instructions"
+            )
+    elif method == "generator":
+        if provider and provider not in GENERATOR_PROVIDERS:
+            result.warnings.append(
+                f"{pack_label} ({pack_id}): provider {provider!r} not in "
+                f"known generator providers {sorted(GENERATOR_PROVIDERS)}"
+            )
+        prompts = pack.get("prompts") or []
+        if not prompts:
+            result.ok = False
+            result.errors.append(
+                f"{pack_label} ({pack_id}): generator pack must have 'prompts: [...]'"
+            )
+
+    # asset_kind (optional but recommended)
+    if "asset_kind" not in pack:
+        result.warnings.append(
+            f"{pack_label} ({pack_id}): no 'asset_kind' set; pipeline will "
+            "default to 'prop'"
+        )
+
+    # license block (optional but recommended for shipped recipes)
+    if "license" not in pack:
+        result.warnings.append(
+            f"{pack_label} ({pack_id}): no 'license' block; consider adding "
+            "'license: {kind: ..., commercial_ok: ...}' for clarity"
+        )
+
+
+def _validate_gates(
+    gates: Any,
+    pack_ids: set[str],
+    source_label: str,
+    result: ValidationResult,
+) -> None:
+    if gates is None:
+        return  # gates block is optional
+    if not isinstance(gates, dict):
+        result.warnings.append(
+            f"{source_label}: 'gates' should be a mapping; "
+            f"got {type(gates).__name__}; ignoring"
+        )
+        return
+
+    for field_name in ("required_pack_ids", "optional_pack_ids"):
+        gate_ids = gates.get(field_name) or []
+        if not isinstance(gate_ids, list):
+            result.warnings.append(
+                f"{source_label}: gates.{field_name} should be a list; ignoring"
+            )
+            continue
+        for gid in gate_ids:
+            gid_str = str(gid)
+            if gid_str not in pack_ids:
+                result.ok = False
+                result.errors.append(
+                    f"{source_label}: gates.{field_name} references "
+                    f"unknown pack_id {gid_str!r}; not present in this recipe's packs[]"
+                )
+
+
+def validate_recipe_file(recipe_path: str | Path) -> ValidationResult:
+    """Load a YAML file from disk and validate it.
+
+    Returns ValidationResult with errors populated if the file can't be
+    read or parsed.
+    """
+    path = Path(recipe_path)
+    if not path.exists():
+        result = ValidationResult(ok=False)
+        result.errors.append(f"recipe_not_found: {path}")
+        return result
+
+    try:
+        import yaml
+    except ImportError as exc:
+        result = ValidationResult(ok=False)
+        result.errors.append(f"pyyaml_not_installed: {exc}")
+        return result
+
+    try:
+        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        result = ValidationResult(ok=False)
+        result.errors.append(f"yaml_parse_error: {exc}")
+        return result
+    except Exception as exc:
+        result = ValidationResult(ok=False)
+        result.errors.append(f"read_failed: {exc}")
+        return result
+
+    return validate_recipe_doc(doc, source_label=str(path))
+
+
+__all__ = [
+    "ValidationResult",
+    "VALID_ACQUISITION_METHODS",
+    "DIRECT_URL_PROVIDERS",
+    "MANUAL_BROWSER_PROVIDERS",
+    "GENERATOR_PROVIDERS",
+    "validate_recipe_doc",
+    "validate_recipe_file",
+]

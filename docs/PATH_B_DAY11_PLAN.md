@@ -268,6 +268,73 @@ After s11 lands, `python -m assetboy.cli pack from-recipe primitive_tech/first_p
 
 ---
 
+## v1.6 backlog (post-v1.5.5 — operator approved 2026-05-11)
+
+5 candidate slices, ranked by ROI:
+
+### v1.6.s1 — `pack from-yaml-string` CLI command (~2 hr)
+
+**Trigger:** flax-mcp facade needs to send recipe content inline (over HTTP)
+rather than depending on the recipe file being on the FAW server's disk.
+
+**Scope:**
+- Add `--inline-yaml <yaml_text>` flag to `pack from-recipe` (or new sub-command).
+- Alternatively: read recipe YAML from stdin when `recipe_path` is `-`.
+- Server-side `RecipeRoutes.HandleRunAsync` already accepts `recipe_path`;
+  add support for `recipe_yaml_text` field in the JSON body.
+
+**Tests:** 3-4 (inline YAML, stdin YAML, malformed YAML error, large YAML).
+
+**Status:** PENDING.
+
+### v1.6.s2 — `GET /api/v1/library/asset/{id}` single-asset metadata (~2 hr)
+
+**Trigger:** facade needs to inspect one asset's full metadata (license, provenance, file paths) — current routes only support substring search + full dump.
+
+**Scope:**
+- New C# route handler `LibraryRoutes.HandleGetAssetAsync(asset_id)`.
+- Routes `GET /api/v1/library/asset/{asset_id}` → reads from asset library DB.
+- Returns 404 with clean error when asset_id not found.
+
+**Tests:** 3-4 (real asset lookup, unknown id, malformed id).
+
+**Status:** PENDING.
+
+### v1.6.s3 — `GET /api/v1/packs/audit` ledger inventory (~2 hr)
+
+**Trigger:** monorepo facade dashboard needs "show me all pack runs across all games."
+
+**Scope:**
+- New C# route handler `RecipeRoutes.HandleAuditAsync()`.
+- Walks `state/pack_pipeline/*.json` ledgers, aggregates by (game_scope, status).
+- Returns `{games: {primitive_tech: {total: 9, completed: 3, failed: 6, pending: 0}, ...}, total: N}`.
+
+**Tests:** 3-4 (empty state dir, mixed ledgers, malformed ledger handled gracefully).
+
+**Status:** PENDING.
+
+### v1.6.s4 — Quaternius + OpenGameArt direct_url providers (~3-4 hr)
+
+**Trigger:** the direct_url lane currently only has 4 CC0 providers. Quaternius (low-poly models) and OpenGameArt (mixed-license catalog) are useful additions.
+
+**Scope:**
+- New `providers/quaternius_provider.py` + `providers/oga_provider.py` (or C# equivalents).
+- Wire into `acquisition_router._acquire_direct_url`.
+- License manifest: Quaternius CC0; OGA per-asset (filter at intake).
+
+**Tests:** 4-6 (per-provider download path + license filter).
+
+**Risks:** OGA has scrape-only catalog (no clean REST); needs HTML parsing.
+
+**Status:** PENDING.
+
+### v1.6.s5 — Recipe schema validator ✅ SHIPPED 2026-05-11
+
+`Python/assetboy/workflows/recipe_validator.py` + `pack validate` CLI command.
+Lints recipe YAML against the v1 schema. 27 tests + integration tests against all 4 shipped recipes. Caught 16 legitimate warnings in primitive_tech + roman recipes (Mixamo packs missing `source_url`).
+
+Commit: TBD this slice. Test suite: 242 → 269.
+
 ## Resumption protocol
 
 Future assetboi turns reading this doc:
