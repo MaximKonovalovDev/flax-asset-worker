@@ -368,6 +368,37 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn("pack_must_be_a_mapping", result.stdout)
 
+    # ----------------------------------------------------------------- #
+    # gen status-all (v1.8.s18)
+    # ----------------------------------------------------------------- #
+
+    def test_gen_status_all_help_renders(self) -> None:
+        result = self.runner.invoke(self.app, ["gen", "status-all", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("all 3 generator providers", result.stdout)
+
+    def test_gen_status_all_runs_without_crash(self) -> None:
+        result = self.runner.invoke(self.app, ["gen", "status-all"])
+        # exit 0 (at least one available) OR 1 (none available); both are non-crash
+        self.assertIn(result.exit_code, (0, 1))
+        self.assertIn("gen_status_all_any_available=", result.stdout)
+        # All 3 generator providers should appear
+        for prov in ("comfyui", "local_image", "stable_audio_open_small"):
+            self.assertIn(prov, result.stdout)
+
+    def test_gen_status_all_json_mode(self) -> None:
+        result = self.runner.invoke(self.app, ["gen", "status-all", "--json"])
+        self.assertIn(result.exit_code, (0, 1))
+        import json
+        parsed = json.loads(result.stdout)
+        self.assertIn("generators", parsed)
+        self.assertIn("any_available", parsed)
+        self.assertEqual(len(parsed["generators"]), 3)
+        for entry in parsed["generators"]:
+            self.assertIn("provider", entry)
+            self.assertIn("available", entry)
+            self.assertIn("notes", entry)
+
 
 if __name__ == "__main__":
     unittest.main()
