@@ -461,7 +461,83 @@ All 5 v1.7 slices done. 5 more candidates queued:
 
 **Status:** PENDING.
 
-### v1.8.s20 — Polyhaven `category` filter override per-pack (~1 hr)
+### v1.8.s16 — library bulk-install ✅ SHIPPED 2026-05-11 v1.8.4
+### v1.8.s17 — pack export-summary ✅ SHIPPED 2026-05-11 v1.8.3
+### v1.8.s18 — gen status-all ✅ SHIPPED 2026-05-11 v1.8.0
+### v1.8.s19 — pack validate-all ✅ SHIPPED 2026-05-11 v1.8.1
+### v1.8.s20 — polyhaven_category override ✅ SHIPPED 2026-05-11 v1.8.2
+
+---
+
+## v1.9 backlog (s21-s25) — written 2026-05-11
+
+All 5 v1.8 slices shipped. 5 more candidates queued:
+
+### v1.9.s21 — `pack from-recipe --only <pack_id>` (~1 hr)
+
+**Trigger:** v1.6.s1 added inline-yaml + stdin; v1.6.s3 added audit; v1.6.s8 added rerun-failed. Missing primitive: run ONE specific pack from a multi-pack recipe by id. Use case: "I just want to retry SHARED_MIXAMO_CHR_PLAYER after fixing mixamo auth — not the other 8 packs."
+
+**Scope:**
+- `cli/pack.py:from_recipe_cmd`: add `--only <pack_id>` flag (repeatable).
+- Filters `packs[]` to just the named ids before the existing loop.
+- Mutually compatible with `--skip` (skip wins on overlap).
+
+**Tests:** 3 (single --only, multi --only, --only + --skip overlap).
+
+**Status:** PENDING.
+
+### v1.9.s22 — `library export` snapshot CLI (~2 hr)
+
+**Trigger:** operator wants to share "here's what's in my library right now" — but there's no atomic snapshot. Walk the C# server's `/library/ready`, dump to a portable JSON/YAML manifest.
+
+**Scope:**
+- `cli/library.py`: new `library export <out_path>` command.
+- Writes manifest in same shape as `bulk-install` accepts (round-trip).
+- `--include-checksums` flag adds sha256 per asset for verification.
+
+**Tests:** 3-4.
+
+**Status:** PENDING.
+
+### v1.9.s23 — `canary --probe <name> --json --exit-zero` for CI hooks (~1 hr)
+
+**Trigger:** canary currently exits 1 on any RED probe — useful locally but bad for CI hooks that want JSON output regardless. Add `--exit-zero` flag.
+
+**Scope:**
+- `canary.py`: new `--exit-zero` flag forces exit 0 regardless of probe result.
+- Doesn't change JSON shape; just decouples shell exit from probe outcome.
+
+**Tests:** 2 (green path, red path; both exit 0 with --exit-zero).
+
+**Status:** PENDING.
+
+### v1.9.s24 — Recipe linter: auto-fix common warnings (~3 hr)
+
+**Trigger:** `pack validate` emits warnings (especially Mixamo packs missing source_url). Operator iterates: validate -> see warning -> edit YAML -> re-validate. An auto-fix mode would write a sane source_url default for common cases.
+
+**Scope:**
+- `workflows/recipe_validator.py`: new `auto_fix_warnings(doc)` function returning a corrected doc + list of fixes applied.
+- `cli/pack.py`: `pack validate --fix --out <path>` writes the fixed YAML.
+- Auto-fixes: Mixamo packs get `source_url: https://www.mixamo.com/`, missing license blocks get inferred defaults from provider, etc.
+
+**Tests:** 5-6.
+
+**Status:** PENDING.
+
+### v1.9.s25 — `gen comfyui submit-workflow` for arbitrary ComfyUI JSON workflows (~3 hr)
+
+**Trigger:** v1.6.s5 added recipe input_image support; operators still need a primitive to run a fully-custom ComfyUI workflow JSON (e.g. ControlNet pose, IP-Adapter style transfer) outside the recipe flow.
+
+**Scope:**
+- `cli/gen.py:comfy_app`: new `submit-workflow <workflow.json>` command.
+- Reads workflow JSON, POSTs to `:8188/prompt`, polls `:8188/history/{prompt_id}`, downloads output files.
+- `--params key=value` flag for parameterizing the workflow (substitutes into known node fields).
+
+**Tests:** 3-4 (with mock ComfyUI).
+
+**Status:** PENDING.
+
+
 
 **Trigger:** acquisition_router `_drive_polyhaven` infers category from `asset_kind` — but operators sometimes want explicit override (e.g. an asset_kind "model" pack that actually downloads an HDRI environment).
 
