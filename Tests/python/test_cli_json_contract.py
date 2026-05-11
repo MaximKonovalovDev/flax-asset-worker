@@ -211,6 +211,56 @@ class CanaryJsonContractTests(unittest.TestCase):
         self.assertIn("ok", result)
         self.assertIn("ms", result)
 
+    def test_pack_audit_json_contract(self) -> None:
+        """v1.6.s3: pack audit --json shape consumed by C# RecipeRoutes.HandleAuditAsync.
+
+        Required keys: summary{total_ledgers, by_status}, games, pipeline_dir.
+        """
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(PYTHON_PACKAGE_ROOT)
+        cmd = [sys.executable, "-m", "assetboy.cli", "pack", "audit", "--json"]
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=30,
+            cwd=str(PYTHON_PACKAGE_ROOT), env=env,
+        )
+        self.assertEqual(proc.returncode, 0)
+        try:
+            parsed = json.loads(proc.stdout)
+        except json.JSONDecodeError as e:
+            self.fail(f"stdout not valid JSON: {e}\nFIRST 300 chars:\n{proc.stdout[:300]}")
+        for k in ("summary", "games", "pipeline_dir"):
+            self.assertIn(k, parsed, f"missing key {k!r}; got: {list(parsed.keys())}")
+        summary = parsed["summary"]
+        self.assertIn("total_ledgers", summary)
+        self.assertIn("by_status", summary)
+
+    def test_pack_validate_json_contract(self) -> None:
+        """v1.6.s5: pack validate --json shape consumed by tooling.
+
+        Required keys: ok, recipe_id, pack_count, errors, warnings, path.
+        """
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(PYTHON_PACKAGE_ROOT)
+        cmd = [
+            sys.executable, "-m", "assetboy.cli",
+            "pack", "validate", "sandbox/one_pack_smoke.yaml", "--json",
+        ]
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=30,
+            cwd=str(PYTHON_PACKAGE_ROOT), env=env,
+        )
+        # exit 0 expected (sandbox recipe is valid)
+        self.assertEqual(proc.returncode, 0)
+        try:
+            parsed = json.loads(proc.stdout)
+        except json.JSONDecodeError as e:
+            self.fail(f"stdout not valid JSON: {e}\nFIRST 300 chars:\n{proc.stdout[:300]}")
+        for k in ("ok", "recipe_id", "pack_count", "errors", "warnings", "path"):
+            self.assertIn(k, parsed, f"missing key {k!r}; got: {list(parsed.keys())}")
+        self.assertTrue(parsed["ok"])
+        self.assertIsInstance(parsed["errors"], list)
+        self.assertIsInstance(parsed["warnings"], list)
+
     def test_canary_full_run_json_emits_overall_state(self) -> None:
         """`canary --json` emits {timestamp, elapsed_ms, overall, probes: {...}}.
 
