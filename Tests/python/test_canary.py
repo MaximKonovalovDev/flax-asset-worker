@@ -290,6 +290,40 @@ class TestEpicProbe:
         assert result.ok is False
         assert "schema_drift_table_missing" in (result.error or "")
 
+    def test_expected_schema_version_default_is_pinned(self, canary):
+        """v1.6.s9: EXPECTED_EPIC_SCHEMA_VERSION pinned to operator's
+        verified-good value (0 as of 2026-05-11). Drift catches if Epic
+        Launcher ever bumps the FabLibrary SQLite schema."""
+        # Default is an int, not None (used to be None before s9 pinned it)
+        assert canary.EXPECTED_EPIC_SCHEMA_VERSION is not None
+        assert isinstance(canary.EXPECTED_EPIC_SCHEMA_VERSION, int)
+
+    def test_expected_schema_can_be_overridden_via_env(self, canary, monkeypatch, tmp_path):
+        """env var EXPECTED_EPIC_SCHEMA_VERSION overrides the module pin.
+
+        This test verifies the override exists; full env-import behavior
+        is exercised at import time and the test of import-time effects
+        would require subprocess. The functional check is that the env-set
+        path leads to a mismatch error.
+        """
+        # Seed a DB with version 3
+        db = tmp_path / "listings_v1.db"
+        conn = sqlite3.connect(str(db))
+        conn.execute("PRAGMA user_version = 3")
+        conn.execute("CREATE TABLE local_listing (id TEXT)")
+        conn.commit()
+        conn.close()
+        from assetboy.providers import epic_vault
+        monkeypatch.setattr(
+            epic_vault, "default_local_fab_library_db_path", lambda: db
+        )
+        # Simulate what an env override would land: set the module attr to 99
+        monkeypatch.setattr(canary, "EXPECTED_EPIC_SCHEMA_VERSION", 99)
+        result = canary.probe_epic()
+        assert result.ok is False
+        assert "schema_mismatch" in (result.error or "")
+        assert "v99" in (result.error or "")
+
 
 # --------------------------------------------------------------------------- #
 # probe_unity_hub

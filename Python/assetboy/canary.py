@@ -51,7 +51,18 @@ from assetboy.library.paths import state_root
 # epic_vault.py still reads the new schema correctly.
 # Set on first green run by reading the actual value; until then we accept
 # anything > 0 to seed the pin.
-EXPECTED_EPIC_SCHEMA_VERSION: int | None = None  # operator pins after Day 1 run
+EXPECTED_EPIC_SCHEMA_VERSION: int | None = 0  # Pinned 2026-05-11 (v1.6.s9)
+# Drift catches: if Epic Launcher upgrades the FabLibrary SQLite schema,
+# the probe will fail loud. Operator updates EXPECTED_EPIC_SCHEMA_VERSION
+# after verifying epic_vault.py reads the new schema correctly. Override
+# at runtime via env var EXPECTED_EPIC_SCHEMA_VERSION (handy for testing).
+import os as _os
+_env_override = _os.getenv("EXPECTED_EPIC_SCHEMA_VERSION", "").strip()
+if _env_override:
+    try:
+        EXPECTED_EPIC_SCHEMA_VERSION = int(_env_override)
+    except ValueError:
+        pass
 
 POLYHAVEN_MIN_RESULTS = 10  # smoke threshold; api returns 100s for textures/natural
 
