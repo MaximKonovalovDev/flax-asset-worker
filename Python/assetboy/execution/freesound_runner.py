@@ -140,7 +140,16 @@ def run_freesound_batch(
     if execute and dry_run:
         raise ValueError("run_freesound_batch cannot use execute=True together with dry_run=True.")
 
-    from assetboy.execution.playwright_runner import run_browser_job
+    # Path B s2.6b (2026-05-11): playwright_runner is DEAD-pending. The
+    # execute=True path used to drive the local Playwright runner; in v1.2+
+    # we emit only the job spec (for manual Playwright MCP invocation via
+    # flax-mcp). The execute=True branch below raises a clean error if hit.
+    if execute:
+        raise NotImplementedError(
+            "Path B v1.2: freesound_runner execute=True path retired. "
+            "The emitted freesound_job.json now drives @playwright/mcp via "
+            "flax-mcp directly; do not invoke run_browser_job from here."
+        )
 
     licenses = allowed_licenses or ["Attribution", "Creative Commons 0"]
 
@@ -184,23 +193,17 @@ def run_freesound_batch(
         spec_path = out_dir / "freesound_job.json"
         spec_path.write_text(json.dumps(spec, indent=2), encoding="utf-8")
 
+        # Path B s2.6b: execute=True now raises above, so browser_result is
+        # always None and FreesoundBatchResult always records the "plan"
+        # mode. Operators run the emitted spec via @playwright/mcp instead.
         browser_result = None
-        if execute:
-            browser_result = run_browser_job(
-                spec_path,
-                execute=True,
-                headed=headed,
-                browser_profile_dir=browser_profile_dir,
-                timeout_ms=timeout_ms,
-            )
-
         result = FreesoundBatchResult(
             pack_id=pid, search=s, output_dir=out_dir,
             job_spec_path=spec_path, steps=steps, dry_run=dry_run,
-            executed=browser_result.executed if browser_result else False,
-            execution_mode=browser_result.execution_mode if browser_result else "plan",
-            artifacts_dir=browser_result.artifacts_dir if browser_result else None,
-            last_url=browser_result.last_url if browser_result else "",
+            executed=False,
+            execution_mode="plan",
+            artifacts_dir=None,
+            last_url="",
         )
 
         mode = "DRY RUN" if dry_run else ("EXECUTED" if execute else "EXECUTION PLAN")

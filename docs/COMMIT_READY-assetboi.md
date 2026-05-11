@@ -688,3 +688,66 @@ generator row OK; details keys: ['colab_profile_count', 'colab_profiles', 'ai_pr
 - `docs/COMMIT_READY-assetboi.md` (this entry)
 
 **Next:** s2.6b — rewire `unity_runner.py` + `unreal_runner.py` + `browser_automation.py` + `freesound_runner.py` to drop dead-bridge deps.
+
+---
+
+## Slice s2.6b — Day 11 rewire providers/__init__.py + neuter playwright_runner imports (2026-05-11)
+
+**Status:** SHIPPED.
+
+**Scope revision (honest reframe):** PATH_B_DAY11_PLAN.md s2.6b spec listed 4 KEEP files. But peer-opus's original "DEAD" verdict for `engine_bridge` + `extractor_bridge` was based on cli_legacy + pack_family_plan importing them. **Post-s2.5a + true-DEAD pack_family_plan identification, those two bridges actually serve KEEP code** (`unity_runner`, `unreal_runner`, `library_map`, `epic_vault`). They're infrastructure, not DEAD. Inlining 75+79 LOC of helpers into 4 files = bad ROI vs leaving the bridges in place.
+
+**Revised s2.6b actual scope** (smaller + cleaner):
+
+1. **`Python/assetboy/providers/__init__.py`** — drop top-level re-exports of the true-DEAD modules:
+   - **Removed import** line 3: `from assetboy.providers.ai_bridge import AI_PROVIDER_PROFILES, emit_ai_bridge_job`
+   - **Removed import** line 25: `from assetboy.providers.runbooks import build_provider_runbook_payload, provider_runbook_ids, render_provider_runbook`
+   - **Removed `__all__` entries**: `AI_PROVIDER_PROFILES`, `emit_ai_bridge_job`, `build_provider_runbook_payload`, `provider_runbook_ids`, `render_provider_runbook` (5 names).
+   - Updated docstring to explain the new contract: code needing `AI_PROVIDER_PROFILES`/`provider_runbook_ids` should read `data/provider_profiles.yaml` (s2 parked).
+   - **Kept re-exports** for `engine_bridge` (`EngineBridgeKind`, `emit_engine_export_job`) and `extractor_bridge` (`ExtractorTool`, `emit_extractor_job`) — they ARE used by KEEP code; not DEAD.
+   - **Result:** `assetboy.providers` package no longer drags `ai_bridge.py` or `runbooks.py` into memory at import time. Three DEAD providers (`ai_bridge`, `generator`, `runbooks`) now have zero KEEP-file importers and can be deleted in s2.6d.
+
+2. **`Python/assetboy/providers/browser_automation.py:126`** — neutered the lazy `from assetboy.execution.playwright_runner import build_structured_playwright_steps`:
+   - PLAYWRIGHT_MCP runtime branch now emits `job_payload["playwright_steps"] = []` + a deprecation note explaining operators should use `@playwright/mcp` via flax-mcp directly.
+   - browser_automation no longer transitively requires `playwright_runner` to be present.
+
+3. **`Python/assetboy/execution/freesound_runner.py:143`** — neutered the lazy `from assetboy.execution.playwright_runner import run_browser_job`:
+   - `execute=True` path now raises `NotImplementedError` with a clear migration note (use `@playwright/mcp` via flax-mcp).
+   - `execute=False` path (the default) still emits the full job spec for manual / MCP invocation; produces a valid `FreesoundBatchResult` with `execution_mode="plan"`.
+   - Removed the dead `if execute: browser_result = run_browser_job(...)` block + downstream `browser_result.executed`/`.execution_mode`/`.artifacts_dir`/`.last_url` references (always None now).
+
+**Verification (real end-to-end):**
+
+```
+=== assetboy.providers package (no longer imports DEAD ai_bridge/runbooks) ===
+OK; __all__ has 31 entries
+AI_PROVIDER_PROFILES exported? False
+emit_ai_bridge_job exported? False
+provider_runbook_ids exported? False
+emit_engine_export_job still exported? True   (KEEP)
+emit_extractor_job still exported? True       (KEEP)
+
+=== browser_automation, freesound_runner, unity_runner, unreal_runner imports ===
+all OK (no DEAD-module transitive loads)
+
+=== CLI smoke ===
+python -m assetboy.cli --help   -> 7 sub-apps cleanly
+python -m assetboy.cli pack list-recipes  -> primitive_tech (9 packs) + roman_arena (14 packs)
+
+=== canary tests ===
+26 passed in 2.10s
+```
+
+**Unblocks for s2.6d (bulk delete):**
+- `providers/ai_bridge.py` — zero KEEP-file importers now (provider_readiness rewired in s2.6a, providers/__init__ re-export dropped here, cli_legacy isolated by s2.5a).
+- `providers/generator.py` — same status.
+- `providers/runbooks.py` — same status.
+- `execution/playwright_runner.py` — only KEEP-side importers were `browser_automation.py:126` + `freesound_runner.py:143` + `execution/music_runner.py:204`. First two neutered here; music_runner is itself DEAD-pending so it goes together in s2.6d.
+
+**Files staged for commit:**
+- `Python/assetboy/providers/__init__.py` (MODIFIED, 2 imports removed + 5 __all__ entries removed + docstring updated)
+- `Python/assetboy/providers/browser_automation.py` (MODIFIED, ~8-line block at line 126 replaced)
+- `Python/assetboy/execution/freesound_runner.py` (MODIFIED, lazy import deleted + execute=True path replaced with NotImplementedError + dead browser_result branch removed)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+**Next:** s2.6c — rewire `pack_pipeline.py` to drop `flax_wrapper` dep (4 names needed: SUPPORTED_BULK_PROFILES, execute_register_packet, execute_run_bulk, execute_run_cleanup), then add flax_wrapper + execution_kit + 3 audio/category/cleanup example files to the s2.6d delete list.

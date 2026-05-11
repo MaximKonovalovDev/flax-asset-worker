@@ -1,6 +1,13 @@
-"""Provider lane helpers for AssetBoy."""
+"""Provider lane helpers for AssetBoy.
 
-from assetboy.providers.ai_bridge import AI_PROVIDER_PROFILES, emit_ai_bridge_job
+Path B s2.6b (2026-05-11): dropped re-exports of DEAD modules ``ai_bridge``
+and ``runbooks``. Their public functions are intentionally NOT exposed at the
+package level anymore. Code that still needs ``AI_PROVIDER_PROFILES`` or
+``provider_runbook_ids`` should read ``assetboy/data/provider_profiles.yaml``
+directly (see ``provider_readiness._load_parked_provider_profiles`` for the
+pattern). The two DEAD modules are scheduled for deletion in s2.6d.
+"""
+
 from assetboy.providers.browser_automation import BrowserRuntime, emit_browser_automation_job
 from assetboy.providers.bridge_registry import AssetCategory, BridgeFamily, get_bridge, get_category_route, list_bridges
 from assetboy.providers.cue4parse_bridge import emit_cue4parse_job
@@ -22,7 +29,6 @@ from assetboy.providers.lanes import (
 )
 from assetboy.providers.marketplace_ops import ClaimMethod, emit_marketplace_claim_job
 from assetboy.providers.provider_readiness import build_provider_readiness_report, render_provider_readiness_report
-from assetboy.providers.runbooks import build_provider_runbook_payload, provider_runbook_ids, render_provider_runbook
 from assetboy.providers.unity_runner import emit_unity_export_runner, list_unity_installations
 from assetboy.providers.unreal_runner import emit_unreal_export_runner, list_unreal_installations
 
@@ -37,8 +43,6 @@ __all__ = [
     "get_bridge",
     "get_category_route",
     "list_bridges",
-    "AI_PROVIDER_PROFILES",
-    "emit_ai_bridge_job",
     "BrowserRuntime",
     "emit_browser_automation_job",
     "ClaimMethod",
@@ -56,9 +60,6 @@ __all__ = [
     "import_legendary_auth",
     "list_legendary_ue_assets",
     "install_legendary_asset",
-    "build_provider_runbook_payload",
-    "provider_runbook_ids",
-    "render_provider_runbook",
     "emit_unity_export_runner",
     "list_unity_installations",
     "emit_unreal_export_runner",

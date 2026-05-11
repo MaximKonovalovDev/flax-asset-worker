@@ -123,11 +123,16 @@ def emit_browser_automation_job(
 
     job_payload = job.to_dict()
     if runtime_value == BrowserRuntime.PLAYWRIGHT_MCP:
-        from assetboy.execution.playwright_runner import build_structured_playwright_steps
-
-        structured_steps = build_structured_playwright_steps(job_payload)
-        if structured_steps:
-            job_payload["playwright_steps"] = structured_steps
+        # Path B s2.6b (2026-05-11): playwright_runner is DEAD-pending. The
+        # PLAYWRIGHT_MCP runtime now emits a placeholder hint instead of
+        # injecting structured steps. Operators using Playwright MCP should
+        # invoke it via Microsoft's @playwright/mcp server directly (see
+        # PATH_B_DAY11_PLAN.md s11 acquisition router design).
+        job_payload["playwright_steps"] = []
+        job_payload["playwright_steps_note"] = (
+            "Path B v1.2: playwright_runner deprecated; "
+            "use @playwright/mcp MCP server via flax-mcp directly."
+        )
 
     job_spec_path = write_json(root_dir / "browser_job.json", job_payload)
     provenance_template_path = write_json(root_dir / "provenance_template.json", provenance)
