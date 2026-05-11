@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -328,6 +329,181 @@ def asset_cmd(
         print(f"library_asset_ok=false")
         print(f"library_asset_error={data.get('error', 'unknown')}")
         print(f"library_asset_id={asset_id}")
+        raise typer.Exit(code=1)
+
+
+# --------------------------------------------------------------------------- #
+# library bulk-install  (v1.8.s16)
+# --------------------------------------------------------------------------- #
+
+@app.command("bulk-install")
+def bulk_install_cmd(
+    manifest: Annotated[
+        Path,
+        typer.Argument(help="Path to YAML or JSON manifest with assets to install."),
+    ],
+    base: Annotated[
+        str,
+        typer.Option("--server", help="FAW server base URL."),
+    ] = DEFAULT_BASE,
+    stop_on_error: Annotated[
+        bool,
+        typer.Option(
+            "--stop-on-error",
+            help="Abort batch on first failure (default: continue + report all).",
+        ),
+    ] = False,
+    json_out: Annotated[
+        bool,
+        typer.Option("--json", help="Emit JSON summary."),
+    ] = False,
+) -> None:
+    """Install many assets from a manifest in one batch (Path B v1.8.s16).
+
+    Manifest schema (YAML or JSON):
+      - asset_id: brick_wall_01
+        provider: polyhaven
+        category: texture
+        name: Brick Wall 01           # optional; defaults to asset_id
+      - asset_id: ...
+
+    Per-asset isolation: one failure doesn't abort the batch unless
+    --stop-on-error is set. Each asset gets its own success/fail entry.
+
+    Exit code:
+      0 if all assets installed
+      1 if any failure (or stop_on_error triggered)
+    """
+    if not manifest.exists():
+        msg = f"manifest_not_found: {manifest}"
+        if json_out:
+            json.dump({"error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"library_bulk_install_error={msg}")
+        raise typer.Exit(code=1)
+
+    # Load YAML or JSON
+    text = manifest.read_text(encoding="utf-8")
+    items = None
+    try:
+        # Try JSON first (cheap)
+        items = json.loads(text)
+    except json.JSONDecodeError:
+        try:
+            import yaml
+            items = yaml.safe_load(text)
+        except Exception as exc:
+            msg = f"manifest_parse_failed: {exc}"
+            if json_out:
+                json.dump({"error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"library_bulk_install_error={msg}")
+            raise typer.Exit(code=1)
+
+    if not isinstance(items, list):
+        msg = f"manifest_must_be_a_list (got {type(items).__name__})"
+        if json_out:
+            json.dump({"error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"library_bulk_install_error={msg}")
+        raise typer.Exit(code=1)
+
+    results: list[dict] = []
+    succeeded = 0
+    failed = 0
+
+    for idx, entry in enumerate(items):
+        if not isinstance(entry, dict):
+            results.append({
+                "index": idx,
+                "ok": False,
+                "error": f"entry_not_a_dict (got {type(entry).__name__})",
+            })
+            failed += 1
+            if stop_on_error:
+                break
+            continue
+
+        asset_id = str(entry.get("asset_id", "")).strip()
+        provider = str(entry.get("provider", "")).strip()
+        category = str(entry.get("category", "")).strip() or "unknown"
+        name = str(entry.get("name", "")).strip() or asset_id
+
+        if not asset_id or not provider:
+            results.append({
+                "index": idx,
+                "asset_id": asset_id,
+                "provider": provider,
+                "ok": False,
+                "error": "missing_required_fields (asset_id + provider both required)",
+            })
+            failed += 1
+            if stop_on_error:
+                break
+            continue
+
+        payload = {
+            "asset_id": asset_id,
+            "provider": provider,
+            "category": category,
+            "name": name,
+        }
+        try:
+            data = _faw_post("/api/v1/library/install", payload, base=base, timeout=300.0)
+            entry_ok = bool(data.get("success", False))
+            results.append({
+                "index": idx,
+                "asset_id": asset_id,
+                "provider": provider,
+                "ok": entry_ok,
+                "response": data,
+            })
+            if entry_ok:
+                succeeded += 1
+                if not json_out:
+                    print(f"  [OK ] {idx:3d}  {provider}/{asset_id}")
+            else:
+                failed += 1
+                err = data.get("error", "install_failed")
+                if not json_out:
+                    print(f"  [RED] {idx:3d}  {provider}/{asset_id}  error={err}")
+                if stop_on_error:
+                    break
+        except Exception as exc:
+            results.append({
+                "index": idx,
+                "asset_id": asset_id,
+                "provider": provider,
+                "ok": False,
+                "error": str(exc),
+            })
+            failed += 1
+            if not json_out:
+                print(f"  [RED] {idx:3d}  {provider}/{asset_id}  http_error={exc}")
+            if stop_on_error:
+                break
+
+    if json_out:
+        json.dump({
+            "total": len(items),
+            "attempted": len(results),
+            "succeeded": succeeded,
+            "failed": failed,
+            "stop_on_error": stop_on_error,
+            "results": results,
+        }, sys.stdout, indent=2, default=str)
+        sys.stdout.write("\n")
+    else:
+        print()
+        print(f"library_bulk_install_total={len(items)}")
+        print(f"library_bulk_install_attempted={len(results)}")
+        print(f"library_bulk_install_succeeded={succeeded}")
+        print(f"library_bulk_install_failed={failed}")
+
+    if failed > 0:
         raise typer.Exit(code=1)
 
 

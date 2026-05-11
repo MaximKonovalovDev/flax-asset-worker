@@ -434,6 +434,83 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(parsed["total"], 4)
         self.assertEqual(parsed["passed"], 4)
 
+    # ----------------------------------------------------------------- #
+    # library bulk-install (v1.8.s16)
+    # ----------------------------------------------------------------- #
+
+    def test_library_bulk_install_help_renders(self) -> None:
+        result = self.runner.invoke(self.app, ["library", "bulk-install", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("manifest", result.stdout.lower())
+
+    def test_library_bulk_install_missing_manifest_errors_cleanly(self) -> None:
+        result = self.runner.invoke(
+            self.app, ["library", "bulk-install", "does_not_exist.yaml"]
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("manifest_not_found", result.stdout)
+
+    def test_library_bulk_install_malformed_manifest_errors_cleanly(self) -> None:
+        """Manifest that isn't a list -> clean error."""
+        import tempfile
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False, encoding="utf-8"
+        ) as tf:
+            tf.write("not: a: list:\n")
+            tmp_path = tf.name
+        try:
+            result = self.runner.invoke(
+                self.app, ["library", "bulk-install", tmp_path]
+            )
+            self.assertEqual(result.exit_code, 1)
+            # Either manifest_parse_failed (yaml shape) or manifest_must_be_a_list
+            self.assertTrue(
+                "manifest_parse_failed" in result.stdout
+                or "manifest_must_be_a_list" in result.stdout,
+                f"stdout: {result.stdout[:200]}",
+            )
+        finally:
+            import os
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+    def test_library_bulk_install_with_real_manifest_smoke(self) -> None:
+        """End-to-end smoke: write a 2-asset manifest; expect exit 1 (server
+        down, both fail) but the command itself shouldn't crash. Output
+        should be parseable JSON in --json mode."""
+        import json as _json
+        import tempfile
+        manifest = [
+            {"asset_id": "test_01", "provider": "polyhaven", "category": "texture"},
+            {"asset_id": "test_02", "provider": "kenney", "category": "model"},
+        ]
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False, encoding="utf-8"
+        ) as tf:
+            _json.dump(manifest, tf)
+            tmp_path = tf.name
+        try:
+            result = self.runner.invoke(
+                self.app,
+                ["library", "bulk-install", tmp_path,
+                 "--server", "http://localhost:1",  # unreachable
+                 "--json"],
+            )
+            # exit 1 expected (server unreachable -> both fail)
+            self.assertEqual(result.exit_code, 1)
+            parsed = _json.loads(result.stdout)
+            self.assertEqual(parsed["total"], 2)
+            self.assertEqual(parsed["failed"], 2)
+            self.assertEqual(parsed["succeeded"], 0)
+        finally:
+            import os
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
 
 if __name__ == "__main__":
     unittest.main()
