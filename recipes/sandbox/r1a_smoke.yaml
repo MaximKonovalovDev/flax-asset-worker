@@ -28,6 +28,19 @@ recipe:
     Iconify. No API keys required; pulls ~50 reference images + icons.
   output_folder: "Content/Sandbox/R1aSmoke"
 
+  # v1.11.14 metadata fields — for `pack list-recipes --filter` queries.
+  genre: reference_collection
+  theme:
+    - historical
+    - fantasy
+    - icons
+  style:
+    - mixed
+  tags:
+    - smoke-test
+    - no-api-key
+    - r1a-wave
+
 packs:
 
   - id: SANDBOX_MET_ROMAN
