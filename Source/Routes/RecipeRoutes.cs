@@ -162,6 +162,80 @@ namespace FAW.Routes
         }
 
         /// <summary>
+        /// Path B v1.6.s7 (2026-05-11): single-pack execution.
+        ///
+        /// POST /api/v1/packs/run-pack
+        ///   Body: { pack_yaml: "<yaml body>", game_scope: "...",
+        ///           dry_run: bool, resume: bool }
+        ///   OR:   { pack: {<dict>}, game_scope: "...", dry_run, resume }
+        /// Returns: full pack_pipeline ledger dict + success flag.
+        ///
+        /// Bridges to `python -m assetboy.cli pack run-pack --pack <yaml>`.
+        /// </summary>
+        public static async Task<JObject> HandleRunPackAsync(HttpListenerContext ctx)
+        {
+            try
+            {
+                JObject body;
+                using (var reader = new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding))
+                {
+                    var json = await reader.ReadToEndAsync();
+                    body = string.IsNullOrWhiteSpace(json) ? new JObject() : JObject.Parse(json);
+                }
+
+                string packYaml = (string)body["pack_yaml"] ?? "";
+                // Convenience: if caller passed a JSON `pack` dict instead of YAML,
+                // serialize it. (YAML is a superset of JSON, so JSON.ToString()
+                // is also valid YAML.)
+                if (string.IsNullOrWhiteSpace(packYaml) && body["pack"] is JObject packDict)
+                {
+                    packYaml = packDict.ToString(Formatting.None);
+                }
+                if (string.IsNullOrWhiteSpace(packYaml))
+                {
+                    return new JObject
+                    {
+                        ["success"] = false,
+                        ["error"] = "missing_pack_body (provide 'pack_yaml' string or 'pack' object)",
+                    };
+                }
+
+                var gameScope = (string)body["game_scope"] ?? "sandbox";
+                var dryRun = (bool?)body["dry_run"] ?? false;
+                var resume = (bool?)body["resume"] ?? true;
+
+                var args = new System.Collections.Generic.List<string>
+                {
+                    "pack", "run-pack",
+                    "--pack", packYaml,
+                    "--game", gameScope,
+                    "--json",
+                };
+                if (dryRun) args.Add("--dry-run");
+                if (!resume) args.Add("--no-resume");
+
+                var output = await RunPackCliAsync(args.ToArray());
+                // run-pack exits non-zero when pack ends in any state other than
+                // completed/pending_manual_drop -- but still returns valid JSON,
+                // so we surface it either way.
+                var parsed = string.IsNullOrWhiteSpace(output.Stdout)
+                    ? new JObject { ["error"] = "empty_stdout", ["stderr"] = output.Stderr }
+                    : JObject.Parse(output.Stdout);
+                parsed["success"] = output.ExitCode == 0;
+                parsed["cli_exit_code"] = output.ExitCode;
+                return parsed;
+            }
+            catch (Exception ex)
+            {
+                return new JObject
+                {
+                    ["success"] = false,
+                    ["error"] = $"run_pack_failed: {ex.Message}",
+                };
+            }
+        }
+
+        /// <summary>
         /// Path B v1.6.s3 (2026-05-11): inventory all pack_pipeline ledgers.
         ///
         /// GET /api/v1/packs/audit

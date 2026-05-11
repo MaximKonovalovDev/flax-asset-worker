@@ -136,6 +136,11 @@ namespace FAW.Core
                 {
                     result = await RecipeRoutes.HandleRunAsync(ctx);
                 }
+                else if (path == "/api/v1/packs/run-pack" && method == "POST")
+                {
+                    // v1.6.s7: single-pack execution from inline YAML body
+                    result = await RecipeRoutes.HandleRunPackAsync(ctx);
+                }
                 else if (path == "/api/v1/packs/audit" && method == "GET")
                 {
                     // v1.6.s3: inventory all pack_pipeline ledgers
