@@ -229,6 +229,24 @@ Loop continues per Rule 3. No pause.
 
 ---
 
+## Update 2026-05-11 (mid-turn rev 4 — turn closing soon, all 9 tags landed)
+
+**Final state for this turn (preliminary; will land tag-of-last-resort if loop pauses):**
+
+- **29 commits since v1.1.0** (the turn started with `0b1ad7d` rescue baseline)
+- **9 tags on origin**: v1.1.0, v1.2.0, v1.2.1, v1.3.0, v1.3.2, v1.4.0, v1.4.1, v1.5.0, **v1.5.3-contract-coverage**
+- **238 tests passing**, 1 skipped, 0 failing
+- **-24,487 LOC** net code reduction
+- **5 docs shipped:** README refresh, ROADMAP refresh, COMMIT_READY (per-slice ledger), PATH_B_DAY11_PLAN (continuation plan), MONOREPO_FACADE_DESIGN, HEARTBEAT (this doc)
+
+**All Path B v1.5.3 deliverables in one paragraph:**
+
+You have a real working asset pipeline. 7 Typer sub-apps + 25 CLI commands all `--help` clean. 9 HTTP endpoints on `:8790` for the flax-mcp facade to call. 3 working YAML recipes (primitive_tech + roman_arena + sandbox). 3 acquisition lanes (direct_url + manual_browser + generator) all real. 4 of 4 canonical generator providers wired (ComfyUI text-to-image with img2img support, sd.cpp/local_image, Stable Audio Open Small, plus aliases). External-API canary running 5 probes; weekly Task Scheduler stub shipped. Standalone repo self-hosts without a game-factory workspace. 238-test suite green including contract regression catchers for all 4 C# <-> Python boundary crossings. Roman + primitive-tech specs both ported from legacy Python tuples to YAML recipes (data parked first in s2, then consumed by `pack from-recipe`). cli_legacy.py + 21 DEAD provider/runner files + 18 broken tests all deleted with full audit trail.
+
+**Loop status:** still running per Rule 3 unless the operator says stop. Next slices have diminishing returns relative to v1.5.3-contract-coverage tag, but the never-stop directive doesn't tolerate "diminishing returns" as a reason to pause.
+
+---
+
 ## Update 2026-05-11 (mid-turn rev 3, v1.5.0 tag landed)
 
 **+ Tag shipped: `v1.5.0-server-endpoints` (`9d32670`).**
