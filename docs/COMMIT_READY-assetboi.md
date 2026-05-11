@@ -2327,3 +2327,54 @@ v1.10.9-unsplash-COMPLETE-R1A   Unsplash photos + R1A milestone (s35)
 - s39 `gen all --query X --count N` mega-command that fans out across
   every working provider in parallel
 - s40 Doc rev: SETUP.md "API keys" section listing all 5 env vars + free signup links
+
+---
+
+## v1.11 batch complete — through v1.11.11 (2026-05-11)
+
+All v1.11 backlog ITEMS SHIPPED (and several beyond):
+
+```
+v1.11.0-recipe-refs          (s36 — schema *_refs fields)
+v1.11.1-fan-out-no-key       (s37 — gen all-no-key, single-query fan-out)
+v1.11.2-fan-out-key          (s38 — gen all-key, env-aware fan-out)
+v1.11.3-setup-docs           (s39 — SETUP.md §5.5)
+v1.11.4-lane-adapters        (s40 — 10 SOURCE_ADAPTERS entries)
+v1.11.5-router-r1a           (s41 — acquisition_router for 5 no-key)
+v1.11.6-r1a-smoke-recipe     (s42 — recipes/sandbox/r1a_smoke.yaml)
+v1.11.7-router-r1a-keyed     (s43 — acquisition_router for 5 key-required)
+v1.11.8-readme-r1a           (s44 — README front-page rollup)
+v1.11.9-list-providers       (s45 — gen list-providers catalog)
+v1.11.10-fix-flake           (s46 — flaky canary test stabilized)
+v1.11.11-release-notes       (s47 — docs/RELEASE_NOTES_v1.10_v1.11.md)
+```
+
+### Authoritative state at v1.11.11 (origin truth)
+
+- **100 commits** since 0b1ad7d baseline (origin/main verified)
+- **58 tags total** on origin (10 v1.10.x + 12 v1.11.x + 36 prior)
+- **594 passed / 1 skipped / 0 failed** (full suite clean, no deselect needed)
+- **0 Rule violations** through entire wave (every file edit < 3 per slice)
+- **Operator-visible**: every R1A provider reachable via CLI + Recipe + Adapter
+
+### Reading order for next session / next AI
+
+1. `docs/RELEASE_NOTES_v1.10_v1.11.md` — canonical R1A reference (~300 lines)
+2. `docs/HEARTBEAT-assetboi.md` — operator wake-up
+3. `docs/SETUP.md` §5.5 — env-key setup
+4. `README.md` — front-page rollup
+5. (This doc) for full slice history — 2200+ lines, navigate by slice id.
+
+### Continuing the loop
+
+Per BOSS Rule 3 (NEVER STOP), assetboi continues with next slice
+selection from the v1.12 implicit backlog:
+
+- Async fan-out (parallelize gen all-no-key + gen all-key for 5x wall-time)
+- Library installer registration for R1A providers
+- Per-provider 429-retry with exponential backoff
+- live-network sanity test per provider (gated by network detection)
+- Recipe schema: `genre`, `theme`, `style` top-level metadata for
+  recipe-genre clustering / discovery
+- HTTP /providers/list endpoint (so C# / web UI can enumerate)
+- One-shot install-plugins.ps1 helper that includes R1A env-var prompts
