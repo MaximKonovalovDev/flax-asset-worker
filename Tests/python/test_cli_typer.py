@@ -259,6 +259,90 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn("library_asset_ok=false", result.stdout)
 
+    # ----------------------------------------------------------------- #
+    # pack run-pack (v1.6.s6)
+    # ----------------------------------------------------------------- #
+
+    INLINE_PACK = (
+        "id: TEST_PACK_S6\n"
+        "provider: polyhaven\n"
+        "acquisition_method: direct_url\n"
+        "assets:\n"
+        "  - asset_id: brick_wall_04\n"
+    )
+
+    def test_run_pack_help_renders(self) -> None:
+        result = self.runner.invoke(self.app, ["pack", "run-pack", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("single pack", result.stdout.lower())
+
+    def test_run_pack_inline_accepts_pack_yaml(self) -> None:
+        """v1.6.s6: --pack '<yaml>' runs one pack through pack_pipeline."""
+        result = self.runner.invoke(
+            self.app,
+            [
+                "pack", "run-pack",
+                "--pack", self.INLINE_PACK,
+                "--game", "sandbox",
+                "--dry-run",
+                "--json",
+            ],
+        )
+        # Pack will land "failed" (dry-run with synthetic source_dir) or
+        # "pending_manual_drop"; either way the CLI itself should produce
+        # valid JSON ledger.
+        import json
+        try:
+            parsed = json.loads(result.stdout)
+        except json.JSONDecodeError as e:
+            self.fail(f"stdout not valid JSON: {e}\nstdout: {result.stdout[:300]}")
+        self.assertEqual(parsed.get("pack_id"), "TEST_PACK_S6")
+        self.assertIn("status", parsed)
+        self.assertIn("current_state", parsed)
+
+    def test_run_pack_no_source_errors_cleanly(self) -> None:
+        result = self.runner.invoke(self.app, ["pack", "run-pack"])
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("missing_pack_source", result.stdout)
+
+    def test_run_pack_both_sources_errors_cleanly(self) -> None:
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "run-pack", "--pack", "id: X", "--pack-from-stdin"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("conflicting_source", result.stdout)
+
+    def test_run_pack_missing_id_errors_cleanly(self) -> None:
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "run-pack", "--pack", "provider: polyhaven\nassets: []", "--json"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        import json
+        try:
+            parsed = json.loads(result.stdout)
+            self.assertIn("pack_missing_id", parsed.get("error", ""))
+        except json.JSONDecodeError:
+            # CLI emits human-mode on missing-id; accept that too
+            self.assertIn("pack_missing_id", result.stdout)
+
+    def test_run_pack_malformed_yaml_errors_cleanly(self) -> None:
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "run-pack", "--pack", "not: valid: yaml: structure:"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("pack_yaml_parse_failed", result.stdout)
+
+    def test_run_pack_non_dict_root_errors_cleanly(self) -> None:
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "run-pack", "--pack", "- one\n- two\n"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("pack_must_be_a_mapping", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

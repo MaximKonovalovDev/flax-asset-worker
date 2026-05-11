@@ -109,6 +109,82 @@ def list_recipes_cmd(
 
 
 # --------------------------------------------------------------------------- #
+# Shared per-pack execution helper (v1.6.s6)
+# --------------------------------------------------------------------------- #
+
+def _acquire_and_run_one_pack(
+    *,
+    pack: dict[str, Any],
+    recipe_doc: dict[str, Any],
+    dry_run: bool,
+    resume: bool,
+) -> dict[str, Any]:
+    """Acquire source_dir for one pack, then run it through pack_pipeline.
+
+    Extracted from `from_recipe_cmd` per Path B v1.6.s6 (2026-05-11) so the
+    new `run-pack` command can reuse the same logic without duplicating it.
+
+    Returns a ledger-shape dict with at least: status, current_state. May
+    include: next_step, error, method, provider, drop_dir, ledger_path,
+    source_lane, source_dir, reviewed_source_dir, publish_dir, packet_path.
+
+    Three terminal flavors:
+      - acquisition failed:        status="failed", current_state="acquisition_failed"
+      - awaiting manual drop:      status="pending_manual_drop",
+                                   current_state="awaiting_manual_browser_drop"
+      - acquisition green:         delegates to pack_pipeline; returns its ledger
+    """
+    # Lazy imports (keep cli --help fast)
+    from assetboy.workflows.acquisition_router import acquire_source_dir
+    from assetboy.workflows.pack_pipeline import (
+        PipelineContext,
+        execute_prepare_pack_dispatched,
+    )
+
+    pack_id = pack.get("id", "?")
+    recipe_meta = recipe_doc.get("recipe") or {}
+    game_scope = recipe_meta.get("game", "unknown")
+
+    acq = acquire_source_dir(pack, recipe_doc, dry_run=dry_run)
+
+    if not acq.ok and not acq.awaiting_manual:
+        return {
+            "status": "failed",
+            "current_state": "acquisition_failed",
+            "next_step": "fix recipe + retry",
+            "error": acq.error,
+            "method": acq.method,
+            "provider": acq.provider,
+        }
+    if acq.awaiting_manual:
+        return {
+            "status": "pending_manual_drop",
+            "current_state": "awaiting_manual_browser_drop",
+            "next_step": acq.notes,
+            "method": acq.method,
+            "provider": acq.provider,
+            "drop_dir": str(acq.source_dir) if acq.source_dir else "",
+        }
+
+    # Acquisition green — hand source_dir to pack_pipeline
+    ctx = PipelineContext(
+        pack_id=pack_id,
+        game_scope=game_scope,
+        source_dir=acq.source_dir,
+        bulk_profile=None,
+        cleanup_mode=(pack.get("cleanup") or {}).get("mode", "auto"),
+        asset_kind=pack.get("asset_kind", "prop"),
+        animated=pack.get("asset_kind") in ("character_animated", "animation"),
+        dry_run=dry_run,
+        resume=resume,
+    )
+    try:
+        return execute_prepare_pack_dispatched(ctx)
+    except Exception as exc:
+        return {"status": "failed", "current_state": "failed", "error": str(exc)}
+
+
+# --------------------------------------------------------------------------- #
 # pack from-recipe
 # --------------------------------------------------------------------------- #
 
@@ -294,13 +370,6 @@ def from_recipe_cmd(
         skip_set = set(skip)
         packs = [p for p in packs if p.get("id") not in skip_set]
 
-    # Lazy import — keeps `pack --help` fast (avoids flax_wrapper import chain)
-    from assetboy.workflows.acquisition_router import acquire_source_dir
-    from assetboy.workflows.pack_pipeline import (
-        PipelineContext,
-        execute_prepare_pack_dispatched,
-    )
-
     results: list[dict[str, Any]] = []
     fail_count = 0
     required_fail = False
@@ -308,54 +377,12 @@ def from_recipe_cmd(
     for pack in packs:
         pack_id = pack.get("id", "?")
         is_required = pack_id in required_ids
-
-        # Path B s11 (2026-05-11): pre-pack acquisition router. Maps recipe
-        # acquisition_method (direct_url / manual_browser / generator) to a
-        # real source_dir BEFORE pack_pipeline runs. Without this every pack
-        # went RED because pack_pipeline rejects missing source_dir.
-        acq = acquire_source_dir(pack, doc, dry_run=dry_run)
-
-        if not acq.ok and not acq.awaiting_manual:
-            # Acquisition failed outright (unsupported provider, runner crash,
-            # etc.) -- skip pack_pipeline and record the failure cleanly.
-            ledger = {
-                "status": "failed",
-                "current_state": "acquisition_failed",
-                "next_step": "fix recipe + retry",
-                "error": acq.error,
-                "method": acq.method,
-                "provider": acq.provider,
-            }
-        elif acq.awaiting_manual:
-            # manual_browser lane: marker emitted, waiting for operator drop.
-            # Not a failure -- pack is paused. Don't run pack_pipeline yet.
-            ledger = {
-                "status": "pending_manual_drop",
-                "current_state": "awaiting_manual_browser_drop",
-                "next_step": acq.notes,
-                "method": acq.method,
-                "provider": acq.provider,
-                "drop_dir": str(acq.source_dir) if acq.source_dir else "",
-            }
-        else:
-            # Acquisition green -- hand source_dir to pack_pipeline.
-            ctx = PipelineContext(
-                pack_id=pack_id,
-                game_scope=game_scope,
-                source_dir=acq.source_dir,
-                bulk_profile=None,
-                cleanup_mode=(pack.get("cleanup") or {}).get("mode", "auto"),
-                asset_kind=pack.get("asset_kind", "prop"),
-                animated=pack.get("asset_kind") in ("character_animated", "animation"),
-                dry_run=dry_run,
-                resume=resume,
-            )
-            try:
-                ledger = execute_prepare_pack_dispatched(ctx)
-            except Exception as exc:
-                ledger = {
-                    "status": "failed", "current_state": "failed", "error": str(exc),
-                }
+        ledger = _acquire_and_run_one_pack(
+            pack=pack,
+            recipe_doc=doc,
+            dry_run=dry_run,
+            resume=resume,
+        )
 
         status = ledger.get("status", "?")
         results.append(
@@ -639,6 +666,156 @@ def validate_cmd(
         exit_code = 1
     if exit_code:
         raise typer.Exit(code=exit_code)
+
+
+# --------------------------------------------------------------------------- #
+# pack run-pack (v1.6.s6)
+# --------------------------------------------------------------------------- #
+
+@app.command("run-pack")
+def run_pack_cmd(
+    inline_yaml: Annotated[
+        str,
+        typer.Option(
+            "--pack",
+            help=(
+                "Single-pack YAML body (the inner pack dict, not a full recipe). "
+                "Mutually exclusive with --pack-from-stdin."
+            ),
+        ),
+    ] = "",
+    pack_from_stdin: Annotated[
+        bool,
+        typer.Option(
+            "--pack-from-stdin",
+            help="Read the pack YAML from stdin.",
+        ),
+    ] = False,
+    game_scope: Annotated[
+        str,
+        typer.Option(
+            "--game",
+            help="Game scope for the pack (used in ledger path).",
+        ),
+    ] = "sandbox",
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Plan only; no real downloads/cleanup."),
+    ] = False,
+    resume: Annotated[
+        bool,
+        typer.Option("--resume", help="Skip already-completed stages."),
+    ] = True,
+    json_out: Annotated[
+        bool, typer.Option("--json", help="Emit JSON output."),
+    ] = False,
+) -> None:
+    """Run a single pack through the pack pipeline (Path B v1.6.s6).
+
+    Unlike `pack from-recipe` (which loads a full recipe doc + iterates
+    its packs[]), this command takes one pack dict directly. Used by the
+    flax-mcp facade to fire one pack at a time, or by operators
+    quick-testing a pack without authoring a full recipe.
+
+    Source modes (mutually exclusive):
+      --pack '<yaml>'        : inline single-pack YAML body
+      --pack-from-stdin      : read pack YAML from stdin
+
+    The pack body must look like one entry from a recipe's packs[] list:
+        id: TEST_PACK_01
+        provider: polyhaven
+        acquisition_method: direct_url
+        assets:
+          - asset_id: brick_wall_04
+
+    Returns the ledger dict (same shape as `pack status <id>` output).
+    """
+    if not inline_yaml and not pack_from_stdin:
+        msg = "missing_pack_source: pass --pack '<yaml>' or --pack-from-stdin"
+        if json_out:
+            json.dump({"error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_run_pack_error={msg}")
+        raise typer.Exit(code=1)
+    if inline_yaml and pack_from_stdin:
+        msg = "conflicting_source: pass either --pack OR --pack-from-stdin, not both"
+        if json_out:
+            json.dump({"error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_run_pack_error={msg}")
+        raise typer.Exit(code=1)
+
+    if yaml is None:
+        msg = "pyyaml_not_installed"
+        if json_out:
+            json.dump({"error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_run_pack_error={msg}")
+        raise typer.Exit(code=1)
+
+    try:
+        if pack_from_stdin:
+            stdin_text = sys.stdin.read()
+            if not stdin_text.strip():
+                raise ValueError("stdin is empty")
+            pack_doc = yaml.safe_load(stdin_text)
+        else:
+            pack_doc = yaml.safe_load(inline_yaml)
+    except Exception as exc:
+        msg = f"pack_yaml_parse_failed: {exc}"
+        if json_out:
+            json.dump({"error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_run_pack_error={msg}")
+        raise typer.Exit(code=1)
+
+    if not isinstance(pack_doc, dict):
+        msg = f"pack_must_be_a_mapping (got {type(pack_doc).__name__})"
+        if json_out:
+            json.dump({"error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_run_pack_error={msg}")
+        raise typer.Exit(code=1)
+
+    if not pack_doc.get("id"):
+        msg = "pack_missing_id: 'id' field is required"
+        if json_out:
+            json.dump({"error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_run_pack_error={msg}")
+        raise typer.Exit(code=1)
+
+    # Synthesize a minimal recipe doc for the helper
+    synthetic_recipe = {"recipe": {"id": "ad_hoc", "game": game_scope}, "packs": [pack_doc]}
+    ledger = _acquire_and_run_one_pack(
+        pack=pack_doc,
+        recipe_doc=synthetic_recipe,
+        dry_run=dry_run,
+        resume=resume,
+    )
+
+    if json_out:
+        json.dump(ledger, sys.stdout, indent=2, default=str)
+        sys.stdout.write("\n")
+    else:
+        pack_id = pack_doc.get("id", "?")
+        status = ledger.get("status", "?")
+        print(f"pack_run_pack_id={pack_id}")
+        print(f"pack_run_pack_status={status}")
+        print(f"pack_run_pack_current_state={ledger.get('current_state', '?')}")
+        if ledger.get("error"):
+            print(f"pack_run_pack_error={ledger['error']}")
+        if ledger.get("next_step"):
+            print(f"pack_run_pack_next_step={ledger['next_step']}")
+
+    if ledger.get("status") not in ("completed", "pending_manual_drop"):
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":
