@@ -436,6 +436,20 @@ class RealRecipeIntegrationTests(unittest.TestCase):
         r = validate_recipe_file(recipe)
         self.assertTrue(r.ok, f"errors: {r.errors}")
 
+    def test_sandbox_r1a_smoke_passes(self) -> None:
+        """v1.11.s42: 5-pack R1A no-key smoke recipe must validate clean."""
+        from assetboy.workflows.recipe_validator import validate_recipe_file
+        from pathlib import Path
+        repo_root = Path(__file__).resolve().parents[2]
+        recipe = repo_root / "recipes" / "sandbox" / "r1a_smoke.yaml"
+        r = validate_recipe_file(recipe)
+        self.assertTrue(r.ok, f"errors: {r.errors}")
+        self.assertEqual(r.pack_count, 5)
+        # All 5 R1A no-key providers should appear, and license blocks
+        # should suppress the no-license warning for ALL packs.
+        license_warnings = [w for w in r.warnings if "license" in w.lower()]
+        self.assertEqual(license_warnings, [], msg=f"unexpected license warnings: {license_warnings}")
+
     def test_sandbox_generator_smoke_passes(self) -> None:
         from assetboy.workflows.recipe_validator import validate_recipe_file
         from pathlib import Path

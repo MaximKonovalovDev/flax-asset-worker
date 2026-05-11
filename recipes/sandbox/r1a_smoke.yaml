@@ -1,0 +1,143 @@
+# Sandbox R1A smoke recipe — Path B v1.11.s42 (2026-05-11).
+# ============================================================================
+# Exercises the v1.10 + v1.11 R1A integrations end-to-end via recipe pipeline.
+# All 5 packs use NO-KEY providers (Met Museum, Wikimedia, Archive.org,
+# Scryfall, Iconify) so this works on any machine without API key setup.
+#
+# Smoke test commands:
+#
+#   python -m assetboy.cli pack validate recipes/sandbox/r1a_smoke.yaml
+#     (should report 0 errors)
+#
+#   python -m assetboy.cli pack from-recipe sandbox/r1a_smoke.yaml --dry-run
+#     (validates router branches without network)
+#
+#   python -m assetboy.cli pack from-recipe sandbox/r1a_smoke.yaml
+#     (real network: hits 5 free public APIs, lands files in inbox/)
+#
+# Also demonstrates v1.11.0 *_refs fields (icon_refs, reference_image_urls)
+# which the validator accepts since v1.11.0.
+# ============================================================================
+
+recipe:
+  id: sandbox_r1a_smoke
+  schema_version: "2026-05-10.recipe.v1"
+  game: sandbox
+  description: |
+    5-pack R1A smoke: Met Museum + Wikimedia + Archive.org + Scryfall +
+    Iconify. No API keys required; pulls ~50 reference images + icons.
+  output_folder: "Content/Sandbox/R1aSmoke"
+
+packs:
+
+  - id: SANDBOX_MET_ROMAN
+    category: reference_image
+    asset_kind: reference_plate
+    provider: met_museum
+    acquisition_method: direct_url
+    license:
+      kind: cc0
+      commercial_ok: true
+      attribution_required: false
+    search_terms:
+      - "roman fresco"
+    count: 3
+    met_department_id: 13                  # Greek and Roman Art dept
+    cleanup:
+      mode: skip
+    gate:
+      required: false                       # network-dependent
+
+  - id: SANDBOX_WIKIMEDIA_STONE
+    category: reference_image
+    asset_kind: texture_ref
+    provider: wikimedia
+    acquisition_method: direct_url
+    license:
+      kind: cc-by-sa
+      commercial_ok: true
+      attribution_required: true
+    search_terms:
+      - "stone wall texture"
+    count: 3
+    cleanup:
+      mode: skip
+    gate:
+      required: false
+
+  - id: SANDBOX_ARCHIVE_NASA
+    category: reference_image
+    asset_kind: photograph
+    provider: archive_org
+    acquisition_method: direct_url
+    license:
+      kind: cc0
+      commercial_ok: true
+      attribution_required: false
+    search_terms:
+      - "creator:NASA"
+    archive_mediatype: image
+    count: 2
+    cleanup:
+      mode: skip
+    gate:
+      required: false
+
+  - id: SANDBOX_SCRYFALL_DRAGONS
+    category: reference_image
+    asset_kind: fantasy_creature
+    provider: scryfall
+    acquisition_method: direct_url
+    license:
+      kind: cc-by-sa
+      commercial_ok: true
+      attribution_required: true
+    search_terms:
+      - "type:dragon"
+    scryfall_variant: art_crop                 # art only, no card frame
+    count: 4
+    cleanup:
+      mode: skip
+    gate:
+      required: false
+
+  - id: SANDBOX_ICONIFY_WEAPONS
+    category: icon
+    asset_kind: ui_glyph
+    provider: iconify
+    acquisition_method: direct_url
+    license:
+      kind: mit
+      commercial_ok: true
+      attribution_required: false
+    search_terms:
+      - "sword"
+    iconify_width: 64
+    iconify_color: "#FFAA00"
+    count: 8
+    cleanup:
+      mode: skip
+    icon_refs:
+      - "https://api.iconify.design/game-icons/broadsword.svg"
+    gate:
+      required: false
+
+gates:
+  required_pack_ids: []
+  optional_pack_ids:
+    - SANDBOX_MET_ROMAN
+    - SANDBOX_WIKIMEDIA_STONE
+    - SANDBOX_ARCHIVE_NASA
+    - SANDBOX_SCRYFALL_DRAGONS
+    - SANDBOX_ICONIFY_WEAPONS
+  block_on_missing_required: false
+
+vfx:
+  particles_needed: []
+  notes: "No VFX in r1a smoke."
+
+scene_setup:
+  notes: |
+    Verification scene: assemble downloaded files into a flat
+    "Sandbox/R1aSmoke" content folder. No Flax-side scene setup;
+    this recipe only exercises the acquisition + library import path.

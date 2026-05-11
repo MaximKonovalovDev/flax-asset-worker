@@ -1380,12 +1380,13 @@ class TyperCliSmokeTests(unittest.TestCase):
     # ----------------------------------------------------------------- #
 
     def test_pack_validate_all_passes_all_shipped_recipes(self) -> None:
-        """v1.8.s19: all 4 shipped recipes validate cleanly in default mode."""
+        """v1.8.s19 (updated v1.11.s42 +r1a_smoke): all 5 shipped recipes validate."""
         result = self.runner.invoke(self.app, ["pack", "validate-all"])
         self.assertEqual(result.exit_code, 0)
-        # Both summary fields should show 4 = all pass
-        self.assertIn("pack_validate_all_total=4", result.stdout)
-        self.assertIn("pack_validate_all_passed=4", result.stdout)
+        # 5 recipes: primitive_tech, roman, sandbox/{one_pack,generator,r1a}_smoke
+        self.assertIn("pack_validate_all_total=5", result.stdout)
+        self.assertIn("pack_validate_all_passed=5", result.stdout)
+        self.assertIn("r1a_smoke", result.stdout)
         self.assertIn("pack_validate_all_failed=0", result.stdout)
 
     def test_pack_validate_all_strict_fails_on_warnings(self) -> None:
@@ -1407,8 +1408,8 @@ class TyperCliSmokeTests(unittest.TestCase):
         for k in ("total", "passed", "failed", "recipes", "aggregate_ok"):
             self.assertIn(k, parsed)
         self.assertTrue(parsed["aggregate_ok"])
-        self.assertEqual(parsed["total"], 4)
-        self.assertEqual(parsed["passed"], 4)
+        self.assertEqual(parsed["total"], 5)  # v1.11.s42 added r1a_smoke
+        self.assertEqual(parsed["passed"], 5)
 
     # ----------------------------------------------------------------- #
     # library bulk-install (v1.8.s16)
