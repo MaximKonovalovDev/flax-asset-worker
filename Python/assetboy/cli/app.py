@@ -13,15 +13,18 @@ from __future__ import annotations
 
 import typer
 
+from assetboy.cli import epic as _epic
 from assetboy.cli import fab as _fab
+from assetboy.cli import gen as _gen
 from assetboy.cli import import_cmd as _import_cmd
 from assetboy.cli import library as _library
+from assetboy.cli import unity as _unity
 
 app = typer.Typer(
     name="assetboy",
     help=(
-        "AssetBoy CLI (Path B Typer rewrite). 6 sub-apps once complete; "
-        "currently shipped: fab, library, import."
+        "AssetBoy CLI (Path B Typer rewrite). 6 sub-apps shipped: "
+        "fab, library, import, unity, epic, gen."
     ),
     add_completion=False,
     rich_markup_mode="rich",
@@ -40,6 +43,21 @@ app.add_typer(
     _import_cmd.app,
     name="import",
     help="Import a file (or watch a folder) into Flax content via FAW :8790.",
+)
+app.add_typer(
+    _unity.app,
+    name="unity",
+    help="Unity Asset Store auth + owned-package enumeration + download.",
+)
+app.add_typer(
+    _epic.app,
+    name="epic",
+    help="Epic Launcher vault + online catalog.",
+)
+app.add_typer(
+    _gen.app,
+    name="gen",
+    help="AI generation via local ComfyUI or stable-diffusion.cpp.",
 )
 
 

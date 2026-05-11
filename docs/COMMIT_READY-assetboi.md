@@ -237,3 +237,66 @@ python -m assetboy.cli import watch <folder> [--interval=5] [--server] [--json]
 - `docs/COMMIT_READY-assetboi.md` (this entry)
 
 **Next:** s6 — Phase 2 sub-apps (unity + epic + gen) wired to `FabHybridDownloader`-equivalent surfaces.
+
+---
+
+## Slice s6 — Day 6 Typer CLI Phase 2 (unity + epic + gen) (2026-05-10)
+
+**Status:** SHIPPED. 6 sub-apps + 22 total commands all rendering help + executing real calls.
+
+**What shipped:**
+
+1. **`Python/assetboy/cli/unity.py`** (NEW, 4 commands):
+   - `unity status` — DPAPI token state + decrypt check (no network)
+   - `unity list-installs` — detected Unity Editor installations
+   - `unity owned` — list Unity Asset Store owned packages (authenticated)
+   - `unity download <product_id>` — download single owned package
+
+2. **`Python/assetboy/cli/epic.py`** (NEW, 3 commands):
+   - `epic status` — local SQLite schema version + row count (no network)
+   - `epic inventory` — full local Fab/Marketplace vault inventory
+   - `epic catalog` — online Epic catalog query (auth-dependent)
+
+3. **`Python/assetboy/cli/gen.py`** (NEW, 4 commands across 2 nested sub-apps):
+   - `gen list-presets` — show all ComfyUI material presets + local-SD prompt templates
+   - `gen comfyui status` — :8188 health + GPU + free VRAM
+   - `gen comfyui run <workflow.json>` — submit + wait via /history
+   - `gen sd run <prompt>` — local stable-diffusion.cpp invocation (RTX 3050 6GB target)
+
+4. **`Python/assetboy/cli/app.py`** (MODIFIED) — wired the 3 new sub-apps into the Typer root.
+
+**Surface shipped (22 total Typer commands across 6 sub-apps):**
+```
+fab     auth, auth-status, download, library                        (4)
+library search, install, ready, audit                               (4)
+import  file, watch                                                 (2)
+unity   status, list-installs, owned, download                      (4)
+epic    status, inventory, catalog                                  (3)
+gen     list-presets, comfyui status, comfyui run, sd run           (4) ← 1 leaf + 2 nested apps
+        ----                                                        ---
+                                                                    22 commands
+```
+
+**Real end-to-end verification:**
+- `python -m assetboy.cli --help` → lists all 6 sub-apps cleanly.
+- `python -m assetboy.cli epic status` on operator machine: schema v0, 4 vault items, exit 0.
+- `python -m assetboy.cli gen comfyui status`: clean `connection_refused` error, exit 1 (ComfyUI not running, expected).
+- All 22 commands' `--help` render without Rich/cp1252 crash (no unicode dashes/arrows in any new file).
+- 26/26 canary tests still green.
+
+**Design notes:**
+- `gen` sub-app uses **nested Typer apps** (`comfyui` and `sd` under `gen`). Gives 3-level command tree: `gen comfyui status`, `gen sd run`. Future ai-image-gen (TripoSR / Hunyuan3D-2mini) hooks slot in as additional nested apps under `gen`.
+- All commands honour `--json` and `key=value` modes consistently.
+- All `download_unity_owned_package`-style heavy calls have 300s default timeouts.
+- Lazy imports inside commands — `--help` stays fast even though `unity_hub.py` is 1900 lines.
+
+**Files staged for commit:**
+- `Python/assetboy/cli/unity.py` (NEW, ~250 lines)
+- `Python/assetboy/cli/epic.py` (NEW, ~180 lines)
+- `Python/assetboy/cli/gen.py` (NEW, ~280 lines)
+- `Python/assetboy/cli/app.py` (MODIFIED, +3 sub-app registrations)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+**Path B status: s5 + s6 cli rewrite COMPLETE.** Total Typer surface area = 6 sub-apps, 22 commands, ~1,500 LOC (vs old cli.py's 8,500 LOC). Old cli.py still present in parallel; will be deleted in s10.
+
+**Next:** s7 — refactor `pack_pipeline.py` from 918 lines to ~350 lines via explicit Stage dataclass + dispatch table.
