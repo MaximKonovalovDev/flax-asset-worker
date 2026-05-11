@@ -1860,3 +1860,63 @@ The 7 new tests take ~7s of the total runtime because each spawns a subprocess. 
 - **Test growth path:** 26 → 172 → 187 → 190 → 214 → 217 → 220 → 227 → 234
 
 **Next:** loop continues per Rule 3. Possibilities: more recipe variants, runner enhancement (e.g. ComfyUI workflow JSON paths in recipe), or wait for operator feedback on the v1.5.0 + v1.5.1 deliverables.
+
+---
+
+## Slice v1.5.2.img2img-support — ComfyUI input_image in recipe (2026-05-11)
+
+**Status:** SHIPPED. **236 passed, 1 skipped, 0 failed** (was 234).
+
+**What shipped:**
+
+### 1. `acquisition_router._drive_comfyui` — input_image passthrough
+
+The underlying `comfyui_runner.run_comfyui_batch` already accepts an `input_image: str | Path | None` parameter for img2img workflows. The acquisition router wasn't passing it through. Fixed:
+
+**Recipe contract addition:**
+```yaml
+- id: SHARED_GEN_TEX_BARK_FROM_PHOTO
+  acquisition_method: generator
+  provider: comfyui
+  asset_kind: texture
+  prompts:
+    - id: stylized_bark
+      text: "stylized PBR bark texture, weathered"
+      input_image: "C:/concepts/photo.jpg"   # NEW: enables img2img
+      width: 1024
+      steps: 25
+```
+
+When `input_image` is `None` (default for plain string prompts or dict prompts without the field), the runner falls back to text-to-image — fully backwards compatible.
+
+### 2. Two new tests
+
+- `test_generator_comfyui_passes_input_image_for_img2img` — verifies the `input_image` field flows through to the runner kwargs.
+- `test_generator_comfyui_default_input_image_is_none` — verifies text-to-image still works without the field.
+
+### Why this matters
+
+Recipe authors can now route concept photos (iPhone shots of bark, moss, dirt, etc.) through ComfyUI img2img to produce stylized game-ready PBR textures. This is the workflow Shahrabi's Atlantic "Blender as a Pipeline Engine" piece described as the indie 2026 canon — and it's now expressible in a recipe.
+
+### Verification
+
+```
+=== full test suite ===
+236 passed, 1 skipped in 11.14s
+(was 234 at v1.5.1)
+```
+
+### Files staged for commit
+
+- `Python/assetboy/workflows/acquisition_router.py` (MODIFIED, +5 lines: input_image extraction from prompt dict, passthrough to runner)
+- `Tests/python/test_acquisition_router.py` (MODIFIED, +2 tests)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+### Turn metrics
+
+- **26 commits** since v1.1.0 tag this turn
+- **8 tags** (v1.1.0 ... v1.5.0)
+- **236 tests** passing (started at 26)
+- **-24,487 LOC** net
+
+**Next:** loop continues. Possibilities: more recipe variants, sd.cpp img2img passthrough (same pattern as v1.5.2 but for local_image runner), or HEARTBEAT rev 4.

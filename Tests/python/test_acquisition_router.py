@@ -314,6 +314,73 @@ class AcquisitionRouterTests(unittest.TestCase):
         second_call_kwargs = mock_run.call_args_list[1].kwargs
         self.assertEqual(second_call_kwargs["width"], 1024)
 
+    def test_generator_comfyui_passes_input_image_for_img2img(self) -> None:
+        """v1.5.2: recipes can specify per-prompt input_image for img2img workflows."""
+        fake_batch_result = [type("FakeRes", (), {"outputs": ["x.png"]})()]
+        with TemporaryDirectory() as tmp_dir:
+            with patch.dict(
+                "os.environ", {"ASSETBOY_FLAX_REPO_ROOT": tmp_dir}, clear=False
+            ):
+                with patch(
+                    "assetboy.execution.comfyui_runner.is_comfyui_running",
+                    return_value=True,
+                ):
+                    with patch(
+                        "assetboy.execution.comfyui_runner.run_comfyui_batch",
+                        return_value=fake_batch_result,
+                    ) as mock_run:
+                        result = self.acquire_source_dir(
+                            {
+                                "id": "TP_GEN_IMG2IMG",
+                                "acquisition_method": "generator",
+                                "provider": "comfyui",
+                                "asset_kind": "texture",
+                                "prompts": [
+                                    {
+                                        "id": "stylized_from_photo",
+                                        "text": "stylized PBR bark texture",
+                                        "input_image": "C:/concepts/photo.jpg",
+                                    },
+                                ],
+                            },
+                            {"recipe": {"game": "test"}},
+                            dry_run=False,
+                        )
+
+        self.assertTrue(result.ok)
+        self.assertEqual(mock_run.call_count, 1)
+        kw = mock_run.call_args.kwargs
+        self.assertEqual(kw["input_image"], "C:/concepts/photo.jpg")
+
+    def test_generator_comfyui_default_input_image_is_none(self) -> None:
+        """Plain text-to-image prompts default input_image=None (no img2img)."""
+        fake_batch_result = [type("FakeRes", (), {"outputs": ["x.png"]})()]
+        with TemporaryDirectory() as tmp_dir:
+            with patch.dict(
+                "os.environ", {"ASSETBOY_FLAX_REPO_ROOT": tmp_dir}, clear=False
+            ):
+                with patch(
+                    "assetboy.execution.comfyui_runner.is_comfyui_running",
+                    return_value=True,
+                ):
+                    with patch(
+                        "assetboy.execution.comfyui_runner.run_comfyui_batch",
+                        return_value=fake_batch_result,
+                    ) as mock_run:
+                        self.acquire_source_dir(
+                            {
+                                "id": "TP_GEN_T2I",
+                                "acquisition_method": "generator",
+                                "provider": "comfyui",
+                                "prompts": [{"text": "no input image here"}],
+                            },
+                            {"recipe": {"game": "test"}},
+                            dry_run=False,
+                        )
+
+        kw = mock_run.call_args.kwargs
+        self.assertIsNone(kw["input_image"])
+
     def test_generator_comfyui_no_prompts_returns_clean_error(self) -> None:
         with TemporaryDirectory() as tmp_dir:
             with patch.dict(

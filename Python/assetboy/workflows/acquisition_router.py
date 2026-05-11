@@ -563,12 +563,17 @@ def _drive_comfyui(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> Acqu
         if isinstance(prompt_entry, str):
             prompt_text = prompt_entry
             width, height, steps, cfg = 1024, 1024, 25, 7.0
+            input_image = None
         elif isinstance(prompt_entry, dict):
             prompt_text = str(prompt_entry.get("text") or prompt_entry.get("prompt") or "")
             width = int(prompt_entry.get("width", 1024))
             height = int(prompt_entry.get("height", 1024))
             steps = int(prompt_entry.get("steps", 25))
             cfg = float(prompt_entry.get("cfg", 7.0))
+            # v1.5.2: optional input_image enables img2img workflows
+            # (e.g. concept-photo -> game-ready texture). When None,
+            # the runner defaults to text-to-image.
+            input_image = prompt_entry.get("input_image")
         else:
             continue
         if not prompt_text:
@@ -584,6 +589,7 @@ def _drive_comfyui(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> Acqu
                 height=height,
                 steps=steps,
                 cfg=cfg,
+                input_image=input_image,
                 output_dir=out_dir,
             )
             results.extend(batch_results)
