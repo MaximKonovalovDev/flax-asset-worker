@@ -751,3 +751,87 @@ python -m assetboy.cli pack list-recipes  -> primitive_tech (9 packs) + roman_ar
 - `docs/COMMIT_READY-assetboi.md` (this entry)
 
 **Next:** s2.6c — rewire `pack_pipeline.py` to drop `flax_wrapper` dep (4 names needed: SUPPORTED_BULK_PROFILES, execute_register_packet, execute_run_bulk, execute_run_cleanup), then add flax_wrapper + execution_kit + 3 audio/category/cleanup example files to the s2.6d delete list.
+
+---
+
+## Slice s2.6c — Day 11 stub flax_wrapper._run_bulk_impl + drop 10 DEAD-runner imports (2026-05-11)
+
+**Status:** SHIPPED.
+
+**Honest reframe:** PATH_B_DAY11_PLAN said "rewire pack_pipeline.py to drop flax_wrapper dep + delete flax_wrapper". The smart reframe after analysis: **pack_pipeline genuinely needs `execute_run_cleanup` (calls KEEP blender_runner) + `execute_register_packet` (no DEAD deps) + `SUPPORTED_BULK_PROFILES` (constant) + `execute_run_bulk` (only fires when bulk_profile != None, which recipes never set)**. The DEAD-by-proxy chain comes from `_run_bulk_impl` (396 lines) which fans out to 10 DEAD runners. **Stub that one function; keep the 3 public functions + their helpers; flax_wrapper itself is no longer DEAD.**
+
+**What shipped:**
+
+1. **`Python/assetboy/workflows/flax_wrapper.py` — 10 DEAD-runner imports removed:**
+   - animationgpt_runner, dialogue_runner, font_runner, game_icons_runner, music_runner, museum_runner, playwright_runner (Mixamo), quaternius_runner, vfx_runner, vehicle_runner.
+   - All 10 had their preset data parked in s2 (`data/*_presets.yaml`); deletion is reversible.
+   - 6 KEEP runner imports preserved: ambientcg_runner, blender_runner, comfyui_runner, freesound_runner, kenney_runner, polyhaven_runner.
+   - Header comment block documents what was removed + why (with parked YAML pointers for future restoration).
+
+2. **`_run_bulk_impl` (396 lines) replaced with `NotImplementedError` stub** (~40 lines):
+   - New body raises `NotImplementedError("...retired in Path B v1.2...")` with operator-friendly migration note.
+   - Function signature preserved (same kwargs) so `execute_run_bulk` (which delegates here) still passes args through cleanly — the NotImplementedError surfaces at the right boundary.
+   - Recipes don't set `bulk_profile`, so this stub is **unreachable in production** today (pack_pipeline `:75` guard `if normalized_profile and normalized_profile not in SUPPORTED_BULK_PROFILES: raise` was a config validator, not an entry to bulk dispatch).
+   - File shrunk from 972 lines to 610 lines (-362 lines).
+
+3. **Helpers + 2 working public functions preserved:**
+   - `execute_run_cleanup` + `_run_cleanup_impl` (41 lines, calls KEEP blender_runner only).
+   - `execute_register_packet` + `_register_packet_impl` (183 lines, calls library + provenance helpers, no DEAD).
+   - `execute_get_job_status`, `_execute_command`, `_serialize_result`, `_matches_pack`, `_pack_output_dir`, `_expected_publish_dir`, `_profile_lane`, `_job_state_path`, `_write_job_state`, `_read_job_state`, `_tail`, `_utc_now`.
+   - All 4 profile constants (DIRECT_URL_PROFILES, MANUAL_BROWSER_PROFILES, GENERATOR_PROFILES, SUPPORTED_BULK_PROFILES).
+
+**Verification:**
+
+```
+=== flax_wrapper imports without DEAD deps ===
+module loaded
+SUPPORTED_BULK_PROFILES: {17 names}     (cosmetic: still lists DEAD-runner-named profiles; defer to s2.6d cleanup)
+execute_run_bulk: callable
+execute_run_cleanup: callable
+execute_register_packet: callable
+stub correctly raises: _run_bulk_impl is retired in Path B v1.2...
+
+=== pack_pipeline still imports ===
+OK
+
+=== cli_legacy still imports (uses 4 names from flax_wrapper; all preserved) ===
+OK
+
+=== ast.parse flax_wrapper ===
+OK, lines: 610  (was 972; -362)
+
+=== canary tests ===
+26 passed in 2.11s
+```
+
+**Unblocks for s2.6d (bulk delete):**
+
+Direct unblocks (KEEP files no longer reference these DEAD modules):
+- `execution/animationgpt_runner.py` (DEAD)
+- `execution/dialogue_runner.py` (DEAD)
+- `execution/font_runner.py` (DEAD)
+- `execution/game_icons_runner.py` (DEAD)
+- `execution/music_runner.py` (DEAD)
+- `execution/museum_runner.py` (DEAD)
+- `execution/playwright_runner.py` (DEAD; browser_automation + freesound_runner neutered in s2.6b)
+- `execution/quaternius_runner.py` (DEAD)
+- `execution/vfx_runner.py` (DEAD)
+- `execution/vehicle_runner.py` (DEAD)
+- `providers/ai_bridge.py` (DEAD; s2.6a + s2.6b)
+- `providers/generator.py` (DEAD; s2.6a)
+- `providers/runbooks.py` (DEAD; s2.6a + s2.6b)
+
+Workflow examples still referencing DEAD code (verify before delete):
+- `workflows/execution_kit.py` (imports ai_bridge + generator)
+- `workflows/pack_family_plan.py` (imports ai_bridge + engine_bridge + generator)
+- `workflows/audio_examples.py` (imports ai_bridge)
+- `workflows/category_examples.py` (imports ai_bridge + engine_bridge + generator)
+- `workflows/cleanup_examples.py` (need to verify imports)
+- `workflows/roman_first_playable.py` (data in data/roman_first_playable_specs.yaml; still imported by cli_legacy + blender_runner — needs verify)
+- `workflows/roman_blockers.py`, `roman_launchers.py`, `roman_source_presets.py` (Roman examples; cli_legacy refs)
+
+**Files staged for commit:**
+- `Python/assetboy/workflows/flax_wrapper.py` (MODIFIED, -362 lines net; 10 imports removed + 396-line _run_bulk_impl stubbed)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+**Next:** s2.6d — bulk delete the 13 confirmed-orphaned DEAD files (10 execution runners + ai_bridge + generator + runbooks). Workflows deferred to a follow-up sub-slice since cli_legacy still references them.

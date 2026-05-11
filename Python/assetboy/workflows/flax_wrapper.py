@@ -10,27 +10,35 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
+# Path B s2.6c (2026-05-11): the 10 DEAD-runner imports below have been
+# removed because v1.2 retires the bulk-profile dispatch path (_run_bulk_impl).
+# Recipes drive pack runs directly via pack_pipeline.execute_prepare_pack; the
+# bulk path will be re-introduced by the s11 acquisition router with a clean
+# contract instead of the kitchen-sink fan-out _run_bulk_impl used to do.
+#
+# Removed:
+#   - animationgpt_runner.run_animationgpt_presets         (DEAD; data in data/animationgpt_presets.yaml)
+#   - dialogue_runner.DIALOGUE_PRESETS, run_dialogue_presets (DEAD; data in data/dialogue_presets.yaml)
+#   - font_runner.FONT_PRESETS, run_font_batch              (DEAD; data in data/font_presets.yaml)
+#   - game_icons_runner.run_game_icons                      (DEAD; data in data/game_icons_presets.yaml)
+#   - music_runner.ROMAN_MUSIC_PRESETS, run_music_batch     (DEAD; data in data/music_presets.yaml)
+#   - museum_runner.MUSEUM_PRESETS, run_museum_batch        (DEAD; data in data/museum_presets.yaml)
+#   - playwright_runner._MIXAMO_CHARACTER_PRESETS, run_mixamo_batch (DEAD)
+#   - quaternius_runner.QUATERNIUS_PRESETS, run_quaternius_batch    (DEAD)
+#   - vfx_runner.VFX_PRESETS, run_vfx_batch                          (DEAD)
+#   - vehicle_runner.VEHICLE_PRESETS, run_vehicle_batch              (DEAD)
+
 from assetboy.execution.ambientcg_runner import AMBIENTCG_PRESETS, run_ambientcg_pack
-from assetboy.execution.animationgpt_runner import run_animationgpt_presets
 from assetboy.execution.blender_runner import run_blender_cleanup
 from assetboy.execution.comfyui_runner import ROMAN_MATERIAL_PRESETS, run_comfyui_batch
-from assetboy.execution.dialogue_runner import DIALOGUE_PRESETS, run_dialogue_presets
-from assetboy.execution.font_runner import FONT_PRESETS, run_font_batch
 from assetboy.execution.freesound_runner import ROMAN_SFX_PRESETS, run_freesound_batch
-from assetboy.execution.game_icons_runner import run_game_icons
 from assetboy.execution.kenney_runner import KENNEY_PRESETS, run_kenney_batch
-from assetboy.execution.music_runner import ROMAN_MUSIC_PRESETS, run_music_batch
-from assetboy.execution.museum_runner import MUSEUM_PRESETS, run_museum_batch
-from assetboy.execution.playwright_runner import _MIXAMO_CHARACTER_PRESETS, run_mixamo_batch
 from assetboy.execution.polyhaven_runner import (
     ROMAN_PRESETS,
     SKYBOX_PRESETS,
     TERRAIN_PRESETS,
     run_polyhaven_batch,
 )
-from assetboy.execution.quaternius_runner import QUATERNIUS_PRESETS, run_quaternius_batch
-from assetboy.execution.vfx_runner import VFX_PRESETS, run_vfx_batch
-from assetboy.execution.vehicle_runner import VEHICLE_PRESETS, run_vehicle_batch
 from assetboy.library.asset_metadata import (
     build_asset_metadata,
     load_generator_registry,
@@ -250,399 +258,37 @@ def _run_bulk_impl(
     *,
     profile: str,
     game_scope: str,
-    pack_ids: Sequence[str] | None,
-    output_dir: str | Path | None,
-    tags_filter: Sequence[str] | None,
-    count: int,
-    resolution: str,
-    category_filter: str | None,
-    dry_run: bool,
-    continue_on_error: bool,
-) -> dict[str, Any]:
-    normalized_profile = str(profile or "").strip().lower()
-    if normalized_profile not in SUPPORTED_BULK_PROFILES:
-        allowed = ", ".join(sorted(SUPPORTED_BULK_PROFILES))
-        raise ValueError(f"Unsupported bulk profile '{profile}'. Allowed: {allowed}.")
+    pack_ids=None,
+    output_dir=None,
+    tags_filter=None,
+    count: int = 1,
+    resolution: str = "",
+    category_filter=None,
+    dry_run: bool = False,
+    continue_on_error: bool = False,
+) -> dict:
+    """Path B s2.6c (2026-05-11): _run_bulk_impl body retired.
 
-    requested_pack_ids = {item.strip() for item in (pack_ids or []) if str(item).strip()}
-    requested_tags = [item.strip() for item in (tags_filter or []) if str(item).strip()]
-    output_root = Path(output_dir).resolve() if output_dir else None
-    profile_lane = _profile_lane(normalized_profile)
+    The original 396-line implementation fanned out to 10 DEAD execution
+    runners (animationgpt, dialogue, font, game_icons, music, museum,
+    mixamo, quaternius, vfx, vehicle). With those runners removed in
+    s2.6d, the bulk-profile dispatch path is no longer functional.
 
-    results: list[dict[str, Any]] = []
+    Recipes drive pack runs directly via pack_pipeline.execute_prepare_pack
+    today. v1.2 s11 (pre-pack acquisition router) will reintroduce bulk
+    dispatch with a clean contract instead of the kitchen-sink fan-out
+    this function used to do.
 
-    def _record_failure(pack_id: str, exc: Exception) -> None:
-        results.append(
-            _serialize_result(
-                {
-                    "pack_id": pack_id,
-                    "lane": profile_lane,
-                    "status": "failed",
-                    "error": str(exc),
-                    "error_type": type(exc).__name__,
-                },
-                game_scope=game_scope,
-                fallback_lane=profile_lane,
-            )
-        )
-
-    def _run_one(pack_id: str, runner):
-        try:
-            return runner()
-        except Exception as exc:  # noqa: BLE001
-            if not continue_on_error:
-                raise
-            _record_failure(pack_id, exc)
-            return None
-
-    def _run_many(pack_id: str, runner):
-        try:
-            return runner()
-        except Exception as exc:  # noqa: BLE001
-            if not continue_on_error:
-                raise
-            _record_failure(pack_id, exc)
-            return []
-
-    if normalized_profile == "quaternius_presets":
-        for pack_id, url, _, preset_tags in QUATERNIUS_PRESETS:
-            if not _matches_pack(pack_id, requested_pack_ids, preset_tags, requested_tags):
-                continue
-            result = _run_one(
-                pack_id,
-                lambda: run_quaternius_batch(
-                    pack_id=pack_id,
-                    source_url=url,
-                    game_scope=game_scope,
-                    output_dir=_pack_output_dir(output_root, pack_id),
-                    dry_run=dry_run,
-                ),
-            )
-            if result is None:
-                continue
-            results.append(_serialize_result(result, game_scope=game_scope, fallback_lane=profile_lane))
-    elif normalized_profile == "ambientcg_presets":
-        for pack_id, desc, preset_resolution, asset_ids, preset_tags in AMBIENTCG_PRESETS:
-            if not _matches_pack(pack_id, requested_pack_ids, preset_tags, requested_tags):
-                continue
-            result = _run_one(
-                pack_id,
-                lambda: run_ambientcg_pack(
-                    pack_id=pack_id,
-                    description=desc,
-                    asset_ids=asset_ids,
-                    resolution=resolution.upper() if resolution else preset_resolution,
-                    game_scope=game_scope,
-                    output_dir=_pack_output_dir(output_root, pack_id),
-                    dry_run=dry_run,
-                ),
-            )
-            if result is None:
-                continue
-            results.append(_serialize_result(result, game_scope=game_scope, fallback_lane=profile_lane))
-    elif normalized_profile == "kenney_presets":
-        for pack_id, url, _, preset_tags in KENNEY_PRESETS:
-            if not _matches_pack(pack_id, requested_pack_ids, preset_tags, requested_tags):
-                continue
-            result = _run_one(
-                pack_id,
-                lambda: run_kenney_batch(
-                    pack_id=pack_id,
-                    source_url=url,
-                    game_scope=game_scope,
-                    output_dir=_pack_output_dir(output_root, pack_id),
-                    dry_run=dry_run,
-                ),
-            )
-            if result is None:
-                continue
-            results.append(_serialize_result(result, game_scope=game_scope, fallback_lane=profile_lane))
-    elif normalized_profile == "game_icons":
-        result = run_game_icons(
-            output_dir=output_root,
-            category_filter=category_filter,
-            game_scope=game_scope,
-            dry_run=dry_run,
-        )
-        pack_id = f"SHARED_GAMEICONS_{(category_filter or 'FULL').upper()}_01"
-        results.append(_serialize_result(result, game_scope=game_scope, fallback_pack_id=pack_id, fallback_lane=profile_lane))
-    elif normalized_profile == "font_presets":
-        for pack_id, url, _, preset_tags in FONT_PRESETS:
-            if not _matches_pack(pack_id, requested_pack_ids, preset_tags, requested_tags):
-                continue
-            result = _run_one(
-                pack_id,
-                lambda: run_font_batch(
-                    pack_id=pack_id,
-                    source_url=url,
-                    game_scope=game_scope,
-                    output_dir=_pack_output_dir(output_root, pack_id),
-                    dry_run=dry_run,
-                ),
-            )
-            if result is None:
-                continue
-            results.append(_serialize_result(result, game_scope=game_scope, fallback_lane=profile_lane))
-    elif normalized_profile == "vfx_presets":
-        for pack_id, url, _, preset_tags in VFX_PRESETS:
-            if not _matches_pack(pack_id, requested_pack_ids, preset_tags, requested_tags):
-                continue
-            result = _run_one(
-                pack_id,
-                lambda: run_vfx_batch(
-                    pack_id=pack_id,
-                    source_url=url,
-                    game_scope=game_scope,
-                    output_dir=_pack_output_dir(output_root, pack_id),
-                    dry_run=dry_run,
-                ),
-            )
-            if result is None:
-                continue
-            results.append(_serialize_result(result, game_scope=game_scope, fallback_lane=profile_lane))
-    elif normalized_profile == "museum_presets":
-        for pack_id, url, _, preset_tags, license_name, download_type in MUSEUM_PRESETS:
-            if not _matches_pack(pack_id, requested_pack_ids, preset_tags, requested_tags):
-                continue
-            result = run_museum_batch(
-                pack_id=pack_id,
-                source_url=url,
-                license_=license_name,
-                download_type=download_type,
-                game_scope=game_scope,
-                output_dir=_pack_output_dir(output_root, pack_id),
-                dry_run=dry_run,
-            )
-            results.append(_serialize_result(result, game_scope=game_scope, fallback_lane=profile_lane))
-    elif normalized_profile == "vehicle_presets":
-        for pack_id, url, _, preset_tags in VEHICLE_PRESETS:
-            if not _matches_pack(pack_id, requested_pack_ids, preset_tags, requested_tags):
-                continue
-            result = _run_one(
-                pack_id,
-                lambda: run_vehicle_batch(
-                    pack_id=pack_id,
-                    source_url=url,
-                    game_scope=game_scope,
-                    output_dir=_pack_output_dir(output_root, pack_id),
-                    dry_run=dry_run,
-                ),
-            )
-            if result is None:
-                continue
-            results.append(_serialize_result(result, game_scope=game_scope, fallback_lane=profile_lane))
-    elif normalized_profile == "polyhaven_roman":
-        for preset in ROMAN_PRESETS:
-            pack_id = str(preset["pack_id"])
-            preset_tags = [str(item) for item in preset.get("tags", [])]
-            if not _matches_pack(pack_id, requested_pack_ids, preset_tags, requested_tags):
-                continue
-            batch_results = _run_many(
-                pack_id,
-                lambda: run_polyhaven_batch(
-                    category=str(preset["category"]),
-                    search=str(preset["search"]),
-                    pack_id=pack_id,
-                    count=count,
-                    resolution=resolution,
-                    output_dir=_pack_output_dir(output_root, pack_id),
-                    dry_run=dry_run,
-                ),
-            )
-            results.extend(_serialize_result(item, game_scope=game_scope, fallback_lane=profile_lane) for item in batch_results)
-    elif normalized_profile == "skybox_presets":
-        for preset in SKYBOX_PRESETS:
-            pack_id = str(preset["pack_id"])
-            preset_tags = [str(item) for item in preset.get("tags", [])]
-            if not _matches_pack(pack_id, requested_pack_ids, preset_tags, requested_tags):
-                continue
-            batch_results = _run_many(
-                pack_id,
-                lambda: run_polyhaven_batch(
-                    category=str(preset["category"]),
-                    search=str(preset["search"]),
-                    pack_id=pack_id,
-                    count=count,
-                    resolution=resolution,
-                    output_dir=_pack_output_dir(output_root, pack_id),
-                    dry_run=dry_run,
-                ),
-            )
-            results.extend(_serialize_result(item, game_scope=game_scope, fallback_lane=profile_lane) for item in batch_results)
-    elif normalized_profile == "terrain_presets":
-        for preset in TERRAIN_PRESETS:
-            pack_id = str(preset["pack_id"])
-            preset_tags = [str(item) for item in preset.get("tags", [])]
-            if not _matches_pack(pack_id, requested_pack_ids, preset_tags, requested_tags):
-                continue
-            batch_results = _run_many(
-                pack_id,
-                lambda: run_polyhaven_batch(
-                    category=str(preset["category"]),
-                    search=str(preset["search"]),
-                    pack_id=pack_id,
-                    count=count,
-                    resolution=resolution,
-                    output_dir=_pack_output_dir(output_root, pack_id),
-                    dry_run=dry_run,
-                ),
-            )
-            results.extend(_serialize_result(item, game_scope=game_scope, fallback_lane=profile_lane) for item in batch_results)
-    elif normalized_profile == "mixamo_presets":
-        for pack_id, preset in _MIXAMO_CHARACTER_PRESETS.items():
-            preset_tags = [str(item).strip().lower() for item in preset.get("search_terms", ())]
-            preset_tags.append(str(preset.get("type", "character")).strip().lower())
-            if not _matches_pack(pack_id, requested_pack_ids, preset_tags, requested_tags):
-                continue
-            result_list = _run_many(
-                pack_id,
-                lambda: run_mixamo_batch(
-                    pack_id=pack_id,
-                    asset_type=str(preset.get("type", "character")),
-                    output_dir=_pack_output_dir(output_root, pack_id),
-                    dry_run=dry_run,
-                    use_presets=False,
-                ),
-            )
-            results.extend(_serialize_result(item, game_scope=game_scope, fallback_lane=profile_lane) for item in result_list)
-    elif normalized_profile == "freesound_presets":
-        for preset in ROMAN_SFX_PRESETS:
-            pack_id = str(preset["pack_id"])
-            preset_tags = [str(item).strip().lower() for item in preset.get("tags", [])]
-            if not _matches_pack(pack_id, requested_pack_ids, preset_tags, requested_tags):
-                continue
-            result_list = _run_many(
-                pack_id,
-                lambda: run_freesound_batch(
-                    search=str(preset["search"]),
-                    pack_id=pack_id,
-                    count=count,
-                    output_dir=_pack_output_dir(output_root, pack_id),
-                    dry_run=dry_run,
-                    use_presets=False,
-                ),
-            )
-            results.extend(_serialize_result(item, game_scope=game_scope, fallback_lane=profile_lane) for item in result_list)
-    elif normalized_profile == "music_presets":
-        for preset in ROMAN_MUSIC_PRESETS:
-            pack_id = str(preset["pack_id"])
-            preset_tags = [str(item).strip().lower() for item in preset.get("tags", [])]
-            preset_tags.append(str(preset.get("source", "")).strip().lower())
-            if not _matches_pack(pack_id, requested_pack_ids, preset_tags, requested_tags):
-                continue
-            result_list = _run_many(
-                pack_id,
-                lambda: run_music_batch(
-                    source=str(preset.get("source", "suno")),
-                    prompt=str(preset.get("prompt", "")) or None,
-                    search=str(preset.get("search", "")) or None,
-                    pack_id=pack_id,
-                    count=count,
-                    output_dir=_pack_output_dir(output_root, pack_id),
-                    dry_run=dry_run,
-                    use_presets=False,
-                ),
-            )
-            results.extend(_serialize_result(item, game_scope=game_scope, fallback_lane=profile_lane) for item in result_list)
-    elif normalized_profile == "animationgpt_presets":
-        if len(requested_pack_ids) > 1:
-            raise ValueError("animationgpt_presets supports at most one pack_id override.")
-        override_pack_id = next(iter(requested_pack_ids), None)
-        result = _run_one(
-            override_pack_id or "animationgpt_presets",
-            lambda: run_animationgpt_presets(
-                game_scope=game_scope,
-                pack_id=override_pack_id,
-                tags_filter=requested_tags or None,
-                output_dir=output_root,
-                dry_run=dry_run,
-            ),
-        )
-        if result is not None:
-            results.append(_serialize_result(result, game_scope=game_scope, fallback_lane=profile_lane))
-    elif normalized_profile == "comfyui_presets":
-        for preset in ROMAN_MATERIAL_PRESETS:
-            pack_id = str(preset["pack_id"])
-            preset_tags = [str(item).strip().lower() for item in str(preset.get("prompt", "")).split()]
-            preset_tags.append(str(preset.get("type", "texture")).strip().lower())
-            if not _matches_pack(pack_id, requested_pack_ids, preset_tags, requested_tags):
-                continue
-            result_list = _run_many(
-                pack_id,
-                lambda: run_comfyui_batch(
-                    prompt=str(preset["prompt"]),
-                    pack_id=pack_id,
-                    asset_type=str(preset.get("type", "texture")),
-                    output_dir=_pack_output_dir(output_root, pack_id),
-                    dry_run=dry_run,
-                    use_presets=False,
-                ),
-            )
-            results.extend(_serialize_result(item, game_scope=game_scope, fallback_lane=profile_lane) for item in result_list)
-    elif normalized_profile == "dialogue_presets":
-        voice_filter = requested_tags[0] if len(requested_tags) == 1 and requested_tags[0] in {"announcer", "hero", "male_narrator", "female_narrator"} else None
-        normalized_line_ids = {line_id for line_id, _, _, _ in DIALOGUE_PRESETS}
-        unknown_pack_ids = requested_pack_ids - normalized_line_ids
-        if unknown_pack_ids:
-            raise ValueError(
-                "dialogue_presets pack_ids must be dialogue line ids. Unknown ids: "
-                + ", ".join(sorted(unknown_pack_ids))
-            )
-        result_list = _run_many(
-            "dialogue_presets",
-            lambda: run_dialogue_presets(
-                game_scope=game_scope,
-                dry_run=dry_run,
-                voice_type_filter=voice_filter,
-                tags_filter=requested_tags or None,
-                output_dir=output_root,
-            ),
-        )
-        for item in result_list:
-            if requested_pack_ids and item.line_id not in requested_pack_ids:
-                continue
-            results.append(
-                _serialize_result(
-                    {
-                        "pack_id": item.line_id,
-                        "voice_type": item.voice_type,
-                        "output_dir": str(item.output_path.parent),
-                        "provenance_path": str(item.provenance_path),
-                        "dry_run": item.dry_run,
-                    },
-                    game_scope=game_scope,
-                    fallback_lane=profile_lane,
-                )
-            )
-
-    if not results:
-        raise ValueError("No AssetBoy presets matched the requested pack_ids/tags_filter/profile.")
-
-    matched_pack_ids = sorted({str(item.get("pack_id", "")).strip() for item in results if str(item.get("pack_id", "")).strip()})
-    expected_publish_paths = [str(_expected_publish_dir(game_scope, pack_id)) for pack_id in matched_pack_ids]
-    expected_destination_paths = sorted(
-        {
-            str(resolve_lane_destination(profile_lane, pack_id=pack_id, game_scope=game_scope))
-            for pack_id in matched_pack_ids
-        }
-    ) if matched_pack_ids else [str(resolve_lane_destination(profile_lane, game_scope=game_scope))]
-
-    return {
-        "profile": normalized_profile,
-        "lane": profile_lane,
-        "game_scope": game_scope,
-        "requested_pack_ids": sorted(requested_pack_ids),
-        "pack_ids": matched_pack_ids,
-        "artifact_count": len(results),
-        "successful_artifact_count": sum(1 for item in results if item.get("status") != "failed"),
-        "failed_artifact_count": sum(1 for item in results if item.get("status") == "failed"),
-        "continue_on_error": continue_on_error,
-        "artifacts": results,
-        "expected_publish_paths": expected_publish_paths,
-        "expected_destination_paths": expected_destination_paths,
-        "dry_run": dry_run,
-    }
-
+    Until then: calling _run_bulk_impl raises NotImplementedError. The
+    pack_pipeline conditional at line ~120 (only fires if bulk_profile is
+    supplied to execute_prepare_pack) is the gate; recipes don't set
+    bulk_profile so this is unreachable in production today.
+    """
+    raise NotImplementedError(
+        f"_run_bulk_impl is retired in Path B v1.2 (profile={profile!r}). "
+        "Use recipe-driven pack runs via pack_pipeline.execute_prepare_pack_dispatched "
+        "or wait for v1.2 s11 acquisition router. See docs/PATH_B_DAY11_PLAN.md."
+    )
 
 def _run_cleanup_impl(
     *,
