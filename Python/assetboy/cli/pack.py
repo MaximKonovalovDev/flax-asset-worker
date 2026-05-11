@@ -56,11 +56,29 @@ def _recipes_dir() -> Path:
 
 @app.command("list-recipes")
 def list_recipes_cmd(
+    filter_: Annotated[
+        list[str],
+        typer.Option(
+            "--filter",
+            help=(
+                "Filter by recipe metadata: 'genre:rpg', 'theme:fantasy', "
+                "'style:lowpoly', 'tags:smoke-test'. Repeatable; all filters "
+                "AND together. Matches against string OR list-entry fields."
+            ),
+        ),
+    ] = None,
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
 ) -> None:
-    """List available YAML recipes under recipes/<game>/<*>.yaml."""
+    """List available YAML recipes under recipes/<game>/<*>.yaml.
+
+    v1.11.s53: supports --filter for metadata-driven discovery.
+    Examples:
+      pack list-recipes --filter genre:rpg
+      pack list-recipes --filter theme:fantasy --filter style:lowpoly
+      pack list-recipes --filter tags:smoke-test --json
+    """
     recipes_root = _recipes_dir()
     if not recipes_root.exists():
         msg = f"recipes_dir_not_found: {recipes_root}"
@@ -71,40 +89,100 @@ def list_recipes_cmd(
             print(f"pack_list_recipes_error={msg}")
         raise typer.Exit(code=1)
 
-    entries: list[dict[str, str]] = []
+    # Parse --filter 'field:value' pairs.
+    parsed_filters: list[tuple[str, str]] = []
+    for f in (filter_ or []):
+        if ":" not in f:
+            msg = f"bad_filter_shape: {f!r} (expected 'field:value')"
+            if json_out:
+                json.dump({"error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"pack_list_recipes_error={msg}")
+            raise typer.Exit(code=1)
+        field_name, _, value = f.partition(":")
+        parsed_filters.append((field_name.strip(), value.strip()))
+
+    def _matches_filter(recipe: dict, field_name: str, value: str) -> bool:
+        """True if recipe[field] matches value (string equals OR contains list entry)."""
+        field_val = recipe.get(field_name)
+        if field_val is None:
+            return False
+        if isinstance(field_val, str):
+            return field_val.strip().lower() == value.strip().lower()
+        if isinstance(field_val, list):
+            return any(
+                isinstance(e, str) and e.strip().lower() == value.strip().lower()
+                for e in field_val
+            )
+        return False
+
+    entries: list[dict] = []
     for game_dir in sorted(p for p in recipes_root.iterdir() if p.is_dir()):
         for recipe_yaml in sorted(game_dir.glob("*.yaml")):
             try:
                 doc = _load_recipe(recipe_yaml)
-                rid = (doc.get("recipe") or {}).get("id", "?")
-                game = (doc.get("recipe") or {}).get("game", game_dir.name)
+                recipe = doc.get("recipe") or {}
+                rid = recipe.get("id", "?")
+                game = recipe.get("game", game_dir.name)
                 pack_count = len((doc.get("packs") or []))
-            except Exception as exc:
-                rid = "?"
-                game = game_dir.name
-                pack_count = -1
-                _ = exc  # silenced; surfaced as "?" recipe id
-            entries.append(
-                {
+                # Apply --filter (AND across all filters).
+                if parsed_filters:
+                    if not all(
+                        _matches_filter(recipe, fn, fv)
+                        for fn, fv in parsed_filters
+                    ):
+                        continue
+                # Capture metadata for output too.
+                entry_data: dict = {
                     "path": str(recipe_yaml.relative_to(recipes_root)),
                     "game": game,
                     "recipe_id": rid,
                     "pack_count": pack_count,
                 }
-            )
+                for meta_key in ("genre", "theme", "style", "tags"):
+                    if meta_key in recipe:
+                        entry_data[meta_key] = recipe[meta_key]
+                entries.append(entry_data)
+            except Exception as exc:
+                # Skip malformed recipes silently in list (validate-all reports them).
+                _ = exc
+                if parsed_filters:
+                    continue
+                entries.append({
+                    "path": str(recipe_yaml.relative_to(recipes_root)),
+                    "game": game_dir.name,
+                    "recipe_id": "?",
+                    "pack_count": -1,
+                })
 
     if json_out:
-        json.dump({"recipes": entries, "count": len(entries)}, sys.stdout, indent=2)
+        out = {
+            "recipes": entries,
+            "count": len(entries),
+            "filters_applied": [f"{fn}:{fv}" for fn, fv in parsed_filters],
+        }
+        json.dump(out, sys.stdout, indent=2)
         sys.stdout.write("\n")
     else:
         print(f"pack_list_recipes_count={len(entries)}")
+        if parsed_filters:
+            print(f"pack_list_recipes_filters={','.join(f'{fn}:{fv}' for fn, fv in parsed_filters)}")
         for idx, e in enumerate(entries, start=1):
+            extras: list[str] = []
+            for k in ("genre", "theme", "style", "tags"):
+                if k in e:
+                    v = e[k]
+                    if isinstance(v, list):
+                        v = ",".join(v)
+                    extras.append(f"{k}={v}")
+            extras_str = "  " + "  ".join(extras) if extras else ""
             print(
                 f"pack_list_recipes_entry={idx}  "
                 f"game={e['game']}  "
                 f"id={e['recipe_id']}  "
                 f"packs={e['pack_count']}  "
-                f"path={e['path']}"
+                f"path={e['path']}{extras_str}"
             )
 
 

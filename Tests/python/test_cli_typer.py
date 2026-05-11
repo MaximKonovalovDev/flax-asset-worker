@@ -108,6 +108,74 @@ class TyperCliSmokeTests(unittest.TestCase):
         )
 
     # ----------------------------------------------------------------- #
+    # pack list-recipes --filter (v1.11.s53)
+    # ----------------------------------------------------------------- #
+
+    def test_pack_list_recipes_filter_by_tags(self) -> None:
+        """v1.11.s53: --filter tags:smoke-test should match r1a_smoke only."""
+        result = self.runner.invoke(
+            self.app, ["pack", "list-recipes", "--filter", "tags:smoke-test"],
+        )
+        self.assertEqual(result.exit_code, 0, f"stdout: {result.stdout}")
+        self.assertIn("r1a_smoke", result.stdout)
+        # Should NOT include primitive_tech or roman (they have no smoke-test tag)
+        self.assertNotIn("primitive_tech", result.stdout)
+        self.assertNotIn("roman_arena", result.stdout)
+
+    def test_pack_list_recipes_filter_by_genre(self) -> None:
+        """--filter genre:reference_collection -> only r1a_smoke."""
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "list-recipes", "--filter", "genre:reference_collection"],
+        )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("r1a_smoke", result.stdout)
+
+    def test_pack_list_recipes_multiple_filters_and(self) -> None:
+        """Multiple --filter values AND together; both must match."""
+        result = self.runner.invoke(
+            self.app,
+            [
+                "pack", "list-recipes",
+                "--filter", "genre:reference_collection",
+                "--filter", "theme:fantasy",
+            ],
+        )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("r1a_smoke", result.stdout)
+
+    def test_pack_list_recipes_filter_no_match_returns_zero_count(self) -> None:
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "list-recipes", "--filter", "genre:nonexistent_genre_XYZ"],
+        )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("pack_list_recipes_count=0", result.stdout)
+
+    def test_pack_list_recipes_filter_bad_shape_errors(self) -> None:
+        """--filter 'malformed' (no colon) -> clean error."""
+        result = self.runner.invoke(
+            self.app, ["pack", "list-recipes", "--filter", "malformed_no_colon"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("bad_filter_shape", result.stdout)
+
+    def test_pack_list_recipes_json_includes_metadata(self) -> None:
+        """JSON output for r1a_smoke must include genre/theme/style/tags."""
+        result = self.runner.invoke(
+            self.app, ["pack", "list-recipes", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout)
+        r1a = [r for r in data["recipes"] if "r1a_smoke" in r["path"]]
+        self.assertEqual(len(r1a), 1)
+        entry = r1a[0]
+        self.assertEqual(entry["genre"], "reference_collection")
+        self.assertIn("historical", entry["theme"])
+        self.assertIn("smoke-test", entry["tags"])
+
+    # ----------------------------------------------------------------- #
     # Sample real call: fab auth-status (no network; reads disk only)
     # ----------------------------------------------------------------- #
 
