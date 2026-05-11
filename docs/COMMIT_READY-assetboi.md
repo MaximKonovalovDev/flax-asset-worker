@@ -1920,3 +1920,47 @@ Recipe authors can now route concept photos (iPhone shots of bark, moss, dirt, e
 - **-24,487 LOC** net
 
 **Next:** loop continues. Possibilities: more recipe variants, sd.cpp img2img passthrough (same pattern as v1.5.2 but for local_image runner), or HEARTBEAT rev 4.
+
+---
+
+## Slice v1.5.3.canary-json-contract — protect canary HTTP contract (2026-05-11)
+
+**Status:** SHIPPED. **238 passed, 1 skipped, 0 failed** (was 236).
+
+**What shipped:**
+
+### 1. `CanaryJsonContractTests` class in `test_cli_json_contract.py` (+2 tests)
+
+Mirrors the v1.5.1 pattern but for the canary's JSON output (which is what `CanaryRoutes.HandleStatusAsync` reads from disk via `state/canary/canary_status.json`):
+
+- `test_canary_single_probe_json_emits_parseable_dict` — `canary --probe polyhaven --json` emits `{polyhaven: {ok, ms, ...}}` shape.
+- `test_canary_full_run_json_emits_overall_state` — `canary --json` emits `{timestamp, elapsed_ms, overall, probes: {...}}` shape with each probe having `ok` + `ms` fields. **This is the exact shape the C# CanaryRoutes returns from HTTP**, so if the canary's --json output ever drifts, this test catches it before the C# side starts returning malformed responses.
+
+### 2. Subprocess helper for canary module
+
+`CanaryJsonContractTests._run_canary()` mirrors `_run_cli()` but spawns `python -m assetboy.canary` instead. Same env inheritance + PYTHONPATH override pattern.
+
+### Coverage map post-v1.5.3
+
+| C# server route | Python --json source | Regression test |
+|---|---|---|
+| `POST /api/v1/recipes/list` | `pack list-recipes --json` | v1.5.1 ✅ |
+| `POST /api/v1/recipes/run` | `pack from-recipe --json` | v1.5.1 ✅ |
+| `GET /api/v1/packs/{id}/status` | `pack status --json` | v1.5.1 ✅ |
+| `GET /api/v1/canary/status` | `canary --json` (writes state/canary/...) | **v1.5.3 ✅** |
+
+All 4 C# server endpoints now have regression catchers on their Python contracts. If any subprocess output shape drifts, tests catch it locally before the C# side starts returning 500s.
+
+### Files staged for commit
+
+- `Tests/python/test_cli_json_contract.py` (MODIFIED, +60 lines: new CanaryJsonContractTests class with 2 tests)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+### Turn metrics
+
+- **27 commits** since v1.1.0 tag this turn
+- **8 tags** (v1.1.0 ... v1.5.0)
+- **238 tests** passing (started at 26)
+- **-24,487 LOC** net
+
+**Next:** loop continues. The contract coverage gap is now closed. Possibilities: a v1.5.x tag at this state (clean test coverage milestone), more recipe variants, or a final HEARTBEAT rev for the day.

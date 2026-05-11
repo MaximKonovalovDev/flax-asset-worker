@@ -173,5 +173,73 @@ class JsonContractTests(unittest.TestCase):
             self.fail(f"stdout not valid JSON: {e}\nFIRST 300 chars:\n{stdout[:300]}")
 
 
+class CanaryJsonContractTests(unittest.TestCase):
+    """Protect the canary --json contract that CanaryRoutes.HandleStatusAsync
+    depends on (it reads the same JSON shape from state/canary/canary_status.json).
+    """
+
+    def _run_canary(self, args: list[str], timeout: float = 30.0) -> tuple[int, str, str]:
+        """Spawn `python -m assetboy.canary <args>`; same env strategy as _run_cli."""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(PYTHON_PACKAGE_ROOT)
+        cmd = [sys.executable, "-m", "assetboy.canary", *args]
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=str(PYTHON_PACKAGE_ROOT),
+            env=env,
+        )
+        return proc.returncode, proc.stdout, proc.stderr
+
+    def test_canary_single_probe_json_emits_parseable_dict(self) -> None:
+        """`canary --probe polyhaven --json` emits {probe_name: {ok, ms, ...}}."""
+        rc, stdout, stderr = self._run_canary(
+            ["--probe", "polyhaven", "--json"], timeout=15.0,
+        )
+        # exit 0 (green) or 1 (red) -- both should emit JSON
+        self.assertIn(rc, (0, 1), f"unexpected exit: stderr={stderr[:200]}")
+        try:
+            parsed = json.loads(stdout)
+        except json.JSONDecodeError as e:
+            self.fail(f"stdout not valid JSON: {e}\nFIRST 300 chars:\n{stdout[:300]}")
+        self.assertIsInstance(parsed, dict)
+        self.assertIn("polyhaven", parsed)
+        # Verify the probe result has the shape CanaryRoutes expects.
+        result = parsed["polyhaven"]
+        self.assertIn("ok", result)
+        self.assertIn("ms", result)
+
+    def test_canary_full_run_json_emits_overall_state(self) -> None:
+        """`canary --json` emits {timestamp, elapsed_ms, overall, probes: {...}}.
+
+        This is the SAME shape that lands in state/canary/canary_status.json
+        and is what CanaryRoutes.HandleStatusAsync surfaces over HTTP.
+        """
+        # Use --probe to keep it fast (single probe + don't need 5 to verify shape)
+        # Wait, --json on full run is what we want -- let it do all 5.
+        rc, stdout, stderr = self._run_canary(["--json"], timeout=60.0)
+        self.assertIn(rc, (0, 1))
+        try:
+            parsed = json.loads(stdout)
+        except json.JSONDecodeError as e:
+            self.fail(f"stdout not valid JSON: {e}\nFIRST 300 chars:\n{stdout[:300]}")
+        # Required keys for the C# CanaryRoutes side:
+        for required_key in ("timestamp", "elapsed_ms", "overall", "probes"):
+            self.assertIn(
+                required_key, parsed,
+                f"missing key {required_key!r}; got keys: {list(parsed.keys())}",
+            )
+        # overall must be one of the two canonical values
+        self.assertIn(parsed["overall"], ("green", "red"))
+        # probes must be a dict (one entry per probe)
+        self.assertIsInstance(parsed["probes"], dict)
+        # Each probe result must have ok + ms
+        for probe_name, probe_result in parsed["probes"].items():
+            self.assertIn("ok", probe_result, f"probe {probe_name} missing 'ok'")
+            self.assertIn("ms", probe_result, f"probe {probe_name} missing 'ms'")
+
+
 if __name__ == "__main__":
     unittest.main()
