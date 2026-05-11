@@ -2271,3 +2271,59 @@ Continue with: v1.10.7 (Unsplash OAuth) OR v1.11.0 (recipe schema
 extension for `video_refs` + first sample recipe that uses
 gen pexels videos as a step) OR backlog s33-s40 covering RAWG +
 Jamendo + Open Library + more.
+
+---
+
+## R1A TOP-10 COMPLETE — v1.10.7 → v1.10.9 (2026-05-11 cont.)
+
+s33-s35 shipped, closing out R1a top-10. Final state:
+
+```
+v1.10.7-rawg                    RAWG.io game DB (s33)
+v1.10.8-jamendo                 Jamendo CC music tracks (s34)
+v1.10.9-unsplash-COMPLETE-R1A   Unsplash photos + R1A milestone (s35)
+```
+
+### R1A scorecard (final)
+
+| # | Provider | Tag | Auth | License |
+|---|---|---|---|---|
+| 1 | Met Museum | v1.10.0 | none | CC0 |
+| 2 | Pexels | v1.10.5 | PEXELS_API_KEY | Pexels License (+VIDEO) |
+| 3 | Pixabay | v1.10.6 | PIXABAY_API_KEY | CC0-equivalent (+VIDEO) |
+| 4 | Unsplash | v1.10.9 | UNSPLASH_ACCESS_KEY | Unsplash License |
+| 5 | Archive.org | v1.10.2 | none | CC/PD per item |
+| 6 | Jamendo | v1.10.8 | JAMENDO_CLIENT_ID | CC-BY/SA (MUSIC) |
+| 7 | Wikimedia | v1.10.1 | none | CC0/CC-BY/CC-BY-SA/PD |
+| 8 | Iconify | v1.10.4 | none | MIT/Apache/CC0/OFL |
+| 9 | Scryfall | v1.10.3 | none | CC-BY-SA-4.0 |
+| 10 | RAWG.io | v1.10.7 | RAWG_API_KEY | reference-only |
+
+### Cumulative metrics through v1.10.9
+
+- **91 commits** since `0b1ad7d` baseline this turn
+- **45 tags** on origin (last 10 are v1.10.0 ... v1.10.9)
+- **545 passed / 1 skipped / 0 failed** (started turn at 26 tests)
+- **+519 net tests** added, all offline (mocked urllib)
+- **10 new runners** in `Python/assetboy/execution/`:
+  met_museum, wikimedia, archive_org, scryfall, iconify, pexels,
+  pixabay, rawg, jamendo, unsplash
+- **0 RULE violations** through the R1A batch (every file edit < 3 per slice).
+
+### Asset class coverage after R1A
+
+- IMAGES: 8 providers (Met, Wikimedia, Archive.org, Scryfall, Iconify,
+  Pexels, Pixabay, Unsplash, RAWG — total 9 covering UI + photo + art)
+- VIDEO: 2 providers (Pexels, Pixabay) — FAW first-class now
+- AUDIO: 2 providers (Freesound for sfx, Jamendo for music tracks)
+- 3D MODELS: 4 existing (Polyhaven, Kenney, AmbientCG via lanes; Fab via Playwright)
+- HDRI/SKYBOX: 1 (Polyhaven HDRIs)
+
+### Next backlog candidates (v1.11+)
+
+- s36 Recipe schema: add `video_refs`, `music_refs`, `icon_refs` fields
+- s37 First sample recipe wiring `gen pexels videos` as an acquisition step
+- s38 Library installer: register R1A providers as lane adapters
+- s39 `gen all --query X --count N` mega-command that fans out across
+  every working provider in parallel
+- s40 Doc rev: SETUP.md "API keys" section listing all 5 env vars + free signup links
