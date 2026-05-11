@@ -253,6 +253,100 @@ class WarningsTests(unittest.TestCase):
         self.assertTrue(any("no 'license' block" in w for w in r.warnings))
 
 
+class RefsFieldTests(unittest.TestCase):
+    """v1.11.s36: video_refs / music_refs / icon_refs / reference_image_urls."""
+
+    def setUp(self) -> None:
+        from assetboy.workflows.recipe_validator import validate_recipe_doc
+        self.validate = validate_recipe_doc
+
+    def _base_pack(self, **extra: object) -> dict:
+        return {
+            "id": "PACK_X", "provider": "polyhaven",
+            "acquisition_method": "direct_url",
+            "asset_kind": "texture",
+            "license": {"kind": "cc0"},
+            "assets": [{"asset_id": "x"}],
+            **extra,
+        }
+
+    def _doc_with(self, pack: dict) -> dict:
+        return {"recipe": {"id": "r", "game": "test"}, "packs": [pack]}
+
+    def test_video_refs_accepts_list_of_urls(self) -> None:
+        pack = self._base_pack(video_refs=[
+            "https://example.com/v1.mp4",
+            "https://example.com/v2.mp4",
+        ])
+        r = self.validate(self._doc_with(pack))
+        self.assertTrue(r.ok, msg=str(r.errors))
+
+    def test_music_refs_accepts_local_paths(self) -> None:
+        pack = self._base_pack(music_refs=[
+            "./music/intro.mp3",
+            "C:/sounds/track.flac",
+        ])
+        r = self.validate(self._doc_with(pack))
+        self.assertTrue(r.ok, msg=str(r.errors))
+
+    def test_icon_refs_warns_on_bare_filename(self) -> None:
+        """Bare filename (no URL/path marker) -> warning, not error."""
+        pack = self._base_pack(icon_refs=["bare_icon.svg"])
+        r = self.validate(self._doc_with(pack))
+        self.assertTrue(r.ok)
+        self.assertTrue(any("URL-shaped" in w for w in r.warnings))
+
+    def test_video_refs_non_list_is_error(self) -> None:
+        pack = self._base_pack(video_refs="https://just-a-string.mp4")  # not a list
+        r = self.validate(self._doc_with(pack))
+        self.assertFalse(r.ok)
+        self.assertTrue(any("video_refs" in e and "must be a list" in e for e in r.errors))
+
+    def test_video_refs_non_string_entry_is_error(self) -> None:
+        pack = self._base_pack(video_refs=["https://ok.mp4", 42, None])
+        r = self.validate(self._doc_with(pack))
+        self.assertFalse(r.ok)
+        # Should error on idx 1 (int) and idx 2 (None).
+        int_errs = [e for e in r.errors if "video_refs[1]" in e]
+        none_errs = [e for e in r.errors if "video_refs[2]" in e]
+        self.assertTrue(int_errs)
+        self.assertTrue(none_errs)
+
+    def test_empty_string_in_refs_is_error(self) -> None:
+        pack = self._base_pack(music_refs=["https://ok.mp3", "", "   "])
+        r = self.validate(self._doc_with(pack))
+        self.assertFalse(r.ok)
+        self.assertTrue(any("empty string" in e for e in r.errors))
+
+    def test_refs_field_absent_no_complaint(self) -> None:
+        """If a *_refs field is simply omitted, no warning or error fires."""
+        pack = self._base_pack()  # no refs fields
+        r = self.validate(self._doc_with(pack))
+        self.assertTrue(r.ok)
+        # Verify no spurious refs warnings.
+        for w in r.warnings:
+            self.assertNotIn("video_refs", w)
+            self.assertNotIn("music_refs", w)
+            self.assertNotIn("icon_refs", w)
+
+    def test_refs_field_null_no_complaint(self) -> None:
+        """Explicit null/None refs field treated as 'absent'."""
+        pack = self._base_pack(video_refs=None, music_refs=None)
+        r = self.validate(self._doc_with(pack))
+        self.assertTrue(r.ok)
+
+    def test_reference_image_urls_alias_also_validated(self) -> None:
+        """reference_image_urls (the pre-v1.11 field) gets the same treatment."""
+        pack = self._base_pack(reference_image_urls=["https://x.com/img.jpg"])
+        r = self.validate(self._doc_with(pack))
+        self.assertTrue(r.ok)
+
+    def test_reference_image_urls_bad_type_is_error(self) -> None:
+        pack = self._base_pack(reference_image_urls={"not": "a list"})
+        r = self.validate(self._doc_with(pack))
+        self.assertFalse(r.ok)
+
+
 class AutoFixWarningsTests(unittest.TestCase):
     """v1.9.s24: auto_fix_warnings(doc) -> (fixed_doc, fixes_list)."""
 

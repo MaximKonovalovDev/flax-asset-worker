@@ -244,6 +244,68 @@ def _validate_pack(
             "'license: {kind: ..., commercial_ok: ...}' for clarity"
         )
 
+    # *_refs fields (v1.11.s36): optional reference URL lists for video/music/icons.
+    # Lists of strings; entries should look like URLs (start with http(s)://)
+    # but we permit any non-empty string for forward-compat (local paths, IDs).
+    _validate_refs_field(pack, "video_refs", pack_label, pack_id, result)
+    _validate_refs_field(pack, "music_refs", pack_label, pack_id, result)
+    _validate_refs_field(pack, "icon_refs", pack_label, pack_id, result)
+    _validate_refs_field(pack, "reference_image_urls", pack_label, pack_id, result)
+
+
+def _validate_refs_field(
+    pack: dict[str, Any],
+    field_name: str,
+    pack_label: str,
+    pack_id: str,
+    result: ValidationResult,
+) -> None:
+    """Validate optional ref-list fields (v1.11.s36 schema extension).
+
+    Shape: `<field>: [str, str, ...]`. Non-list -> ERROR. Empty list ok.
+    Non-string entries -> ERROR. Entries that aren't URL-shaped (don't start
+    with http/https/file/<local-path-marker>) -> WARNING.
+    """
+    if field_name not in pack:
+        return
+    value = pack[field_name]
+    if value is None:
+        return
+    if not isinstance(value, list):
+        result.ok = False
+        result.errors.append(
+            f"{pack_label} ({pack_id}): {field_name!r} must be a list of strings; "
+            f"got {type(value).__name__}"
+        )
+        return
+    for i, entry in enumerate(value):
+        entry_label = f"{pack_label} ({pack_id}): {field_name}[{i}]"
+        if not isinstance(entry, str):
+            result.ok = False
+            result.errors.append(
+                f"{entry_label}: must be a string; got {type(entry).__name__}"
+            )
+            continue
+        stripped = entry.strip()
+        if not stripped:
+            result.ok = False
+            result.errors.append(f"{entry_label}: empty string not allowed")
+            continue
+        # Soft check: URL-shaped?
+        lower = stripped.lower()
+        is_url_shaped = (
+            lower.startswith(("http://", "https://", "file://", "ftp://"))
+            or lower.startswith("/")  # absolute local
+            or lower.startswith("./")  # relative local
+            or lower.startswith("../")
+            or (len(stripped) >= 3 and stripped[1] == ":")  # windows drive
+        )
+        if not is_url_shaped:
+            result.warnings.append(
+                f"{entry_label}: {stripped!r} doesn't look URL-shaped "
+                "(expected http(s)://... or local path)"
+            )
+
 
 def _validate_gates(
     gates: Any,
