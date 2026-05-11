@@ -1,6 +1,8 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Text;
 using System.Threading.Tasks;
 using FlaxEngine;
 using Newtonsoft.Json;
@@ -15,6 +17,52 @@ namespace FAW.Routes
             var result = ProviderRegistry.Instance.ListProviders();
             result["success"] = true;
             return Task.FromResult(result);
+        }
+
+        /// <summary>
+        /// v1.11.s48 — list gen sub-app providers (R1A + ComfyUI + sd) via
+        /// subprocess to `python -m assetboy.cli gen list-providers --json`.
+        /// Returns the same shape as the CLI catalog: providers[] + aggregate
+        /// counts (no_key_count, key_required_count, key_set_count, etc).
+        /// </summary>
+        public static async Task<JObject> HandleListGenAsync()
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "python",
+                    Arguments = "-m assetboy.cli gen list-providers --json",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8,
+                };
+                var proc = new Process { StartInfo = psi };
+                proc.Start();
+                var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+                var stderrTask = proc.StandardError.ReadToEndAsync();
+                if (!proc.WaitForExit(15000))
+                {
+                    try { proc.Kill(); } catch { }
+                    return ErrorResult("timeout: gen list-providers took > 15s");
+                }
+                var stdout = await stdoutTask;
+                var stderr = await stderrTask;
+                if (proc.ExitCode != 0)
+                {
+                    return ErrorResult($"gen_list_providers_failed: exit={proc.ExitCode} stderr={stderr}");
+                }
+                var parsed = JObject.Parse(stdout);
+                parsed["success"] = true;
+                return parsed;
+            }
+            catch (Exception exc)
+            {
+                return ErrorResult($"gen_list_providers_crashed: {exc.Message}");
+            }
         }
 
         public static async Task<JObject> HandleDownloadAsync(string path, HttpListenerContext ctx)

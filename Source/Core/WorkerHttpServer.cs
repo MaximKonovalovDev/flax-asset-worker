@@ -91,6 +91,11 @@ namespace FAW.Core
                 {
                     result = await ProviderRoutes.HandleListAsync();
                 }
+                else if (path == "/api/v1/providers/list-gen" && method == "POST")
+                {
+                    // v1.11.s48 — enumerate Python gen sub-app providers (R1A catalog).
+                    result = await ProviderRoutes.HandleListGenAsync();
+                }
                 else if (path.StartsWith("/api/v1/providers/") && path.Contains("/download"))
                 {
                     result = await ProviderRoutes.HandleDownloadAsync(path, ctx);
