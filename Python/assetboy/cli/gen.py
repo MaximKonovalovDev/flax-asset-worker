@@ -450,5 +450,250 @@ def list_presets_cmd(
             )
 
 
+# --------------------------------------------------------------------------- #
+# gen comfyui submit-workflow  (v1.9.s25)
+# --------------------------------------------------------------------------- #
+
+@comfy_app.command("submit-workflow")
+def comfy_submit_workflow_cmd(
+    workflow_path: Annotated[
+        Path,
+        typer.Argument(
+            help="Path to a ComfyUI workflow JSON file (the /prompt-format payload).",
+        ),
+    ],
+    params: Annotated[
+        list[str],
+        typer.Option(
+            "--param",
+            help=(
+                "Workflow parameter override: 'node.field=value' (repeatable). "
+                "E.g. --param '6.text=stone wall mossy' --param '5.seed=42'."
+            ),
+        ),
+    ] = None,
+    poll_interval_s: Annotated[
+        float,
+        typer.Option(
+            "--poll-interval",
+            help="Seconds between /history/{id} polls (default 1.0).",
+        ),
+    ] = 1.0,
+    timeout_s: Annotated[
+        float,
+        typer.Option(
+            "--timeout",
+            help="Max seconds to wait for workflow completion (default 300).",
+        ),
+    ] = 300.0,
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            help="Directory to write downloaded output files (default: ./comfyui_out/<prompt_id>/).",
+        ),
+    ] = Path("."),
+    json_out: Annotated[
+        bool, typer.Option("--json", help="Emit JSON output."),
+    ] = False,
+) -> None:
+    """Submit an arbitrary ComfyUI workflow JSON (Path B v1.9.s25).
+
+    Reads a workflow JSON file, optionally applies --param overrides
+    (e.g. `--param 6.text=...`), POSTs to local ComfyUI :8188/prompt,
+    polls /history/{prompt_id} until done, downloads output files.
+
+    Workflow JSON shape (standard ComfyUI 'API format'):
+      { "<node_id>": {"class_type": "...", "inputs": {<field>: <value>}}, ... }
+
+    --param 'N.field=value' overrides nodes[N].inputs[field] before submit.
+    Use for parameterized workflows (prompt text, seed, etc.).
+    """
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+    from assetboy.execution.comfyui_runner import COMFYUI_API, is_comfyui_running
+
+    if not workflow_path.exists():
+        msg = f"workflow_not_found: {workflow_path}"
+        if json_out:
+            json.dump({"error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_comfyui_submit_error={msg}")
+        raise typer.Exit(code=1)
+
+    if not is_comfyui_running():
+        msg = "comfyui_not_running (start ComfyUI on :8188 first)"
+        if json_out:
+            json.dump({"error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_comfyui_submit_error={msg}")
+        raise typer.Exit(code=1)
+
+    # Load workflow JSON
+    try:
+        workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        msg = f"workflow_parse_failed: {exc}"
+        if json_out:
+            json.dump({"error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_comfyui_submit_error={msg}")
+        raise typer.Exit(code=1)
+
+    # Apply --param overrides: "N.field=value"
+    applied_overrides: list[dict] = []
+    for p in (params or []):
+        try:
+            key, value = p.split("=", 1)
+            node_id, field_name = key.rsplit(".", 1)
+        except ValueError:
+            msg = f"bad_param_shape: {p!r} (expected 'node_id.field=value')"
+            if json_out:
+                json.dump({"error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"gen_comfyui_submit_error={msg}")
+            raise typer.Exit(code=1)
+        if node_id not in workflow:
+            msg = f"unknown_node: {node_id!r} (workflow has nodes: {list(workflow.keys())[:5]}...)"
+            if json_out:
+                json.dump({"error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"gen_comfyui_submit_error={msg}")
+            raise typer.Exit(code=1)
+        node = workflow[node_id]
+        if not isinstance(node, dict) or "inputs" not in node:
+            continue
+        # Try to coerce value: int/float if possible, else string
+        coerced: object = value
+        try:
+            coerced = int(value)
+        except ValueError:
+            try:
+                coerced = float(value)
+            except ValueError:
+                pass
+        node["inputs"][field_name] = coerced
+        applied_overrides.append({"node": node_id, "field": field_name, "value": coerced})
+
+    # POST /prompt
+    payload = json.dumps({"prompt": workflow}).encode("utf-8")
+    req = urllib.request.Request(
+        f"{COMFYUI_API}/prompt",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            submit_resp = json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")[:500]
+        msg = f"submit_failed: HTTP {exc.code}: {body}"
+        if json_out:
+            json.dump({"error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_comfyui_submit_error={msg}")
+        raise typer.Exit(code=1)
+    except Exception as exc:
+        msg = f"submit_failed: {exc}"
+        if json_out:
+            json.dump({"error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_comfyui_submit_error={msg}")
+        raise typer.Exit(code=1)
+
+    prompt_id = submit_resp.get("prompt_id")
+    if not prompt_id:
+        msg = f"no_prompt_id_in_response: {submit_resp}"
+        if json_out:
+            json.dump({"error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_comfyui_submit_error={msg}")
+        raise typer.Exit(code=1)
+
+    if not json_out:
+        print(f"gen_comfyui_submit_prompt_id={prompt_id}")
+        print(f"gen_comfyui_submit_overrides_applied={len(applied_overrides)}")
+
+    # Poll /history/{prompt_id}
+    import time as _time
+    deadline = _time.time() + timeout_s
+    history_entry: dict | None = None
+    while _time.time() < deadline:
+        try:
+            with urllib.request.urlopen(
+                f"{COMFYUI_API}/history/{prompt_id}", timeout=10
+            ) as resp:
+                history = json.loads(resp.read())
+        except Exception:
+            _time.sleep(poll_interval_s)
+            continue
+        if prompt_id in history:
+            history_entry = history[prompt_id]
+            break
+        _time.sleep(poll_interval_s)
+
+    if history_entry is None:
+        msg = f"timeout_waiting_for_completion (prompt_id={prompt_id}, {timeout_s}s elapsed)"
+        if json_out:
+            json.dump({"error": msg, "prompt_id": prompt_id}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_comfyui_submit_error={msg}")
+        raise typer.Exit(code=1)
+
+    # Resolve output dir
+    out_dir = output_dir if output_dir != Path(".") else Path(".") / "comfyui_out" / prompt_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Download outputs
+    downloaded: list[str] = []
+    outputs = history_entry.get("outputs", {})
+    for node_id, node_output in outputs.items():
+        for img in (node_output.get("images") or []):
+            fname = img.get("filename")
+            subfolder = img.get("subfolder", "")
+            ftype = img.get("type", "output")
+            if not fname:
+                continue
+            query = urllib.parse.urlencode({"filename": fname, "subfolder": subfolder, "type": ftype})
+            url = f"{COMFYUI_API}/view?{query}"
+            try:
+                with urllib.request.urlopen(url, timeout=30) as resp:
+                    data = resp.read()
+                dest = out_dir / fname
+                dest.write_bytes(data)
+                downloaded.append(str(dest))
+            except Exception as exc:
+                if not json_out:
+                    print(f"  warn: download_failed for {fname}: {exc}")
+
+    summary = {
+        "prompt_id": prompt_id,
+        "workflow_path": str(workflow_path),
+        "overrides_applied": applied_overrides,
+        "output_dir": str(out_dir),
+        "downloaded": downloaded,
+        "download_count": len(downloaded),
+        "ok": True,
+    }
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"gen_comfyui_submit_output_dir={out_dir}")
+        print(f"gen_comfyui_submit_downloaded_count={len(downloaded)}")
+        for d in downloaded:
+            print(f"  downloaded={d}")
+
+
 if __name__ == "__main__":
     app()

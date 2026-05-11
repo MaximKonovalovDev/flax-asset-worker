@@ -263,6 +263,78 @@ class TyperCliSmokeTests(unittest.TestCase):
         "      - asset_id: c\n"
     )
 
+    # ----------------------------------------------------------------- #
+    # gen comfyui submit-workflow (v1.9.s25)
+    # ----------------------------------------------------------------- #
+
+    def test_comfy_submit_workflow_help_renders(self) -> None:
+        result = self.runner.invoke(
+            self.app, ["gen", "comfyui", "submit-workflow", "--help"]
+        )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("ComfyUI workflow JSON", result.stdout)
+
+    def test_comfy_submit_workflow_missing_file_errors_cleanly(self) -> None:
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "comfyui", "submit-workflow", "does_not_exist.json"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("workflow_not_found", result.stdout)
+
+    def test_comfy_submit_workflow_server_down_errors_cleanly(self) -> None:
+        """When ComfyUI :8188 isn't running, command exits 1 with clean error."""
+        import tempfile, json as _json
+        from unittest.mock import patch
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False, encoding="utf-8"
+        ) as tf:
+            _json.dump({"6": {"class_type": "x", "inputs": {}}}, tf)
+            tmp = tf.name
+        try:
+            with patch(
+                "assetboy.execution.comfyui_runner.is_comfyui_running",
+                return_value=False,
+            ):
+                result = self.runner.invoke(
+                    self.app, ["gen", "comfyui", "submit-workflow", tmp]
+                )
+            self.assertEqual(result.exit_code, 1)
+            self.assertIn("comfyui_not_running", result.stdout)
+        finally:
+            import os
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+    def test_comfy_submit_workflow_bad_param_shape_errors(self) -> None:
+        """--param 'malformed' (no = sign) -> clean error."""
+        import tempfile, json as _json
+        from unittest.mock import patch
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False, encoding="utf-8"
+        ) as tf:
+            _json.dump({"6": {"class_type": "x", "inputs": {"text": "old"}}}, tf)
+            tmp = tf.name
+        try:
+            with patch(
+                "assetboy.execution.comfyui_runner.is_comfyui_running",
+                return_value=True,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "comfyui", "submit-workflow", tmp, "--param", "malformed"],
+                )
+            self.assertEqual(result.exit_code, 1)
+            self.assertIn("bad_param_shape", result.stdout)
+        finally:
+            import os
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
     def test_pack_from_recipe_only_filters_to_named_pack(self) -> None:
         """v1.9.s21: --only PACK_B restricts to that pack only."""
         result = self.runner.invoke(
