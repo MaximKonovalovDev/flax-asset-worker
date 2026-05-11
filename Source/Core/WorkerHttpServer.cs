@@ -115,6 +115,26 @@ namespace FAW.Core
                 {
                     result = LibraryRoutes.HandleReady();
                 }
+                else if (path == "/api/v1/recipes/list" && method == "POST")
+                {
+                    result = await RecipeRoutes.HandleListAsync();
+                }
+                else if (path == "/api/v1/recipes/run" && method == "POST")
+                {
+                    result = await RecipeRoutes.HandleRunAsync(ctx);
+                }
+                else if (path.StartsWith("/api/v1/packs/") && path.EndsWith("/status") && method == "GET")
+                {
+                    // Parse /api/v1/packs/{pack_id}/status
+                    var packId = path.Substring("/api/v1/packs/".Length);
+                    packId = packId.Substring(0, packId.Length - "/status".Length);
+                    var gameScope = ctx.Request.QueryString["game"] ?? "primitive_tech";
+                    result = await RecipeRoutes.HandlePackStatusAsync(packId, gameScope);
+                }
+                else if (path == "/api/v1/canary/status" && method == "GET")
+                {
+                    result = await CanaryRoutes.HandleStatusAsync();
+                }
                 else
                 {
                     result = new JObject

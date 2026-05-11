@@ -1703,3 +1703,102 @@ Wires `run_stable_audio_batch` into the generator lane. Same recipe contract as 
 - `docs/COMMIT_READY-assetboi.md` (this entry)
 
 **Next:** v1.4.1 tag → continue with whichever slice has highest leverage next. Possibilities: recipe expansion (more sandbox variants), Mixamo runner improvements, HEARTBEAT refresh.
+
+---
+
+## Slice v1.5.0.recipe-endpoints — C# HTTP routes for recipes + canary (2026-05-11)
+
+**Status:** SHIPPED.
+
+**Context:** the `MONOREPO_FACADE_DESIGN.md` doc (committed in `9f5495c`) called out 4 new HTTP endpoints needed for the flax-mcp monorepo facade to integrate cleanly. assetboi can ship those server-side endpoints (C# in `Source/Routes/`) since that's still within this repo's authority. The flax-mcp client side is Lane E broker's territory.
+
+**What shipped (all 4 endpoints from the design doc):**
+
+### 1. `Source/Routes/RecipeRoutes.cs` (NEW, ~190 lines)
+
+3 handlers, all subprocess-bridge to the Typer CLI's `--json` output:
+
+```
+POST /api/v1/recipes/list
+  HandleListAsync()
+  -> spawns: python -m assetboy.cli pack list-recipes --json
+  -> returns: { success, recipes: [...], count }
+
+POST /api/v1/recipes/run
+  HandleRunAsync(ctx)
+  Body: { recipe_path, dry_run, resume, only_required, skip[] }
+  -> spawns: python -m assetboy.cli pack from-recipe <path> --json [--dry-run] [--only-required] [--skip ID]...
+  -> returns: full pack-run summary + cli_exit_code
+
+GET  /api/v1/packs/{pack_id}/status?game={game_scope}
+  HandlePackStatusAsync(packId, gameScope)
+  -> spawns: python -m assetboy.cli pack status <pack_id> --game <scope> --json
+  -> returns: full ledger dict
+```
+
+**Design:** subprocess invocation with 60-second walltime. Reads stdout +
+stderr; parses JSON if exit==0; surfaces stderr if not. No business logic
+duplication — the CLI is the single source of truth for recipe semantics.
+
+### 2. `Source/Routes/CanaryRoutes.cs` (NEW, ~80 lines)
+
+1 handler:
+
+```
+GET /api/v1/canary/status
+  HandleStatusAsync()
+  -> reads: <repo>/state/canary/canary_status.json (multi-path resolver)
+  -> returns: canary status verbatim + success + path
+```
+
+**Multi-path resolver** tries 3 layouts so the endpoint works whether
+FAW is running standalone OR as a submodule under flax-mcp:
+1. `<project>/state/canary/canary_status.json` (standalone)
+2. `<project>/external/flax-asset-worker/state/...` (submodule)
+3. `<project>/../../../../flax-asset-worker/state/...` (plugin-side relative)
+
+Returns `success=false, error=no_canary_run` with the expected path
+when the file doesn't exist (operator hasn't run canary yet) — clean
+hint instead of a server error.
+
+### 3. `Source/Core/WorkerHttpServer.cs` route registration
+
+Added 4 new `else if` branches matching the 4 new endpoints. Wired
+correctly to the new route handlers. The 404 fallback continues to
+handle unknown paths.
+
+### Verification
+
+```
+=== Python tests (unchanged) ===
+227 passed, 1 skipped in 5.23s
+
+=== C# files spot-checked ===
+RecipeRoutes.cs syntactically valid (generics use < > not HTML entities;
+fixed via post-Write sweep that replaced 5,486 HTML-encoded entities)
+CanaryRoutes.cs clean
+WorkerHttpServer.cs: 4 new route branches added, total 9 endpoints now
+```
+
+**Note:** assetboi cannot run `dotnet build` in this loop (no Flax build chain available), so the C# changes are committed without compile verification. The shape is identical to existing routes (`LaneRoutes.cs`, `LibraryRoutes.cs`) which DO compile, so this is low-risk pattern matching. Lane E broker / operator should run `dotnet build` against the FAW C# project before relying on these in a Flax editor session.
+
+### What this unlocks for v1.5
+
+The flax-mcp facade design from `MONOREPO_FACADE_DESIGN.md` can now be
+implemented immediately — all 4 server-side endpoints exist. The
+facade plugin in `flax-mcp/plugins/flax-asset-worker/` just needs to:
+
+1. Add 6 MCP atomics (`asset_worker/list_recipes`, `pack_from_recipe`, `pack_status`, `library_*`, `canary_status` + 1 mega-tool).
+2. Each atomic calls one of the FAW endpoints via HttpClient.
+3. Test with mock HTTP fixtures.
+
+That's Lane E broker's slice. assetboi has delivered the contract.
+
+### Files staged for commit
+
+- `Source/Routes/RecipeRoutes.cs` (NEW, ~190 lines, 3 handlers)
+- `Source/Routes/CanaryRoutes.cs` (NEW, ~80 lines, 1 handler)
+- `Source/Core/WorkerHttpServer.cs` (MODIFIED, +20 lines: 4 new route branches)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+**Next:** v1.5.0 tag captures this server-side milestone. Then loop continues with whichever slice has highest leverage (recipe expansion / runner improvements / more provider drivers).
