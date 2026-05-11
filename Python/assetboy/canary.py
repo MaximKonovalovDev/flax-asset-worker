@@ -376,6 +376,86 @@ def save_state(state: dict) -> Path:
 
 
 # --------------------------------------------------------------------------- #
+# History management (v1.7.s12)
+# --------------------------------------------------------------------------- #
+
+def _history_dir() -> Path:
+    return state_root() / "canary"
+
+
+def list_history(since_iso: str = "") -> list[dict]:
+    """Return per-run history file metadata sorted newest-first.
+
+    Each entry: {path, name, mtime_iso, size_bytes, overall, timestamp}.
+    Reads each file's top-level JSON (cheap; files are tiny). Tolerant
+    of broken files (marks them with ``error`` field, doesn't crash).
+    """
+    state_dir = _history_dir()
+    if not state_dir.exists():
+        return []
+    entries: list[dict] = []
+    for fp in state_dir.glob("canary_*.json"):
+        if fp.name == "canary_status.json":
+            continue  # the "latest" symlink-equivalent; not history
+        try:
+            stat = fp.stat()
+        except OSError:
+            continue
+        entry: dict = {
+            "path": str(fp),
+            "name": fp.name,
+            "mtime_iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(stat.st_mtime)),
+            "size_bytes": stat.st_size,
+        }
+        try:
+            doc = json.loads(fp.read_text(encoding="utf-8"))
+            entry["overall"] = str(doc.get("overall", "unknown"))
+            entry["timestamp"] = str(doc.get("timestamp", ""))
+        except Exception as exc:
+            entry["error"] = str(exc)
+        entries.append(entry)
+
+    # Sort newest-first by mtime
+    entries.sort(key=lambda e: e.get("mtime_iso", ""), reverse=True)
+
+    # --since filter (operator-friendly: drop entries strictly older than the date)
+    if since_iso:
+        entries = [
+            e for e in entries
+            if (e.get("mtime_iso", "") or e.get("timestamp", "")) >= since_iso
+        ]
+
+    return entries
+
+
+def prune_history(keep_last: int) -> dict:
+    """Delete all but the most recent N history files. Returns {deleted, kept}.
+
+    Reads sort order from ``list_history()`` (newest-first), keeps the
+    first `keep_last`, deletes the rest. Never deletes the
+    ``canary_status.json`` "latest" file (excluded by list_history).
+    """
+    if keep_last < 0:
+        keep_last = 0
+    entries = list_history()
+    to_keep = entries[:keep_last]
+    to_delete = entries[keep_last:]
+    deleted_paths: list[str] = []
+    for entry in to_delete:
+        try:
+            Path(entry["path"]).unlink()
+            deleted_paths.append(entry["path"])
+        except OSError:
+            continue
+    return {
+        "deleted": deleted_paths,
+        "deleted_count": len(deleted_paths),
+        "kept_count": len(to_keep),
+        "kept_paths": [e["path"] for e in to_keep],
+    }
+
+
+# --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
 
@@ -399,7 +479,46 @@ def main(argv: list[str] | None = None) -> int:
         choices=list(PROBES.keys()),
         help="run a single probe (skips state file write)",
     )
+    # v1.7.s12: history management
+    p.add_argument(
+        "--list-history",
+        action="store_true",
+        help="list state/canary/canary_*.json history files (newest-first); skip running probes",
+    )
+    p.add_argument(
+        "--since",
+        default="",
+        help="filter --list-history to entries with mtime >= this ISO date (e.g. 2026-05-01)",
+    )
+    p.add_argument(
+        "--prune",
+        type=int,
+        default=-1,
+        help="delete all but the most recent N history files; skip running probes",
+    )
     args = p.parse_args(argv)
+
+    # v1.7.s12 history modes (no probe run)
+    if args.list_history:
+        entries = list_history(since_iso=args.since)
+        if args.json:
+            print(json.dumps({"count": len(entries), "entries": entries}, indent=2))
+        else:
+            print(f"canary_history_count={len(entries)}")
+            for e in entries:
+                overall = e.get("overall", "?")
+                ts = e.get("timestamp", e.get("mtime_iso", "?"))
+                print(f"canary_history  {ts}  overall={overall}  size={e.get('size_bytes', 0)}  {e['name']}")
+        return 0
+
+    if args.prune >= 0:
+        result = prune_history(keep_last=args.prune)
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"canary_prune_kept={result['kept_count']}")
+            print(f"canary_prune_deleted={result['deleted_count']}")
+        return 0
 
     if args.probe:
         result = _run_one(args.probe, PROBES[args.probe])

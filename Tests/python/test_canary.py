@@ -298,6 +298,90 @@ class TestEpicProbe:
         assert canary.EXPECTED_EPIC_SCHEMA_VERSION is not None
         assert isinstance(canary.EXPECTED_EPIC_SCHEMA_VERSION, int)
 
+    def test_list_history_returns_newest_first(self, canary, monkeypatch, tmp_path):
+        """v1.7.s12: list_history walks state/canary/ and sorts newest-first."""
+        import os
+        state_dir = tmp_path / "canary"
+        state_dir.mkdir(parents=True)
+        for stem, ts in [
+            ("canary_20260101_000000", 1735689600),
+            ("canary_20260201_000000", 1738368000),
+            ("canary_20260301_000000", 1740787200),
+        ]:
+            fp = state_dir / f"{stem}.json"
+            fp.write_text('{"overall":"green","timestamp":"' + stem + '"}', encoding="utf-8")
+            os.utime(fp, (ts, ts))
+        (state_dir / "canary_status.json").write_text(
+            '{"overall":"green"}', encoding="utf-8"
+        )
+
+        monkeypatch.setattr(canary, "state_root", lambda: tmp_path)
+
+        entries = canary.list_history()
+        assert len(entries) == 3
+        names = [e["name"] for e in entries]
+        assert "canary_status.json" not in names
+        assert entries[0]["name"] == "canary_20260301_000000.json"
+        assert entries[2]["name"] == "canary_20260101_000000.json"
+
+    def test_list_history_since_filter_excludes_older_entries(self, canary, monkeypatch, tmp_path):
+        """--since filters by mtime_iso (or timestamp if present)."""
+        import os
+        state_dir = tmp_path / "canary"
+        state_dir.mkdir(parents=True)
+        # Two files with mtimes far apart so the filter is unambiguous:
+        # - "old" = 1577836800 (2020-01-01)
+        # - "new" = 1893456000 (2030-01-01)
+        for stem, ts in [
+            ("canary_old", 1577836800),
+            ("canary_new", 1893456000),
+        ]:
+            fp = state_dir / f"{stem}.json"
+            fp.write_text('{"overall":"green"}', encoding="utf-8")
+            os.utime(fp, (ts, ts))
+
+        monkeypatch.setattr(canary, "state_root", lambda: tmp_path)
+
+        # since = 2025-01-01 -> only the 2030 entry should remain
+        entries = canary.list_history(since_iso="2025-01-01")
+        assert len(entries) == 1
+        assert entries[0]["name"] == "canary_new.json"
+
+    def test_prune_history_keeps_last_N(self, canary, monkeypatch, tmp_path):
+        """prune_history(keep_last=2) keeps the 2 newest, deletes the rest."""
+        import os
+        state_dir = tmp_path / "canary"
+        state_dir.mkdir(parents=True)
+        for stem, ts in [
+            ("canary_a", 1000),
+            ("canary_b", 2000),
+            ("canary_c", 3000),
+            ("canary_d", 4000),
+            ("canary_e", 5000),
+        ]:
+            fp = state_dir / f"{stem}.json"
+            fp.write_text('{}', encoding="utf-8")
+            os.utime(fp, (ts, ts))
+
+        monkeypatch.setattr(canary, "state_root", lambda: tmp_path)
+
+        result = canary.prune_history(keep_last=2)
+        assert result["kept_count"] == 2
+        assert result["deleted_count"] == 3
+        remaining = sorted(p.name for p in state_dir.glob("canary_*.json"))
+        assert remaining == ["canary_d.json", "canary_e.json"]
+
+    def test_prune_history_keep_zero_deletes_all(self, canary, monkeypatch, tmp_path):
+        state_dir = tmp_path / "canary"
+        state_dir.mkdir(parents=True)
+        for name in ("canary_x", "canary_y"):
+            (state_dir / f"{name}.json").write_text('{}', encoding="utf-8")
+        monkeypatch.setattr(canary, "state_root", lambda: tmp_path)
+
+        result = canary.prune_history(keep_last=0)
+        assert result["kept_count"] == 0
+        assert result["deleted_count"] == 2
+
     def test_expected_schema_can_be_overridden_via_env(self, canary, monkeypatch, tmp_path):
         """env var EXPECTED_EPIC_SCHEMA_VERSION overrides the module pin.
 
