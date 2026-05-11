@@ -1802,3 +1802,61 @@ That's Lane E broker's slice. assetboi has delivered the contract.
 - `docs/COMMIT_READY-assetboi.md` (this entry)
 
 **Next:** v1.5.0 tag captures this server-side milestone. Then loop continues with whichever slice has highest leverage (recipe expansion / runner improvements / more provider drivers).
+
+---
+
+## Slice v1.5.1.cli-json-contract — regression catchers for C# <-> Python boundary (2026-05-11)
+
+**Status:** SHIPPED. **234 passed, 1 skipped, 0 failed** (was 227).
+
+**Context:** v1.5.0 server-side C# routes subprocess to `python -m assetboy.cli <subapp> <cmd> --json` and parse the stdout as JSON. Since assetboi cannot dotnet-build-test the C# side, the next-best protection is to **verify the Python `--json` contract those routes depend on stays stable.** If a future CLI change accidentally breaks the JSON output shape, these tests catch it before the C# routes start returning 500s.
+
+**What shipped:**
+
+### 1. `Tests/python/test_cli_json_contract.py` (NEW, ~150 lines, 7 tests)
+
+7 regression catchers spawning the real CLI via subprocess + asserting on the JSON contract that `Source/Routes/RecipeRoutes.cs` and `Source/Routes/CanaryRoutes.cs` depend on:
+
+**`pack list-recipes --json` contract** (consumed by `RecipeRoutes.HandleListAsync`):
+- `test_pack_list_recipes_json_is_parseable` — stdout is valid JSON, has `recipes: [...]` + `count: int`.
+- `test_pack_list_recipes_json_entries_have_expected_keys` — each entry has `game`, `recipe_id`, `pack_count`, `path`.
+
+**`pack from-recipe ... --json` contract** (consumed by `RecipeRoutes.HandleRunAsync`):
+- `test_pack_from_recipe_dry_run_json_is_parseable` — required keys: `recipe_id`, `game`, `total_packs`, `completed`, `failed`, `required_failed`, `block_on_missing_required`, `results`.
+- `test_pack_from_recipe_results_have_expected_shape` — each result entry has `pack_id`, `required`, `status`, `current_state`, `next_step`.
+
+**`pack status <id> --json` contract** (consumed by `RecipeRoutes.HandlePackStatusAsync`):
+- `test_pack_status_json_returns_a_ledger` — accepts exit 0 OR 1 (ledger present vs not); both emit valid JSON dict.
+
+**Other sub-apps in `--json` mode** (smoke-level regression catchers):
+- `test_fab_auth_status_json_is_parseable` — fab auth-status fail-path emits JSON.
+- `test_unity_status_json_is_parseable` — unity status emits JSON regardless of Unity Hub install state.
+
+### 2. Subprocess test harness with proper env inheritance
+
+`_run_cli()` helper does `env = os.environ.copy()` + `PYTHONPATH` override. Initial implementation tried to whitelist env vars (PYTHONPATH + PATH only) which broke on Windows — `python -m` needs SYSTEMROOT and other Windows-specific vars to even locate the standard library. Lesson: inherit + override beats whitelist for subprocess tests on Windows.
+
+### Verification
+
+```
+=== full test suite ===
+234 passed, 1 skipped in 11.01s
+(was 227 at v1.5.0)
+```
+
+The 7 new tests take ~7s of the total runtime because each spawns a subprocess. Acceptable cost for a regression catcher that protects an entire C# / Python boundary.
+
+### Files staged for commit
+
+- `Tests/python/test_cli_json_contract.py` (NEW, ~150 lines, 7 tests)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+### Turn metrics so far
+
+- **24 commits** since v1.1.0 tag this turn
+- **8 tags** (v1.1.0 ... v1.5.0)
+- **234 tests** passing (started turn at 26)
+- **-24,487 LOC** net code reduction
+- **Test growth path:** 26 → 172 → 187 → 190 → 214 → 217 → 220 → 227 → 234
+
+**Next:** loop continues per Rule 3. Possibilities: more recipe variants, runner enhancement (e.g. ComfyUI workflow JSON paths in recipe), or wait for operator feedback on the v1.5.0 + v1.5.1 deliverables.
