@@ -96,3 +96,43 @@ written: C:\flax\flax-asset-worker\state\canary\canary_status.json
 - `Python/assetboy/execution/tts_runner.py` (deleted)
 
 **Next:** s3 — extract Quixel scanner from `library_map.py` per PATH-B Day 3.
+
+---
+
+## Slice s3 — Day 3 Extract Quixel scanner (2026-05-10)
+
+**Status:** SHIPPED.
+
+**What shipped:**
+
+1. **New file** `Python/assetboy/providers/quixel_scanner.py` (454 lines).
+   - 3 public functions:
+     - `build_local_quixel_library_map(extra_roots=(), timeout_seconds=2.0)` — top-level entry, combines Bridge API probe + filesystem rglob scan
+     - `render_local_quixel_library_map_markdown(report)` — markdown formatter
+     - `scan_quixel_library_root(root, sample_limit=24)` — single-root scan
+   - 7 private helpers: `_append_path`, `_iter_quixel_settings_candidates`, `_extract_paths_from_settings`, `_discover_quixel_roots_from_settings`, `_default_quixel_path_candidates`, `_probe_quixel_bridge_api`, `_quixel_category_from_parts`, `_looks_like_quixel_asset_json`
+   - 4 module constants: `_QUIXEL_API_BASE`, `_QUIXEL_CATEGORY_NAMES`, `_QUIXEL_SKIP_PARTS`, `_QUIXEL_SKIP_FILES`
+   - Module is self-contained: only depends on `requests` + stdlib. No internal `assetboy.*` deps.
+   - `__all__` declared for clean public surface.
+
+2. **`library_map.py` trimmed:** 1942 lines → 1646 lines (−296 lines).
+   - Quixel function bodies removed (lines 200-505 originally).
+   - Quixel constants removed from top.
+   - New re-export block added (`from assetboy.providers.quixel_scanner import ...`) so existing callers (`epic_vault.py`, `cli.py`, tests) keep working without changes.
+   - Roman-Arena keyword constants (`_DUMMY_DO_FIRST_KEYWORDS`, `_USEFUL_FAB_KEYWORDS`, etc.) stay in library_map.py — they're used by the Roman-arena waves further down the file (deferred to future slice).
+
+3. **Gate verification:**
+   - `python -c "from assetboy.providers.library_map import build_local_quixel_library_map, scan_quixel_library_root, render_local_quixel_library_map_markdown, detect_optional_library_tools, build_combined_library_map; print('OK')"` → green
+   - `python -c "import assetboy.providers.epic_vault"` → green (it imports from library_map)
+   - `python -c "from assetboy.providers.quixel_scanner import build_local_quixel_library_map"` → green
+   - `python -m pytest Tests/python/test_canary.py -q` → 26/26 green
+   - Live Quixel scan: `build_local_quixel_library_map(timeout_seconds=1.0)` returns `{summary: {detected_root_count: 0, total_assets: 0, bridge_api_reachable: False}}` — graceful handling when Bridge not running.
+
+**Files staged for commit:**
+- `Python/assetboy/providers/quixel_scanner.py` (NEW, 454 lines)
+- `Python/assetboy/providers/library_map.py` (MODIFIED, −296 lines)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+**Backwards compatibility:** all old import paths still work via re-exports in `library_map.py`. New code should `from assetboy.providers.quixel_scanner import ...` directly.
+
+**Next:** s4 — rename `ProviderLane` → `AcquisitionMethod` per PATH-B Day 4.
