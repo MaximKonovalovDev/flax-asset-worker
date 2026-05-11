@@ -442,3 +442,62 @@ Those lanes ship in **a follow-up "pre-pack acquisition router" slice** (s11). F
 **CLI surface total:** 7 sub-apps, **25 commands** (was 22 after s6; +3 in pack).
 
 **Next:** s9 — port the parked `data/roman_first_playable_specs.yaml` (s2 extract) to a real recipe at `recipes/roman/first_playable.yaml` so both games have YAML recipes.
+
+---
+
+## Slice s9 — Day 9 Roman Arena YAML port (2026-05-10)
+
+**Status:** SHIPPED. Both Roman and Primitive-Tech now have real recipes consumed by the same `pack from-recipe` CLI.
+
+**What shipped:**
+
+1. **`recipes/roman/first_playable.yaml`** (~20 KB, 14 packs):
+   - Mechanically ported from `Python/assetboy/data/roman_first_playable_specs.yaml` (parked in s2 from the legacy `workflows/roman_first_playable.py:149+:497` Python tuples — that file is in the DEAD-pending list).
+   - 11 main packs (P0/P1 priorities -> `required: true`) covering: character core/skirmisher/slinger/duelist slices, weapon combat, sandstone bowl architecture, traps, materials, combat animations, SFX, music.
+   - 3 default-only packs (`required: false`) covering: combat-prep variants + secondary anim slice.
+   - Per-pack metadata preserved: `pack_id`, `roman_category`, `priority`, `expected_contents`, `bootstrap_lane -> acquisition_method`, `source_adapter -> provider`, `search_terms`, `quality_keywords`, `fallback_adapters -> fallback_providers`, `blender_required -> cleanup.mode="blender"`, `output_formats`, `shared_family_tags`, `flax_intended_use`, `source_strategy`, `min_keyword_hits`, `min_payload_files`, `request_count`, `accept_archive_payload`, `animated`.
+   - Same schema as `recipes/primitive_tech/first_playable.yaml` (Path B s8) so the `pack` sub-app handles both identically.
+   - VFX needs (5 particles: dust, blood spurt, sand kicks, torch flames, weapon clash sparks) documented for manual Flax editor authoring.
+   - Scene setup: 256x256 arena, 5 splat layers (sand/blood-stained-sand/cobble/wood/marble-dust), harsh midday Mediterranean sun (5800K, 55° pitch), lightmap-baked arena_floor + tunnel_entry + podium regions.
+
+2. **Port script lived in `_temp/port_roman.py`** (not committed; one-shot tool). The output YAML is the deliverable.
+
+**Real end-to-end verification:**
+
+```
+$ python -m assetboy.cli pack list-recipes
+pack_list_recipes_count=2
+pack_list_recipes_entry=1  game=primitive_tech  id=primitive_tech_first_playable  packs=9   path=primitive_tech\first_playable.yaml
+pack_list_recipes_entry=2  game=roman_arena     id=roman_arena_first_playable      packs=14  path=roman\first_playable.yaml
+
+$ python -m assetboy.cli pack from-recipe roman/first_playable.yaml --dry-run
+  [RED] [REQ] RA_PACK_CHR_CORE_SLICE_01           state=failed
+  [RED] [REQ] RA_PACK_CHR_SKIRMISHER_SLICE_01     state=failed
+  ... (14 packs total)
+  pack_from_recipe_total=14
+  pack_from_recipe_completed=0
+  pack_from_recipe_failed=14
+  pack_from_recipe_required_failed=true
+```
+
+All 14 packs go RED for the same legitimate reason as primitive_tech (no `source_dir` / `bulk_profile` -- the s11 pre-pack acquisition router will fix this). The CLI / recipe loader / dispatch shim work end-to-end.
+
+**Path B completion check:**
+
+The original 8500-line `workflows/roman_first_playable.py` Python tuples are now superseded by:
+- **Parked data**: `Python/assetboy/data/roman_first_playable_specs.yaml` (s2, source of truth for the port).
+- **Runtime recipe**: `recipes/roman/first_playable.yaml` (s9, consumed by CLI).
+
+`workflows/roman_first_playable.py` still exists on disk because (per peer-opus deep import-trace in s2 notes) it's still imported by `cli.py:139`, `execution/blender_runner.py:22`, `Tests/python/helpers.py:164`. Deletion deferred to s10.5 (alongside `cli.py` deletion + mechanical pack_pipeline extraction).
+
+**26/26 canary tests still green.**
+
+**Files staged for commit:**
+- `recipes/roman/first_playable.yaml` (NEW, ~20 KB, 14 packs)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+**Next:** s10 — final cleanup slice. Plan:
+- Update `README.md` + `ROADMAP.md` to reflect Path B state (Typer CLI, recipes/, Stage dispatch, canary, AcquisitionMethod alias).
+- Inline C# `QuickImport` into `LaneRoutes.cs`; delete `ILane.cs`, `LaneExecutor.cs`, `Config/lanes.json` per PATH-B Day 10.
+- Tag `v1.1.0-path-b-cleanup`.
+- DO NOT delete old `cli.py` yet -- defer to s10.5 (requires DEAD-file purge first, blocked by s2.5+s2.6).

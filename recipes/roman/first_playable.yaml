@@ -1,0 +1,797 @@
+recipe:
+  id: roman_arena_first_playable
+  schema_version: 2026-05-10.recipe.v1
+  game: roman_arena
+  description: 'Roman gladiator arena first-playable. Ported from workflows/roman_first_playable.py:ROMAN_FIRST_PLAYABLE_SPECS
+    (Path B s9 mechanical YAML port; data parked in s2).
+
+    11 main specs + 3 default-only = 14 packs total. P0/P1 = required, P2/P3 = optional.'
+  flax_project_default: C:/flax/flax-mcp/Project/TestGame
+  output_folder: Content/Recipes/RomanArena_FirstPlayable
+  ported_from: Python/assetboy/data/roman_first_playable_specs.yaml
+  ported_at_utc: '2026-05-10T00:00:00Z'
+packs:
+- id: RA_PACK_CHR_CORE_SLICE_01
+  category: character_base
+  asset_kind: character_animated
+  provider: mixamo
+  acquisition_method: manual_browser
+  license:
+    kind: manual_per_source
+    commercial_ok: true
+    cross_engine_ok: true
+    notes: Per-source EULA review required.
+  search_terms:
+  - male humanoid muscular
+  - fighter male base
+  - roman fighter base
+  quality_keywords:
+  - body
+  - head
+  - tunic
+  - sandal
+  - team
+  expected_contents:
+  - shared male body/rig
+  - 6 heads
+  - shared tunic
+  - shared sandals/footwear
+  - team overlays
+  output_formats:
+  - fbx
+  - glb
+  - png
+  - jpg
+  - tga
+  fallback_providers:
+  - fab
+  - unity
+  min_keyword_hits: 4
+  min_payload_files: 5
+  request_count: 1
+  accept_archive_payload: false
+  cleanup:
+    mode: blender
+    blender_passes:
+    - decimate_uv_fbx_export
+  shared_family_tags:
+  - shared_human_base_rigs
+  flax_import:
+    target_subfolder: Roman/characters/RA_PACK_CHR_CORE_SLICE_01
+  flax_intended_use: shared fighter base plus class loadouts
+  source_strategy: Bootstrap the shared male rig/body first, then layer heads, tunic, sandals, and team overlays around the
+    approved base.
+  gate:
+    required: true
+    priority: P0
+    reason: 'P0/P1 Roman-arena slice item (provenance: RA_PACK_CHR_CORE_SLICE_01)'
+- id: RA_PACK_CHR_SKIRMISHER_SLICE_01
+  category: character_base
+  asset_kind: character_animated
+  provider: fab
+  acquisition_method: manual_browser
+  license:
+    kind: manual_per_source
+    commercial_ok: true
+    cross_engine_ok: true
+    notes: Per-source EULA review required.
+  search_terms:
+  - roman skirmisher tunic javelin
+  - light fighter wrap
+  quality_keywords:
+  - skirmisher
+  - javelin
+  - light
+  - wrap
+  expected_contents:
+  - 'class kit: skirmisher'
+  output_formats:
+  - fbx
+  - glb
+  - png
+  - jpg
+  - tga
+  fallback_providers:
+  - mixamo
+  - unity
+  min_keyword_hits: 1
+  min_payload_files: 1
+  request_count: 1
+  accept_archive_payload: false
+  cleanup:
+    mode: blender
+    blender_passes:
+    - decimate_uv_fbx_export
+  shared_family_tags: []
+  flax_import:
+    target_subfolder: Roman/characters/RA_PACK_CHR_SKIRMISHER_SLICE_01
+  flax_intended_use: javelin skirmisher class silhouette
+  source_strategy: Use source-first class clothing or kitbash parts around the approved shared body; keep the skirmisher light
+    and readable.
+  gate:
+    required: true
+    priority: P0
+    reason: 'P0/P1 Roman-arena slice item (provenance: RA_PACK_CHR_SKIRMISHER_SLICE_01)'
+- id: RA_PACK_CHR_SLINGER_SLICE_01
+  category: character_base
+  asset_kind: character_animated
+  provider: fab
+  acquisition_method: manual_browser
+  license:
+    kind: manual_per_source
+    commercial_ok: true
+    cross_engine_ok: true
+    notes: Per-source EULA review required.
+  search_terms:
+  - roman slinger tunic pouch
+  - light slinger wrap
+  quality_keywords:
+  - slinger
+  - sling
+  - pouch
+  - light
+  expected_contents:
+  - 'class kit: slinger'
+  output_formats:
+  - fbx
+  - glb
+  - png
+  - jpg
+  - tga
+  fallback_providers:
+  - mixamo
+  - unity
+  min_keyword_hits: 1
+  min_payload_files: 1
+  request_count: 1
+  accept_archive_payload: false
+  cleanup:
+    mode: blender
+    blender_passes:
+    - decimate_uv_fbx_export
+  shared_family_tags: []
+  flax_import:
+    target_subfolder: Roman/characters/RA_PACK_CHR_SLINGER_SLICE_01
+  flax_intended_use: slinger class silhouette and pouch read
+  source_strategy: Use source-first class clothing or kitbash parts around the approved shared body; make the sling read instantly
+    at match distance.
+  gate:
+    required: true
+    priority: P0
+    reason: 'P0/P1 Roman-arena slice item (provenance: RA_PACK_CHR_SLINGER_SLICE_01)'
+- id: RA_PACK_CHR_DUELIST_SLICE_01
+  category: character_base
+  asset_kind: character_animated
+  provider: fab
+  acquisition_method: manual_browser
+  license:
+    kind: manual_per_source
+    commercial_ok: true
+    cross_engine_ok: true
+    notes: Per-source EULA review required.
+  search_terms:
+  - roman duelist shield tunic
+  - roman arena duelist
+  quality_keywords:
+  - duelist
+  - shield
+  - roman
+  expected_contents:
+  - 'class kit: duelist'
+  output_formats:
+  - fbx
+  - glb
+  - png
+  - jpg
+  - tga
+  fallback_providers:
+  - mixamo
+  - unity
+  min_keyword_hits: 1
+  min_payload_files: 1
+  request_count: 1
+  accept_archive_payload: false
+  cleanup:
+    mode: blender
+    blender_passes:
+    - decimate_uv_fbx_export
+  shared_family_tags: []
+  flax_import:
+    target_subfolder: Roman/characters/RA_PACK_CHR_DUELIST_SLICE_01
+  flax_intended_use: duelist class silhouette with stronger Roman read
+  source_strategy: Avoid generator-first here. Use manual or licensed class parts that keep the duelist historically grounded.
+  gate:
+    required: true
+    priority: P0
+    reason: 'P0/P1 Roman-arena slice item (provenance: RA_PACK_CHR_DUELIST_SLICE_01)'
+- id: RA_PACK_WPN_COMBAT_SLICE_01
+  category: weapon
+  asset_kind: prop_static
+  provider: fab
+  acquisition_method: manual_browser
+  license:
+    kind: manual_per_source
+    commercial_ok: true
+    cross_engine_ok: true
+    notes: Per-source EULA review required.
+  search_terms:
+  - roman weapons pack
+  - gladius scutum javelin spear sling
+  quality_keywords:
+  - javelin
+  - spear
+  - sling
+  - stone
+  - pouch
+  - club
+  - gladius
+  - scutum
+  - bundle
+  expected_contents:
+  - light javelin
+  - heavy javelin
+  - short spear
+  - hand sling
+  - sling stone
+  - stone pouch
+  - hardwood club
+  - gladius
+  - scutum
+  - javelin bundle
+  output_formats:
+  - glb
+  - fbx
+  - png
+  - jpg
+  - tga
+  fallback_providers:
+  - museum_page
+  - unity
+  min_keyword_hits: 6
+  min_payload_files: 6
+  request_count: 1
+  accept_archive_payload: false
+  cleanup:
+    mode: blender
+    blender_passes:
+    - decimate_uv_fbx_export
+  shared_family_tags:
+  - historic_tech_props_core
+  flax_import:
+    target_subfolder: Roman/weapons_props/RA_PACK_WPN_COMBAT_SLICE_01
+  flax_intended_use: hands, loadouts, and pickups
+  source_strategy: Source the core Roman loadout first. Only use generator support for small carry-prop gaps after the hero
+    silhouettes are credible.
+  gate:
+    required: true
+    priority: P0
+    reason: 'P0/P1 Roman-arena slice item (provenance: RA_PACK_WPN_COMBAT_SLICE_01)'
+- id: RA_PACK_ENV_SANDSTONE_BOWL_SLICE_01
+  category: architecture
+  asset_kind: model
+  provider: fab
+  acquisition_method: manual_browser
+  license:
+    kind: manual_per_source
+    commercial_ok: true
+    cross_engine_ok: true
+    notes: Per-source EULA review required.
+  search_terms:
+  - roman arena modular
+  - sandstone colosseum bowl
+  quality_keywords:
+  - arena
+  - wall
+  - gate
+  - stair
+  - tunnel
+  - column
+  - banner
+  - urn
+  expected_contents:
+  - sandstone bowl arena shell
+  - floor
+  - mound
+  - walls
+  - gate
+  - tunnel
+  - stairs
+  - barriers
+  - columns
+  - shield rack
+  - banners
+  - urns
+  output_formats:
+  - glb
+  - fbx
+  - png
+  - jpg
+  - tga
+  fallback_providers:
+  - unity
+  min_keyword_hits: 2
+  min_payload_files: 8
+  request_count: 1
+  accept_archive_payload: false
+  cleanup:
+    mode: blender
+    blender_passes:
+    - decimate_uv_fbx_export
+  shared_family_tags:
+  - historic_roman_architecture_core
+  flax_import:
+    target_subfolder: Roman/environment_architecture/RA_PACK_ENV_SANDSTONE_BOWL_SLICE_01
+  flax_intended_use: assemble the playable arena shell
+  source_strategy: Use a compact Roman-adjacent modular shell first. Keep the pack tight enough to build one honest arena
+    instead of a giant environment dump.
+  gate:
+    required: true
+    priority: P0
+    reason: 'P0/P1 Roman-arena slice item (provenance: RA_PACK_ENV_SANDSTONE_BOWL_SLICE_01)'
+- id: RA_PACK_TRAP_SLICE_01
+  category: prop
+  asset_kind: prop_static
+  provider: fab
+  acquisition_method: manual_browser
+  license:
+    kind: manual_per_source
+    commercial_ok: true
+    cross_engine_ok: true
+    notes: Per-source EULA review required.
+  search_terms:
+  - spike trap portcullis pendulum trap
+  - arena trap mechanical
+  quality_keywords:
+  - spike
+  - fire
+  - pendulum
+  - portcullis
+  - trigger
+  expected_contents:
+  - spike grate
+  - fire urn
+  - pendulum
+  - portcullis
+  - trigger plate
+  - intact/active/readable states
+  output_formats:
+  - glb
+  - fbx
+  - png
+  - jpg
+  - tga
+  fallback_providers:
+  - unity
+  min_keyword_hits: 4
+  min_payload_files: 4
+  request_count: 1
+  accept_archive_payload: false
+  cleanup:
+    mode: blender
+    blender_passes:
+    - decimate_uv_fbx_export
+  shared_family_tags: []
+  flax_import:
+    target_subfolder: Roman/traps/RA_PACK_TRAP_SLICE_01
+  flax_intended_use: placed hazard states
+  source_strategy: Kitbash the trap families from readable mechanical pieces first. Keep the active and intact states obvious
+    before chasing fidelity.
+  gate:
+    required: true
+    priority: P0
+    reason: 'P0/P1 Roman-arena slice item (provenance: RA_PACK_TRAP_SLICE_01)'
+- id: RA_PACK_MAT_AND_POLISH_SLICE_01
+  category: material
+  asset_kind: surface_pbr
+  provider: ambientcg
+  acquisition_method: direct_url
+  license:
+    kind: cc0_or_cc_by_filtered
+    commercial_ok: true
+    attribution_required: per-file
+    cross_engine_ok: true
+  search_terms:
+  - sand
+  - stone
+  - leather
+  - wood
+  - metal
+  - fabric
+  quality_keywords:
+  - sand
+  - stone
+  - leather
+  - wood
+  - metal
+  - fabric
+  expected_contents:
+  - sand
+  - sandstone
+  - leather
+  - wood
+  - iron
+  - coarse cloth
+  output_formats:
+  - png
+  - jpg
+  - tga
+  - hdr
+  - exr
+  fallback_providers: []
+  min_keyword_hits: 4
+  min_payload_files: 4
+  request_count: 6
+  accept_archive_payload: true
+  cleanup:
+    mode: minimal
+  shared_family_tags:
+  - historic_roman_materials_core
+  flax_import:
+    target_subfolder: Roman/materials_textures/RA_PACK_MAT_AND_POLISH_SLICE_01
+  flax_intended_use: sand, sandstone, leather, wood, iron, and cloth materials
+  source_strategy: Bootstrap with legally clear direct-download materials first. Upgrade to stronger scans later without locking
+    the repo into free forever.
+  gate:
+    required: true
+    priority: P1
+    reason: 'P0/P1 Roman-arena slice item (provenance: RA_PACK_MAT_AND_POLISH_SLICE_01)'
+- id: RA_PACK_ANM_COMBAT_SLICE_01
+  category: animation
+  asset_kind: animation
+  provider: mixamo_animations
+  acquisition_method: manual_browser
+  license:
+    kind: manual_per_source
+    commercial_ok: true
+    cross_engine_ok: true
+    notes: Per-source EULA review required.
+  search_terms:
+  - walk run sprint idle
+  - hit react stumble death
+  - javelin throw attack
+  - sling throw attack
+  - sword shield slash
+  - trap react knockback
+  quality_keywords:
+  - idle
+  - run
+  - react
+  - javelin
+  - sling
+  - duelist
+  - trap
+  expected_contents:
+  - shared locomotion
+  - shared state
+  - shared reacts
+  - javelin set
+  - sling set
+  - duelist set
+  - trap react set
+  output_formats:
+  - fbx
+  - bvh
+  fallback_providers: []
+  min_keyword_hits: 5
+  min_payload_files: 6
+  request_count: 1
+  accept_archive_payload: false
+  cleanup:
+    mode: blender
+    blender_passes:
+    - decimate_uv_fbx_export
+  shared_family_tags:
+  - shared_combat_animation_baseline
+  flax_import:
+    target_subfolder: Roman/animations/RA_PACK_ANM_COMBAT_SLICE_01
+  flax_intended_use: combat graph clips and class action sets
+  source_strategy: Source grounded locomotion, reacts, throws, and class-specific attacks first. Generator support is for
+    clear gaps only.
+  gate:
+    required: true
+    priority: P0
+    reason: 'P0/P1 Roman-arena slice item (provenance: RA_PACK_ANM_COMBAT_SLICE_01)'
+- id: RA_PACK_AUD_SFX_SLICE_01
+  category: sfx
+  asset_kind: sfx
+  provider: mixkit
+  acquisition_method: direct_url
+  license:
+    kind: cc0_or_cc_by_filtered
+    commercial_ok: true
+    attribution_required: per-file
+    cross_engine_ok: true
+  search_terms:
+  - combat footsteps
+  - shield impact
+  - trap warning
+  - ui confirm
+  quality_keywords:
+  - impact
+  - footstep
+  - trap
+  - warning
+  - ui
+  - fire
+  expected_contents:
+  - combat SFX baseline
+  - trap warning/impact baseline
+  - UI/combat feedback baseline
+  output_formats:
+  - wav
+  - ogg
+  - mp3
+  fallback_providers: []
+  min_keyword_hits: 3
+  min_payload_files: 3
+  request_count: 4
+  accept_archive_payload: true
+  cleanup:
+    mode: minimal
+  shared_family_tags: []
+  flax_import:
+    target_subfolder: Roman/audio_sfx/RA_PACK_AUD_SFX_SLICE_01
+  flax_intended_use: combat, trap, and UI cues
+  source_strategy: Curate a small direct-download baseline that covers weapon impacts, warnings, footsteps, and UI confirms
+    before any generator fill.
+  gate:
+    required: true
+    priority: P0
+    reason: 'P0/P1 Roman-arena slice item (provenance: RA_PACK_AUD_SFX_SLICE_01)'
+- id: RA_PACK_AUD_MUSIC_SLICE_01
+  category: music
+  asset_kind: music
+  provider: mixkit
+  acquisition_method: direct_url
+  license:
+    kind: cc0_or_cc_by_filtered
+    commercial_ok: true
+    attribution_required: per-file
+    cross_engine_ok: true
+  search_terms:
+  - roman combat loop
+  - arena ambience loop
+  quality_keywords:
+  - arena
+  - combat
+  - loop
+  - ambience
+  expected_contents:
+  - one arena/combat ambience or loop baseline
+  output_formats:
+  - wav
+  - ogg
+  - mp3
+  fallback_providers: []
+  min_keyword_hits: 2
+  min_payload_files: 1
+  request_count: 1
+  accept_archive_payload: true
+  cleanup:
+    mode: minimal
+  shared_family_tags: []
+  flax_import:
+    target_subfolder: Roman/music/RA_PACK_AUD_MUSIC_SLICE_01
+  flax_intended_use: one loopable arena/combat bed
+  source_strategy: Choose one honest loopable arena/combat bed from a legally clear source before considering generator backups.
+  gate:
+    required: true
+    priority: P0
+    reason: 'P0/P1 Roman-arena slice item (provenance: RA_PACK_AUD_MUSIC_SLICE_01)'
+- id: RA_PACK_COMBAT_PREP_SLICE_01
+  category: character_base
+  asset_kind: character_animated
+  provider: mixamo
+  acquisition_method: manual_browser
+  license:
+    kind: manual_per_source
+    commercial_ok: true
+    cross_engine_ok: true
+    notes: Per-source EULA review required.
+  search_terms:
+  - Kevin HumanM spear polearm combat
+  - Mixamo spear carry run strafe jump
+  - first person arms polearm combat
+  quality_keywords:
+  - arms
+  - spear
+  - idle
+  - run
+  - strafe
+  - jump
+  - melee
+  - death
+  expected_contents:
+  - coherent Kevin or B-hips body lane
+  - first-person arms candidate
+  - primary spear mesh
+  - idle, walk, run, sprint, strafe, jump begin, jump land
+  - spear carry and combat idle
+  - light polearm melee and heavy melee partial
+  - death plus explicit fallback stagger and throw coverage
+  output_formats:
+  - fbx
+  - glb
+  fallback_providers:
+  - fab
+  - unity
+  min_keyword_hits: 5
+  min_payload_files: 8
+  request_count: 1
+  accept_archive_payload: false
+  cleanup:
+    mode: blender
+    blender_passes:
+    - decimate_uv_fbx_export
+  shared_family_tags:
+  - shared_combat_animation_baseline
+  - shared_human_base_rigs
+  flax_import:
+    target_subfolder: Roman/combat_presentation/RA_PACK_COMBAT_PREP_SLICE_01
+  flax_intended_use: baseline first-person and third-person Roman spear combat lane
+  source_strategy: Prefer one coherent Kevin or B-hips lane that already covers locomotion, spear carry, melee, and a usable
+    upper-body arms candidate before filling gaps.
+  gate:
+    required: false
+    priority: P0
+    reason: 'P0/P1 Roman-arena slice item (provenance: RA_PACK_COMBAT_PREP_SLICE_01)'
+- id: RA_PACK_COMBAT_PREP_SLICE_02
+  category: character_base
+  asset_kind: character_animated
+  provider: mixamo
+  acquisition_method: manual_browser
+  license:
+    kind: manual_per_source
+    commercial_ok: true
+    cross_engine_ok: true
+    notes: Per-source EULA review required.
+  search_terms:
+  - Kevin HumanM crouch throw stagger wounded
+  - Mixamo polearm throw hit react limp
+  - first person arms wounded combat
+  quality_keywords:
+  - arms
+  - crouch
+  - throw
+  - hit
+  - stagger
+  - wounded
+  - limp
+  expected_contents:
+  - true first-person arms or stronger viewmodel lane
+  - same-lane crouch locomotion
+  - same-lane throw windup, release, and recover
+  - same-lane upper and lower hit reacts
+  - same-lane stagger and recovery
+  - same-lane wounded or limp locomotion
+  - weapon grip and left-hand support targets
+  output_formats:
+  - fbx
+  - glb
+  fallback_providers:
+  - fab
+  - unity
+  min_keyword_hits: 5
+  min_payload_files: 6
+  request_count: 1
+  accept_archive_payload: false
+  cleanup:
+    mode: blender
+    blender_passes:
+    - decimate_uv_fbx_export
+  shared_family_tags:
+  - shared_combat_animation_baseline
+  - shared_human_base_rigs
+  flax_import:
+    target_subfolder: Roman/combat_presentation/RA_PACK_COMBAT_PREP_SLICE_02
+  flax_intended_use: close the missing first-person combat coverage for throw, reacts, wounded, and crouch
+  source_strategy: Stay on one coherent humanoid lane and only accept source-first slices that close the crouch, throw, hit-react,
+    and wounded gaps without rig drift.
+  gate:
+    required: false
+    priority: P0
+    reason: 'P0/P1 Roman-arena slice item (provenance: RA_PACK_COMBAT_PREP_SLICE_02)'
+- id: RA_PACK_ANM_COMBAT_SLICE_02
+  category: animation
+  asset_kind: animation
+  provider: mixamo_animations
+  acquisition_method: manual_browser
+  license:
+    kind: manual_per_source
+    commercial_ok: true
+    cross_engine_ok: true
+    notes: Per-source EULA review required.
+  search_terms:
+  - javelin throw windup release recover
+  - hit react stagger knockback
+  - wounded limp crouch locomotion
+  quality_keywords:
+  - throw
+  - hit
+  - stagger
+  - wounded
+  - limp
+  - crouch
+  expected_contents:
+  - throw windup, release, and recover
+  - upper-body hit reacts
+  - lower-body hit reacts
+  - stagger and knockback recovery
+  - wounded or limp locomotion
+  - same-lane crouch locomotion
+  output_formats:
+  - fbx
+  - bvh
+  fallback_providers: []
+  min_keyword_hits: 4
+  min_payload_files: 5
+  request_count: 1
+  accept_archive_payload: false
+  cleanup:
+    mode: blender
+    blender_passes:
+    - decimate_uv_fbx_export
+  shared_family_tags:
+  - shared_combat_animation_baseline
+  flax_import:
+    target_subfolder: Roman/animations/RA_PACK_ANM_COMBAT_SLICE_02
+  flax_intended_use: animation-only gap fill for Roman spear combat coverage
+  source_strategy: Source clip-level throw, react, crouch, and wounded coverage on the same humanoid lane before accepting
+    cross-rig filler.
+  gate:
+    required: false
+    priority: P0
+    reason: 'P0/P1 Roman-arena slice item (provenance: RA_PACK_ANM_COMBAT_SLICE_02)'
+gates:
+  required_pack_ids:
+  - RA_PACK_CHR_CORE_SLICE_01
+  - RA_PACK_CHR_SKIRMISHER_SLICE_01
+  - RA_PACK_CHR_SLINGER_SLICE_01
+  - RA_PACK_CHR_DUELIST_SLICE_01
+  - RA_PACK_WPN_COMBAT_SLICE_01
+  - RA_PACK_ENV_SANDSTONE_BOWL_SLICE_01
+  - RA_PACK_TRAP_SLICE_01
+  - RA_PACK_MAT_AND_POLISH_SLICE_01
+  - RA_PACK_ANM_COMBAT_SLICE_01
+  - RA_PACK_AUD_SFX_SLICE_01
+  - RA_PACK_AUD_MUSIC_SLICE_01
+  optional_pack_ids:
+  - RA_PACK_COMBAT_PREP_SLICE_01
+  - RA_PACK_COMBAT_PREP_SLICE_02
+  - RA_PACK_ANM_COMBAT_SLICE_02
+  block_on_missing_required: true
+vfx:
+  particles_needed:
+  - dust_arena_ground
+  - blood_hit_spurt
+  - sand_kicks
+  - torch_flames
+  - weapon_clash_sparks
+  notes: Flax Particles authored manually in editor. Not auto-acquired. Drop into Content/Recipes/RomanArena_FirstPlayable/VFX/.
+scene_setup:
+  terrain:
+    source: heightmap_imported_from_gaea_or_world_creator
+    splat_layers:
+    - arena_sand_dry
+    - arena_sand_blood_stained
+    - stone_cobble
+    - wood_planks_aged
+    - marble_dust
+    size_m: 256
+    height_range_m: 40
+  lighting:
+    sky_atmosphere: enabled
+    sun_directional:
+      intensity: 10
+      color_kelvin: 5800
+      angle_pitch_deg: 55
+      notes: harsh midday Mediterranean sun
+    sky_light:
+      intensity: 0.3
+      mode: ibl_from_hdri
+    bake_lightmaps:
+      regions:
+      - arena_floor
+      - tunnel_entry
+      - podium
+      foliage: dynamic
