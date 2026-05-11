@@ -1,0 +1,364 @@
+# Primitive-Tech First Playable — Asset Recipe
+# ============================================================================
+# A stone-age forest survival demo. Player chops trees, crafts huts, makes
+# fire, hunts. Stylized realistic PBR, no fantasy, no sci-fi, no characters
+# with crazy armor. Small asset surface (10-20 species, ~20 prop types).
+#
+# Target hardware:    RTX 3050 6GB laptop
+# Generation budget:  zero-AI for v0 — all assets from CC0 / Fab-Standard sources
+# Demo target:        4 weeks (per PATH-B Day-by-Day plan)
+# Engine:             Flax 1.10
+#
+# Consumed by:        `python -m assetboy.cli pack from-recipe <this file>`
+#                     (s8 ships the CLI command; s9 ships a Roman counterpart)
+# ============================================================================
+
+recipe:
+  id: primitive_tech_first_playable
+  schema_version: "2026-05-10.recipe.v1"
+  game: primitive_tech
+  description: |
+    Stone-age forest survival vertical-slice demo.
+    Hero loop: chop wood, gather stones, light a fire, place a hut, sleep
+    through night. Forest exterior only; no dungeons, no NPCs (yet).
+  flax_project_default: "C:/flax/flax-mcp/Project/TestGame"
+  output_folder: "Content/Recipes/PrimitiveTech_FirstPlayable"
+  perf_target:
+    visible_lod0_trees: 100
+    foliage_cull_m: 80
+    foliage_lod_bias_beyond_m: 50
+    max_texture_set_gb_in_flight: 2.0
+    target_fps_3050: 60
+
+# ============================================================================
+# Packs — atomic asset bundles, each driven through pack_pipeline.Stage flow
+# ============================================================================
+packs:
+
+  # ------------------------------------------------------------------
+  # Foliage — Quixel Megaplants (Fab-Standard, free, engine-agnostic).
+  # 16+ species free; pick 8 that fit a temperate-broadleaf forest.
+  # ------------------------------------------------------------------
+  - id: SHARED_FAB_FOLIAGE_FOREST_BROADLEAF_TREES_01
+    category: model
+    asset_kind: foliage
+    provider: fab
+    acquisition_method: manual_browser
+    source_url: https://www.fab.com/sellers/Quixel%20Megaplants
+    license:
+      kind: fab_standard
+      commercial_ok: true
+      attribution_required: false
+      cross_engine_ok: true
+      notes: "Fab EULA: 'usage is not limited to Unreal Engine.' Engine-agnostic."
+    assets:
+      - listing_uid: "english_oak_01"          # Quercus robur
+      - listing_uid: "european_beech_01"       # Fagus sylvatica
+      - listing_uid: "european_aspen_01"       # Populus tremula
+      - listing_uid: "european_hornbeam_01"    # Carpinus betulus
+      - listing_uid: "common_hazel_01"         # Corylus avellana
+      - listing_uid: "norway_maple_01"         # Acer platanoides
+      - listing_uid: "goat_willow_01"          # Salix caprea
+      - listing_uid: "baltic_pine_01"          # Pinus sylvestris
+    cleanup:
+      mode: minimal              # already game-ready LODs in source FBX
+      blender_passes: []
+    flax_import:
+      target_subfolder: "Foliage/Trees"
+      flax_foliage_actor_preset: temperate_broadleaf
+      lod_import: true
+      lod_screen_size_table: [1.0, 0.5, 0.25, 0.1]
+    gate:
+      required: true
+      reason: "core forest visual; demo unplayable without trees"
+
+  # ------------------------------------------------------------------
+  # Surface textures — PolyHaven (CC0)
+  # ------------------------------------------------------------------
+  - id: SHARED_POLY_TEX_FOREST_FLOOR_PBR_01
+    category: texture
+    asset_kind: surface_pbr
+    provider: polyhaven
+    acquisition_method: direct_url
+    license:
+      kind: cc0
+      commercial_ok: true
+      attribution_required: false
+      cross_engine_ok: true
+    assets:
+      - asset_id: leaves_forest_ground         # forest floor leaves
+      - asset_id: forest_ground_01             # general forest dirt
+      - asset_id: moss_ground_01               # mossy patches
+      - asset_id: mud_forest_01                # wet mud
+    cleanup:
+      mode: skip                  # PolyHaven ships clean PBR sets
+    flax_import:
+      target_subfolder: "Materials/Ground"
+      pbr_channels:
+        albedo: "*_diff_2k.jpg"
+        normal: "*_nor_gl_2k.exr"   # OpenGL convention
+        roughness: "*_rough_2k.exr"
+        ao: "*_ao_2k.exr"
+        height: "*_disp_2k.exr"
+      resolution_default: 2048    # 2K default; reserve 4K for hero closeups
+    gate:
+      required: true
+      reason: "terrain splat layers; no terrain without these"
+
+  # ------------------------------------------------------------------
+  # Hero rock scans — PolyHaven (CC0)
+  # ------------------------------------------------------------------
+  - id: SHARED_POLY_MODEL_FOREST_ROCKS_01
+    category: model
+    asset_kind: prop_static
+    provider: polyhaven
+    acquisition_method: direct_url
+    license:
+      kind: cc0
+      commercial_ok: true
+      attribution_required: false
+    assets:
+      - asset_id: rock_boulder_dry_01
+      - asset_id: rock_moss_set_01
+    cleanup:
+      mode: minimal
+    flax_import:
+      target_subfolder: "Props/Rocks"
+      lod_import: true
+    gate:
+      required: true
+
+  # ------------------------------------------------------------------
+  # Bark / wood textures — AmbientCG (CC0)
+  # ------------------------------------------------------------------
+  - id: SHARED_ACG_TEX_BARK_WOOD_01
+    category: texture
+    asset_kind: surface_pbr
+    provider: ambientcg
+    acquisition_method: direct_url
+    license:
+      kind: cc0
+      commercial_ok: true
+      attribution_required: false
+    assets:
+      - asset_id: Bark004
+      - asset_id: Bark007
+      - asset_id: WoodLog003
+      - asset_id: WoodPlanksOld001
+    cleanup:
+      mode: skip
+    flax_import:
+      target_subfolder: "Materials/Bark"
+      resolution_default: 2048
+    gate:
+      required: false             # nice-to-have; trees ship with their own bark
+      reason: "for chopped-log props"
+
+  # ------------------------------------------------------------------
+  # Sky HDRI — PolyHaven (CC0)
+  # ------------------------------------------------------------------
+  - id: SHARED_POLY_HDRI_FOREST_DAWN_01
+    category: hdr
+    asset_kind: skybox
+    provider: polyhaven
+    acquisition_method: direct_url
+    license:
+      kind: cc0
+      commercial_ok: true
+    assets:
+      - asset_id: autumn_forest_03    # dawn HDRI
+      - asset_id: kloofendal_43d_clear_puresky_2k
+    cleanup:
+      mode: skip
+    flax_import:
+      target_subfolder: "Lighting/HDRI"
+      resolution_default: 4096
+    gate:
+      required: true
+      reason: "sky atmosphere + IBL bake source"
+
+  # ------------------------------------------------------------------
+  # Blockout props — Kenney CC0 (Nature Kit + Survival Kit)
+  # ------------------------------------------------------------------
+  - id: SHARED_KEN_BLOCKOUT_NATURE_SURVIVAL_01
+    category: model
+    asset_kind: prop_blockout
+    provider: kenney
+    acquisition_method: direct_url
+    license:
+      kind: cc0
+      commercial_ok: true
+    assets:
+      - asset_id: nature-kit
+      - asset_id: survival-kit
+    cleanup:
+      mode: skip
+    flax_import:
+      target_subfolder: "Props/Blockout"
+    gate:
+      required: false
+      reason: "Week 1 blockouts; replaced by hero props in Week 2-3"
+
+  # ------------------------------------------------------------------
+  # Player character + animations — Mixamo
+  # ------------------------------------------------------------------
+  - id: SHARED_MIXAMO_CHR_PLAYER_HUMAN_01
+    category: animation
+    asset_kind: character_animated
+    provider: mixamo
+    acquisition_method: manual_browser
+    license:
+      kind: mixamo_free
+      commercial_ok: true
+      attribution_required: false
+      cross_engine_ok: true
+      restrictions: "Embedded in game OK; cannot redistribute rigs as standalone pack."
+    base_model: X_Bot
+    animations:
+      - idle
+      - walk_forward
+      - run_forward
+      - chop_overhead       # axe chop
+      - chop_side
+      - gather              # pick up small item
+      - drink               # crouch + drink
+      - sleep               # lay down
+      - throw
+      - crouch_idle
+      - climb_up
+    cleanup:
+      mode: blender
+      blender_script: "scripts/mixamo_merge.py"
+      blender_args:
+        - "--input-glb"
+        - "<source_dir>"
+        - "--output-glb"
+        - "<reviewed_source_dir>/player_with_anims.glb"
+    flax_import:
+      target_subfolder: "Characters/Player"
+    gate:
+      required: true
+      reason: "no player without player"
+
+  # ------------------------------------------------------------------
+  # Ambient audio — generated locally with Stable Audio Open Small (6GB OK)
+  # ------------------------------------------------------------------
+  - id: SHARED_GEN_AUDIO_FOREST_AMBIENCE_01
+    category: audio
+    asset_kind: ambience_loop
+    provider: stable_audio_open_small
+    acquisition_method: generator
+    license:
+      kind: stability_community
+      commercial_ok: true        # under $1M annual revenue
+      training_data_clean: true  # trained on CC0/CC-BY/Sampling+ only
+    prompts:
+      - id: forest_dawn_loop
+        text: "forest at dawn, birds chirping, soft wind through leaves, 11 seconds, loop-friendly"
+        duration_s: 11
+      - id: fire_crackle_close
+        text: "fire crackle close-up, wood embers, 11 seconds, loop-friendly"
+        duration_s: 11
+      - id: river_over_rocks
+        text: "river over rocks, gentle flow, 11 seconds, loop-friendly"
+        duration_s: 11
+      - id: wind_through_leaves_distant
+        text: "wind through leaves, distant, 11 seconds, loop-friendly"
+        duration_s: 11
+    cleanup:
+      mode: minimal
+      ffmpeg_passes:
+        - normalize_loudness_lufs: -16
+        - fade_in_ms: 50
+        - fade_out_ms: 50
+    flax_import:
+      target_subfolder: "Audio/Ambience"
+      audio_class: ambient_loop
+      loop: true
+    gate:
+      required: false
+      reason: "shippable without, but unlocks dusk/night atmosphere"
+
+  # ------------------------------------------------------------------
+  # SFX — FreeSound (filter CC0 or CC-BY)
+  # ------------------------------------------------------------------
+  - id: SHARED_FS_AUDIO_FOREST_SFX_01
+    category: audio
+    asset_kind: sfx
+    provider: freesound
+    acquisition_method: direct_url
+    license:
+      kind: cc0_or_cc_by_filtered
+      commercial_ok: true
+      attribution_required: "per-file (cc_by entries need credits.md entry)"
+    search_terms:
+      - "axe chop oak wood"
+      - "boar grunt"
+      - "deer call"
+      - "footsteps forest leaves"
+      - "stone pickup"
+      - "rope creak"
+    license_filter: ["cc0", "cc_by"]
+    cleanup:
+      mode: minimal
+    flax_import:
+      target_subfolder: "Audio/SFX"
+    gate:
+      required: true
+      reason: "no audio feedback = no game"
+
+# ============================================================================
+# Gates (cross-pack ready-to-ship checks)
+# ============================================================================
+gates:
+  required_pack_ids:
+    - SHARED_FAB_FOLIAGE_FOREST_BROADLEAF_TREES_01
+    - SHARED_POLY_TEX_FOREST_FLOOR_PBR_01
+    - SHARED_POLY_MODEL_FOREST_ROCKS_01
+    - SHARED_POLY_HDRI_FOREST_DAWN_01
+    - SHARED_MIXAMO_CHR_PLAYER_HUMAN_01
+    - SHARED_FS_AUDIO_FOREST_SFX_01
+  optional_pack_ids:
+    - SHARED_ACG_TEX_BARK_WOOD_01
+    - SHARED_KEN_BLOCKOUT_NATURE_SURVIVAL_01
+    - SHARED_GEN_AUDIO_FOREST_AMBIENCE_01
+  block_on_missing_required: true
+
+# ============================================================================
+# VFX (built manually in Flax editor; not pipelinable)
+# ============================================================================
+vfx:
+  particles_needed:
+    - smoke_from_fire
+    - fire_flames
+    - water_splash
+    - dust_motes_sun_shafts
+  notes: |
+    Flax Particles authored manually in editor. Not auto-acquired.
+    Drop into Content/Recipes/PrimitiveTech_FirstPlayable/VFX/.
+
+# ============================================================================
+# Scene setup (driven manually post-import; documents expected setup)
+# ============================================================================
+scene_setup:
+  terrain:
+    source: heightmap_imported_from_gaea_or_world_creator
+    splat_layers: [forest_floor_leaves, dirt, mud, grass, exposed_rock, gravel]
+    size_m: 512
+    height_range_m: 80
+  lighting:
+    sky_atmosphere: enabled
+    sun_directional:
+      intensity: 8
+      color_kelvin: 5500
+      angle_pitch_deg: 35
+    sky_light:
+      intensity: 0.4
+      mode: ibl_from_hdri
+    bake_lightmaps:
+      regions: [player_base, hut_area, fire_pit_area]
+      foliage: dynamic
+  foliage_actor:
+    visible_lod0_budget: 100
+    cull_distance_m: 80
+    lod_bias_beyond_m: 50

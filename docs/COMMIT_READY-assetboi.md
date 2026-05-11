@@ -373,3 +373,72 @@ This gives recipe-driven pack runs a stable forward-compatible entry point that 
 **Deferred to new slice s10.5:** mechanical extraction of legacy `execute_prepare_pack` body into the 5 `STAGE_HANDLERS` functions, with full v1 -> v2 ledger compatibility tests (round-trip + cleanup-pause + degraded-canonicalization), and rewrite of legacy body to call `execute_prepare_pack_dispatched` internally. ~2-day slice when test bootstrap is in place.
 
 **Next:** s8 — `recipes/primitive_tech/first_playable.yaml` + `pack from-recipe` CLI command.
+
+---
+
+## Slice s8 — Day 8 primitive_tech recipe + pack CLI (2026-05-10)
+
+**Status:** SHIPPED end-to-end. 7th Typer sub-app live. Recipe loader + dispatch walking real packs.
+
+**What shipped:**
+
+1. **`recipes/primitive_tech/first_playable.yaml`** (~220 lines) — first real recipe:
+   - 9 packs covering: 8 tree species (Quixel Megaplants/Fab-Standard), 4 PolyHaven CC0 ground textures, 2 PolyHaven CC0 rocks, 4 AmbientCG CC0 bark/wood textures, 2 PolyHaven CC0 HDRIs (forest dawn), Kenney CC0 blockout kits, Mixamo player + 11 anims (chop/gather/sleep/run/etc), 4 generated ambience tracks (Stable Audio Open Small ≤6GB VRAM), FreeSound CC0 SFX.
+   - License + commercial_ok + cross_engine_ok metadata per pack.
+   - Per-pack cleanup mode (`skip` / `minimal` / `blender`) + Flax import target paths.
+   - Per-pack gate flag (`required: true` blocks demo if missing).
+   - Cross-pack `gates` block with 6 required + 3 optional pack IDs.
+   - 3050 perf targets (≤100 LOD0 trees, 80m cull, 2GB texture budget).
+   - VFX needs documented (built manually in Flax editor).
+   - Lighting recipe (SkyAtmosphere + warm sun + IBL sky_light + lightmap bake regions).
+
+2. **`Python/assetboy/cli/pack.py`** (~280 lines) — new 7th sub-app with 3 commands:
+   - `pack list-recipes` — walks `recipes/<game>/*.yaml`, prints recipe_id + pack_count.
+   - `pack from-recipe <yaml>` — loads recipe, iterates `packs[]`, builds `PipelineContext` per pack, calls `execute_prepare_pack_dispatched` (s7 entry), prints per-pack OK/RED + REQ/opt summary, exits 1 if `block_on_missing_required=true` AND a required pack is red.
+   - `pack status <pack_id>` — read-only `read_pack_pipeline_status` wrapper.
+
+3. **`Python/assetboy/cli/app.py`** — wired `pack` sub-app into Typer root, bumped sub-app count `6 -> 7`.
+
+**Real end-to-end verification:**
+
+```
+$ python -m assetboy.cli pack list-recipes
+pack_list_recipes_count=1
+pack_list_recipes_entry=1  game=primitive_tech  id=primitive_tech_first_playable  packs=9  path=primitive_tech\first_playable.yaml
+
+$ python -m assetboy.cli pack from-recipe primitive_tech/first_playable.yaml --dry-run
+  [RED] [REQ] SHARED_FAB_FOLIAGE_FOREST_BROADLEAF_TREES_01                 state=failed
+  [RED] [REQ] SHARED_POLY_TEX_FOREST_FLOOR_PBR_01                          state=failed
+  [RED] [REQ] SHARED_POLY_MODEL_FOREST_ROCKS_01                            state=failed
+  [RED] [opt] SHARED_ACG_TEX_BARK_WOOD_01                                  state=failed
+  [RED] [REQ] SHARED_POLY_HDRI_FOREST_DAWN_01                              state=failed
+  [RED] [opt] SHARED_KEN_BLOCKOUT_NATURE_SURVIVAL_01                       state=failed
+  [RED] [REQ] SHARED_MIXAMO_CHR_PLAYER_HUMAN_01                            state=failed
+  [RED] [opt] SHARED_GEN_AUDIO_FOREST_AMBIENCE_01                          state=failed
+  [RED] [REQ] SHARED_FS_AUDIO_FOREST_SFX_01                                state=failed
+pack_from_recipe_total=9
+pack_from_recipe_completed=0
+pack_from_recipe_failed=9
+pack_from_recipe_required_failed=true
+exit=1
+```
+
+All 9 packs go RED because legacy `execute_prepare_pack` correctly rejects pack runs with no `source_dir` AND no `bulk_profile`. **The CLI / recipe loader / dispatch shim wiring all works correctly** — the RED output is honest: the recipe is asking for downloads (Fab manual claim, PolyHaven REST, Mixamo Playwright, etc.) that the legacy pipeline doesn't auto-acquire. Real acquisition wires in via:
+
+- **Manual lane (`acquisition_method: manual_browser` for fab/mixamo):** operator drags files into the recipe's expected `source_dir` location, then reruns `pack from-recipe ... --resume`.
+- **Direct URL lane (`polyhaven`/`ambientcg`/`kenney`/`freesound`):** future slice extends the pre-pack-stage to call the existing direct-URL runners before invoking `execute_prepare_pack_dispatched`.
+- **Generator lane (`stable_audio_open_small`):** future slice routes to `local_image_runner` / Stable Audio adapter.
+
+Those lanes ship in **a follow-up "pre-pack acquisition router" slice** (s11). For now s8 delivers the contract end-to-end: recipe -> CLI -> dispatch -> per-pack ledger -> summary.
+
+**26/26 canary tests still green.**
+
+**Files staged for commit:**
+- `recipes/primitive_tech/first_playable.yaml` (NEW, ~220 lines)
+- `Python/assetboy/cli/pack.py` (NEW, ~280 lines, 3 commands)
+- `Python/assetboy/cli/app.py` (MODIFIED, +pack sub-app registration)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+**CLI surface total:** 7 sub-apps, **25 commands** (was 22 after s6; +3 in pack).
+
+**Next:** s9 — port the parked `data/roman_first_playable_specs.yaml` (s2 extract) to a real recipe at `recipes/roman/first_playable.yaml` so both games have YAML recipes.

@@ -18,13 +18,14 @@ from assetboy.cli import fab as _fab
 from assetboy.cli import gen as _gen
 from assetboy.cli import import_cmd as _import_cmd
 from assetboy.cli import library as _library
+from assetboy.cli import pack as _pack
 from assetboy.cli import unity as _unity
 
 app = typer.Typer(
     name="assetboy",
     help=(
-        "AssetBoy CLI (Path B Typer rewrite). 6 sub-apps shipped: "
-        "fab, library, import, unity, epic, gen."
+        "AssetBoy CLI (Path B Typer rewrite). 7 sub-apps shipped: "
+        "fab, library, import, unity, epic, gen, pack."
     ),
     add_completion=False,
     rich_markup_mode="rich",
@@ -58,6 +59,11 @@ app.add_typer(
     _gen.app,
     name="gen",
     help="AI generation via local ComfyUI or stable-diffusion.cpp.",
+)
+app.add_typer(
+    _pack.app,
+    name="pack",
+    help="YAML-recipe-driven pack pipeline runs (Path B s8 recipes).",
 )
 
 
