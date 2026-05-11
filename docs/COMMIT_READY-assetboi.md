@@ -2169,3 +2169,105 @@ The 16 warnings are legitimate hints (Mixamo manual_browser packs lack `source_u
 - Test surface coverage tightens further: recipe authors get immediate feedback.
 
 **Next:** tag v1.6.0-recipe-validator. Then loop continues with v1.6.s1.
+
+---
+
+## Batch — v1.6 / v1.7 / v1.8 / v1.9 / v1.10 (cumulative, 2026-05-11)
+
+All slices through v1.10.6 SHIPPED. Operator can audit by `git log --oneline`.
+
+### Tags landed (this turn)
+
+```
+v1.1.0-path-b-cleanup ... v1.5.5-final-polish    (early Path B)
+v1.6.0-recipe-validator ... v1.6.9-backlog-s11-s15
+v1.7.0-readiness-cli ... v1.7.3-quaternius
+v1.8.0-gen-status-all ... v1.8.4-bulk-install
+v1.9.0-only-filter ... v1.9.4-comfyui-workflow
+v1.10.0-met-museum
+v1.10.1-wikimedia
+v1.10.2-archive-org
+v1.10.3-scryfall
+v1.10.4-iconify
+v1.10.5-pexels-video         <- FIRST VIDEO PROVIDER for FAW
+v1.10.6-pixabay               <- 7th R1a public-API integration
+```
+
+### v1.10 R1a public-API integrations (NEW THIS BATCH)
+
+| # | Slice | API | License | Key needed |
+|---|---|---|---|---|
+| s26 | met-museum | Met Open Access | CC0 | no |
+| s27 | wikimedia | Wikimedia Commons | CC0/CC-BY/CC-BY-SA/PD | no |
+| s28 | archive-org | Internet Archive | CC-BY/CC-BY-SA/CC0/PD | no |
+| s29 | scryfall | Scryfall (MTG cards) | CC-BY-SA-4.0 | no |
+| s30 | iconify | Iconify (150+ icon sets) | MIT/Apache/CC0/OFL | no |
+| s31 | pexels | Pexels stock photos+videos | Pexels License | PEXELS_API_KEY |
+| s32 | pixabay | Pixabay photos+illustrations+vectors+videos | CC0-equivalent | PIXABAY_API_KEY |
+
+### Files added this batch (runner files)
+
+- `Python/assetboy/execution/met_museum_runner.py` (~260 LOC)
+- `Python/assetboy/execution/wikimedia_runner.py` (~280 LOC)
+- `Python/assetboy/execution/archive_org_runner.py` (~280 LOC)
+- `Python/assetboy/execution/scryfall_runner.py` (~250 LOC)
+- `Python/assetboy/execution/iconify_runner.py` (~270 LOC)
+- `Python/assetboy/execution/pexels_runner.py` (~360 LOC)
+- `Python/assetboy/execution/pixabay_runner.py` (~400 LOC)
+
+### Files added this batch (test files)
+
+- `Tests/python/test_met_museum_runner.py` (6 tests)
+- `Tests/python/test_wikimedia_runner.py` (12 tests)
+- `Tests/python/test_archive_org_runner.py` (16 tests)
+- `Tests/python/test_scryfall_runner.py` (8 tests)
+- `Tests/python/test_iconify_runner.py` (14 tests)
+- `Tests/python/test_pexels_runner.py` (12 tests)
+- `Tests/python/test_pixabay_runner.py` (14 tests)
+
+### CLI commands added this batch
+
+```
+gen met-museum fetch    --query --count --department --small --dry-run --json
+gen wikimedia fetch     --query --count --dry-run --json
+gen archive-org fetch   --query --mediatype --count --dry-run --json
+gen scryfall fetch      --query --count --variant --dry-run --json
+gen iconify fetch       --query --count --width --color --skip-license-check
+                        --dry-run --json
+gen pexels photos       --query --count --variant --dry-run --json
+gen pexels videos       --query --count --max-height --dry-run --json
+gen pixabay photos      --query --count --image-type --variant --dry-run --json
+gen pixabay videos      --query --count --variant --dry-run --json
+```
+
+### Batch metrics
+
+- **87 commits** since `0b1ad7d` baseline this turn
+- **42 tags** on origin
+- **496 passed / 1 skipped / 0 failed** (started turn at 26 tests; +470 net)
+- **7 new external integrations** (4 free no-key APIs ready out of box;
+  3 key-aware APIs that no-op gracefully without env vars; Pexels +
+  Pixabay are FAW's first VIDEO providers).
+- **0 RULE violations** through whole batch (every file edit < 3 per
+  slice; gen.py touched 2x per slice across 7 slices).
+
+### Open / Deferred
+
+- 3 of R1a top-10 still pending integration:
+  * Unsplash (OAuth, not just env var)
+  * Jamendo (OAuth)
+  * RAWG.io (env-var API key — can use Pexels pattern)
+- Video plumbing: recipe pack `video_refs` field NOT YET in recipe
+  schema; first cut would extend `workflows/recipe_validator.py` to
+  understand `video_refs: [...]` lists on packs.
+- Library installer: new providers don't auto-register with
+  `Python/assetboy/providers/lanes.py` adapters — they're CLI-direct.
+  Future slice: register them as lane providers for one-shot recipe
+  pipelines.
+
+### Next
+
+Continue with: v1.10.7 (Unsplash OAuth) OR v1.11.0 (recipe schema
+extension for `video_refs` + first sample recipe that uses
+gen pexels videos as a step) OR backlog s33-s40 covering RAWG +
+Jamendo + Open Library + more.
