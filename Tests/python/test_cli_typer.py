@@ -399,6 +399,41 @@ class TyperCliSmokeTests(unittest.TestCase):
             self.assertIn("available", entry)
             self.assertIn("notes", entry)
 
+    # ----------------------------------------------------------------- #
+    # pack validate-all (v1.8.s19)
+    # ----------------------------------------------------------------- #
+
+    def test_pack_validate_all_passes_all_shipped_recipes(self) -> None:
+        """v1.8.s19: all 4 shipped recipes validate cleanly in default mode."""
+        result = self.runner.invoke(self.app, ["pack", "validate-all"])
+        self.assertEqual(result.exit_code, 0)
+        # Both summary fields should show 4 = all pass
+        self.assertIn("pack_validate_all_total=4", result.stdout)
+        self.assertIn("pack_validate_all_passed=4", result.stdout)
+        self.assertIn("pack_validate_all_failed=0", result.stdout)
+
+    def test_pack_validate_all_strict_fails_on_warnings(self) -> None:
+        """--strict mode flips warnings (e.g. missing source_url) to errors."""
+        result = self.runner.invoke(self.app, ["pack", "validate-all", "--strict"])
+        # At least one of the shipped recipes has warnings (primitive_tech /
+        # roman Mixamo packs missing source_url) -> exit 1 in strict mode.
+        self.assertEqual(result.exit_code, 1)
+        # Aggregate fail count > 0
+        self.assertIn("pack_validate_all_failed=", result.stdout)
+        # Verify not all 4 passed
+        self.assertNotIn("pack_validate_all_failed=0", result.stdout)
+
+    def test_pack_validate_all_json_mode(self) -> None:
+        result = self.runner.invoke(self.app, ["pack", "validate-all", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        import json
+        parsed = json.loads(result.stdout)
+        for k in ("total", "passed", "failed", "recipes", "aggregate_ok"):
+            self.assertIn(k, parsed)
+        self.assertTrue(parsed["aggregate_ok"])
+        self.assertEqual(parsed["total"], 4)
+        self.assertEqual(parsed["passed"], 4)
+
 
 if __name__ == "__main__":
     unittest.main()

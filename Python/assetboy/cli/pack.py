@@ -669,6 +669,116 @@ def validate_cmd(
 
 
 # --------------------------------------------------------------------------- #
+# pack validate-all (v1.8.s19)
+# --------------------------------------------------------------------------- #
+
+@app.command("validate-all")
+def validate_all_cmd(
+    strict: Annotated[
+        bool,
+        typer.Option(
+            "--strict",
+            help="Treat warnings as errors (exit 1 if any warning).",
+        ),
+    ] = False,
+    json_out: Annotated[
+        bool, typer.Option("--json", help="Emit JSON output."),
+    ] = False,
+) -> None:
+    """Validate every recipe under recipes/ (Path B v1.8.s19).
+
+    Walks the recipes/ tree, runs the v1.6.s5 validator on each recipe,
+    and emits an aggregate summary. Useful for CI / pre-push hooks.
+
+    Exit code:
+      0 if ALL recipes pass (warnings allowed unless --strict)
+      1 if ANY recipe has errors (or --strict and any has warnings)
+    """
+    from assetboy.workflows.recipe_validator import validate_recipe_file
+
+    recipes_root = _recipes_dir()
+    if not recipes_root.exists():
+        msg = f"recipes_dir_not_found: {recipes_root}"
+        if json_out:
+            json.dump({"error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_validate_all_error={msg}")
+        raise typer.Exit(code=1)
+
+    per_recipe: list[dict[str, Any]] = []
+    total = 0
+    pass_count = 0
+    error_count = 0
+    warn_count = 0
+    aggregate_ok = True
+
+    # Walk recipes/<game>/<recipe>.yaml
+    for game_dir in sorted(p for p in recipes_root.iterdir() if p.is_dir()):
+        for recipe_file in sorted(game_dir.glob("*.yaml")):
+            total += 1
+            result = validate_recipe_file(recipe_file)
+            this_ok = result.ok
+            if strict and result.warnings:
+                this_ok = False
+            if this_ok:
+                pass_count += 1
+            else:
+                error_count += 1
+                aggregate_ok = False
+            if result.warnings:
+                warn_count += 1
+            per_recipe.append({
+                "path": str(recipe_file.relative_to(recipes_root)),
+                "recipe_id": result.recipe_id,
+                "pack_count": result.pack_count,
+                "ok": this_ok,
+                "errors": result.errors,
+                "warnings": result.warnings,
+            })
+
+    if json_out:
+        json.dump(
+            {
+                "total": total,
+                "passed": pass_count,
+                "failed": error_count,
+                "with_warnings": warn_count,
+                "strict_mode": strict,
+                "recipes": per_recipe,
+                "aggregate_ok": aggregate_ok,
+            },
+            sys.stdout,
+            indent=2,
+        )
+        sys.stdout.write("\n")
+    else:
+        print(f"pack_validate_all_total={total}")
+        print(f"pack_validate_all_passed={pass_count}")
+        print(f"pack_validate_all_failed={error_count}")
+        print(f"pack_validate_all_with_warnings={warn_count}")
+        for entry in per_recipe:
+            marker = "OK " if entry["ok"] else "RED"
+            warn_hint = (
+                f"  warnings={len(entry['warnings'])}"
+                if entry["warnings"] else ""
+            )
+            print(
+                f"  [{marker}] {entry['path']:50} "
+                f"recipe_id={entry['recipe_id']:35}"
+                f"  packs={entry['pack_count']}"
+                f"{warn_hint}"
+            )
+            for err in entry["errors"]:
+                print(f"      ERROR: {err}")
+
+    if not aggregate_ok:
+        raise typer.Exit(code=1)
+
+
+# --------------------------------------------------------------------------- #
+# pack run-pack (v1.6.s6)
+# --------------------------------------------------------------------------- #
 # pack diff (v1.7.s14)
 # --------------------------------------------------------------------------- #
 
