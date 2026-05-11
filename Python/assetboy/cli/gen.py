@@ -70,6 +70,12 @@ iconify_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
 )
+pexels_app = typer.Typer(
+    name="pexels",
+    help="Pexels free stock photos + videos (requires PEXELS_API_KEY env).",
+    add_completion=False,
+    no_args_is_help=True,
+)
 
 app.add_typer(comfy_app, name="comfyui")
 app.add_typer(sd_app, name="sd")
@@ -78,6 +84,7 @@ app.add_typer(wikimedia_app, name="wikimedia")
 app.add_typer(archive_app, name="archive-org")
 app.add_typer(scryfall_app, name="scryfall")
 app.add_typer(iconify_app, name="iconify")
+app.add_typer(pexels_app, name="pexels")
 
 
 # --------------------------------------------------------------------------- #
@@ -1302,6 +1309,158 @@ def iconify_fetch_cmd(
             print(f"gen_iconify_manifest={result.manifest_path}")
         if result.error:
             print(f"gen_iconify_note={result.error}")
+
+    if not result.ok:
+        raise typer.Exit(code=1)
+
+
+# --------------------------------------------------------------------------- #
+# gen pexels photos / videos  (v1.10.s31)
+# --------------------------------------------------------------------------- #
+
+@pexels_app.command("photos")
+def pexels_photos_cmd(
+    query: Annotated[str, typer.Option("--query", "-q", help="Free-text search.")],
+    count: Annotated[int, typer.Option("--count", "-n")] = 6,
+    variant: Annotated[
+        str,
+        typer.Option(
+            "--variant",
+            help="src key: original | large2x | large | medium | small | tiny | "
+                 "portrait | landscape.",
+        ),
+    ] = "large",
+    pack_id: Annotated[str, typer.Option("--pack-id")] = "",
+    output_dir: Annotated[Path, typer.Option("--output-dir")] = Path(""),
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Fetch free stock photos from Pexels (Path B v1.10.s31).
+
+    Requires PEXELS_API_KEY env var (free signup at pexels.com/api).
+    All photos under Pexels License: free personal + commercial, no attrib req.
+
+    Examples:
+      assetboy gen pexels photos -q "stone wall" -n 4 --variant large
+      assetboy gen pexels photos -q "fire" --variant original -n 2
+    """
+    from assetboy.execution.pexels_runner import run_pexels_photo_batch
+
+    out_dir_arg: Path | None = output_dir if str(output_dir) else None
+    pack_id_arg: str | None = pack_id if pack_id else None
+
+    try:
+        result = run_pexels_photo_batch(
+            query=query, pack_id=pack_id_arg, count=count, variant=variant,
+            output_dir=out_dir_arg, dry_run=dry_run,
+        )
+    except Exception as exc:
+        msg = f"pexels_runner_crashed: {exc}"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_pexels_photos_error={msg}")
+        raise typer.Exit(code=1)
+
+    summary = {
+        "ok": result.ok, "kind": "photos",
+        "pack_id": result.pack_id, "query": result.query,
+        "output_dir": str(result.output_dir),
+        "items_matched": result.items_matched,
+        "items_downloaded": result.items_downloaded,
+        "items_failed": result.items_failed,
+        "downloaded_paths": [str(p) for p in result.downloaded_paths],
+        "manifest_path": str(result.manifest_path) if result.manifest_path else None,
+        "dry_run": result.dry_run,
+        "error": result.error,
+    }
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"gen_pexels_photos_pack_id={result.pack_id}")
+        print(f"gen_pexels_photos_matched={result.items_matched}")
+        print(f"gen_pexels_photos_downloaded={result.items_downloaded}")
+        print(f"gen_pexels_photos_failed={result.items_failed}")
+        print(f"gen_pexels_photos_output_dir={result.output_dir}")
+        if result.manifest_path:
+            print(f"gen_pexels_photos_manifest={result.manifest_path}")
+        if result.error:
+            print(f"gen_pexels_photos_note={result.error}")
+
+    if not result.ok:
+        raise typer.Exit(code=1)
+
+
+@pexels_app.command("videos")
+def pexels_videos_cmd(
+    query: Annotated[str, typer.Option("--query", "-q", help="Free-text search.")],
+    count: Annotated[int, typer.Option("--count", "-n")] = 3,
+    max_height: Annotated[
+        int,
+        typer.Option(
+            "--max-height",
+            help="Prefer highest-quality file at or below this many pixels.",
+        ),
+    ] = 1080,
+    pack_id: Annotated[str, typer.Option("--pack-id")] = "",
+    output_dir: Annotated[Path, typer.Option("--output-dir")] = Path(""),
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Fetch free stock videos from Pexels (FAW's first video provider).
+
+    Requires PEXELS_API_KEY. Pexels License: free personal + commercial.
+
+    Examples:
+      assetboy gen pexels videos -q "fire crackling" -n 2 --max-height 1080
+      assetboy gen pexels videos -q "ocean waves" --max-height 720 -n 4
+    """
+    from assetboy.execution.pexels_runner import run_pexels_video_batch
+
+    out_dir_arg: Path | None = output_dir if str(output_dir) else None
+    pack_id_arg: str | None = pack_id if pack_id else None
+
+    try:
+        result = run_pexels_video_batch(
+            query=query, pack_id=pack_id_arg, count=count,
+            max_height=max_height, output_dir=out_dir_arg, dry_run=dry_run,
+        )
+    except Exception as exc:
+        msg = f"pexels_runner_crashed: {exc}"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_pexels_videos_error={msg}")
+        raise typer.Exit(code=1)
+
+    summary = {
+        "ok": result.ok, "kind": "videos",
+        "pack_id": result.pack_id, "query": result.query,
+        "output_dir": str(result.output_dir),
+        "items_matched": result.items_matched,
+        "items_downloaded": result.items_downloaded,
+        "items_failed": result.items_failed,
+        "downloaded_paths": [str(p) for p in result.downloaded_paths],
+        "manifest_path": str(result.manifest_path) if result.manifest_path else None,
+        "dry_run": result.dry_run,
+        "error": result.error,
+    }
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"gen_pexels_videos_pack_id={result.pack_id}")
+        print(f"gen_pexels_videos_matched={result.items_matched}")
+        print(f"gen_pexels_videos_downloaded={result.items_downloaded}")
+        print(f"gen_pexels_videos_failed={result.items_failed}")
+        print(f"gen_pexels_videos_output_dir={result.output_dir}")
+        if result.manifest_path:
+            print(f"gen_pexels_videos_manifest={result.manifest_path}")
+        if result.error:
+            print(f"gen_pexels_videos_note={result.error}")
 
     if not result.ok:
         raise typer.Exit(code=1)

@@ -1,0 +1,249 @@
+"""Tests for execution/pexels_runner.py (v1.10.s31)."""
+
+from __future__ import annotations
+
+import json
+import os
+import tempfile
+import unittest
+import urllib.error
+from pathlib import Path
+from unittest.mock import patch
+
+
+class FakeHttpResponse:
+    def __init__(self, payload_bytes: bytes) -> None:
+        self._payload = payload_bytes
+
+    def __enter__(self) -> "FakeHttpResponse":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self._payload
+
+
+def _json_response(payload: dict) -> FakeHttpResponse:
+    return FakeHttpResponse(json.dumps(payload).encode("utf-8"))
+
+
+def _binary_response(blob: bytes) -> FakeHttpResponse:
+    return FakeHttpResponse(blob)
+
+
+class PexelsApiKeyTests(unittest.TestCase):
+    def setUp(self) -> None:
+        from assetboy.execution.pexels_runner import get_api_key, PEXELS_API_KEY_ENV
+        self.fn = get_api_key
+        self.env = PEXELS_API_KEY_ENV
+
+    def test_unset_returns_none(self) -> None:
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop(self.env, None)
+            self.assertIsNone(self.fn())
+
+    def test_empty_returns_none(self) -> None:
+        with patch.dict(os.environ, {self.env: "   "}):
+            self.assertIsNone(self.fn())
+
+    def test_set_returns_value(self) -> None:
+        with patch.dict(os.environ, {self.env: "abc123"}):
+            self.assertEqual(self.fn(), "abc123")
+
+
+class PexelsPickVideoFileTests(unittest.TestCase):
+    def setUp(self) -> None:
+        from assetboy.execution.pexels_runner import pick_video_file
+        self.fn = pick_video_file
+
+    def test_picks_highest_under_max(self) -> None:
+        video = {"video_files": [
+            {"link": "a", "height": 480},
+            {"link": "b", "height": 1080},
+            {"link": "c", "height": 720},
+            {"link": "d", "height": 2160},  # > max
+        ]}
+        got = self.fn(video, max_height=1080)
+        self.assertEqual(got["link"], "b")
+
+    def test_falls_back_when_all_above_max(self) -> None:
+        video = {"video_files": [
+            {"link": "x", "height": 2160},
+            {"link": "y", "height": 4320},
+        ]}
+        got = self.fn(video, max_height=1080)
+        # Falls back to first file with link.
+        self.assertEqual(got["link"], "x")
+
+    def test_returns_none_when_no_files(self) -> None:
+        self.assertIsNone(self.fn({"video_files": []}, max_height=720))
+        self.assertIsNone(self.fn({}, max_height=720))
+
+
+class PexelsPhotoRunnerTests(unittest.TestCase):
+    def setUp(self) -> None:
+        from assetboy.execution import pexels_runner
+        self.mod = pexels_runner
+
+    def test_missing_api_key_returns_ok_false(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("PEXELS_API_KEY", None)
+                result = self.mod.run_pexels_photo_batch(
+                    query="x", pack_id="P", count=2, output_dir=Path(tmp),
+                )
+        self.assertFalse(result.ok)
+        self.assertIn("missing_api_key", result.error or "")
+
+    def test_explicit_api_key_overrides_env(self) -> None:
+        """Passing api_key= bypasses env var requirement."""
+        search = _json_response({"photos": []})
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("PEXELS_API_KEY", None)
+                with patch.object(
+                    self.mod.urllib.request, "urlopen", return_value=search
+                ):
+                    result = self.mod.run_pexels_photo_batch(
+                        query="x", api_key="test-key",
+                        pack_id="P", count=2, output_dir=Path(tmp),
+                    )
+        self.assertTrue(result.ok)  # no matches but valid call
+        self.assertEqual(result.items_matched, 0)
+        self.assertEqual(result.error, "no_matches")
+
+    def test_photo_batch_downloads_and_writes_manifest(self) -> None:
+        search = _json_response({
+            "photos": [
+                {
+                    "id": 100, "width": 1920, "height": 1080,
+                    "url": "https://www.pexels.com/photo/100/",
+                    "photographer": "P One",
+                    "photographer_url": "https://www.pexels.com/@pone",
+                    "alt": "Stone",
+                    "src": {
+                        "original": "https://images.pexels.com/photos/100/orig.jpg",
+                        "large": "https://images.pexels.com/photos/100/large.jpg",
+                        "medium": "https://images.pexels.com/photos/100/medium.jpg",
+                    },
+                },
+            ],
+        })
+        img_blob = _binary_response(b"\xff\xd8\xff\xe0fake-jpeg")
+        responses = iter([search, img_blob])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            with patch.object(
+                self.mod.urllib.request, "urlopen",
+                side_effect=lambda *a, **kw: next(responses),
+            ):
+                with patch.object(self.mod.time, "sleep"):
+                    result = self.mod.run_pexels_photo_batch(
+                        query="stone", api_key="k", pack_id="P",
+                        count=5, variant="large", output_dir=out,
+                    )
+
+            self.assertTrue(result.ok)
+            self.assertEqual(result.kind, "photos")
+            self.assertEqual(result.items_matched, 1)
+            self.assertEqual(result.items_downloaded, 1)
+            for p in result.downloaded_paths:
+                self.assertTrue(p.exists())
+            manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(manifest["source"], "pexels")
+            self.assertEqual(manifest["kind"], "photos")
+            self.assertFalse(manifest["attribution_required"])
+            self.assertEqual(len(manifest["entries"]), 1)
+            self.assertEqual(manifest["entries"][0]["variant"], "large")
+
+    def test_photo_batch_dry_run(self) -> None:
+        search = _json_response({
+            "photos": [
+                {"id": 1, "src": {"large": "https://x/1.jpg"},
+                 "photographer": "P", "url": "u"},
+            ],
+        })
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            with patch.object(
+                self.mod.urllib.request, "urlopen", return_value=search
+            ):
+                with patch.object(self.mod.time, "sleep"):
+                    result = self.mod.run_pexels_photo_batch(
+                        query="x", api_key="k", pack_id="D",
+                        count=1, output_dir=out, dry_run=True,
+                    )
+            self.assertTrue(result.ok)
+            self.assertTrue(result.dry_run)
+            self.assertEqual(result.items_downloaded, 1)
+            for p in result.downloaded_paths:
+                self.assertFalse(p.exists())
+            self.assertTrue(result.manifest_path.exists())
+
+    def test_photo_batch_http_error(self) -> None:
+        def http_401(*a: object, **kw: object) -> None:
+            raise urllib.error.HTTPError(
+                url="x", code=401, msg="Unauthorized",
+                hdrs=None, fp=None,  # type: ignore[arg-type]
+            )
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(self.mod.urllib.request, "urlopen", side_effect=http_401):
+                result = self.mod.run_pexels_photo_batch(
+                    query="x", api_key="bad", pack_id="F",
+                    count=2, output_dir=Path(tmp),
+                )
+        self.assertFalse(result.ok)
+        self.assertIn("HTTP 401", result.error or "")
+
+
+class PexelsVideoRunnerTests(unittest.TestCase):
+    def setUp(self) -> None:
+        from assetboy.execution import pexels_runner
+        self.mod = pexels_runner
+
+    def test_video_batch_picks_best_quality_under_max(self) -> None:
+        search = _json_response({
+            "videos": [
+                {
+                    "id": 200, "duration": 12,
+                    "url": "https://www.pexels.com/video/200/",
+                    "user": {"name": "VidPerson"},
+                    "video_files": [
+                        {"link": "https://v/480.mp4", "height": 480,
+                         "width": 854, "quality": "sd", "file_type": "video/mp4"},
+                        {"link": "https://v/1080.mp4", "height": 1080,
+                         "width": 1920, "quality": "hd", "file_type": "video/mp4"},
+                        {"link": "https://v/2160.mp4", "height": 2160,
+                         "width": 3840, "quality": "uhd", "file_type": "video/mp4"},
+                    ],
+                },
+            ],
+        })
+        vid_blob = _binary_response(b"\x00\x00\x00\x18ftypisom-fake")
+        responses = iter([search, vid_blob])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            with patch.object(
+                self.mod.urllib.request, "urlopen",
+                side_effect=lambda *a, **kw: next(responses),
+            ):
+                with patch.object(self.mod.time, "sleep"):
+                    result = self.mod.run_pexels_video_batch(
+                        query="x", api_key="k", pack_id="V",
+                        count=1, max_height=1080, output_dir=out,
+                    )
+            self.assertTrue(result.ok)
+            self.assertEqual(result.kind, "videos")
+            self.assertEqual(result.items_downloaded, 1)
+            manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+            entry = manifest["entries"][0]
+            self.assertEqual(entry["height"], 1080)  # picked 1080 not 2160 or 480
+            self.assertEqual(entry["quality"], "hd")
+
+
+if __name__ == "__main__":
+    unittest.main()

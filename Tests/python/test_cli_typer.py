@@ -571,6 +571,56 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["icons_skipped_restricted"], 10)
         self.assertTrue(data["ok"])
 
+    # ----------------------------------------------------------------- #
+    # gen pexels photos / videos (v1.10.s31)
+    # ----------------------------------------------------------------- #
+
+    def test_pexels_photos_help_renders(self) -> None:
+        result = self.runner.invoke(self.app, ["gen", "pexels", "photos", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Pexels", result.stdout)
+        self.assertIn("PEXELS_API_KEY", result.stdout)
+
+    def test_pexels_videos_help_renders(self) -> None:
+        result = self.runner.invoke(self.app, ["gen", "pexels", "videos", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("video", result.stdout.lower())
+
+    def test_pexels_photos_missing_api_key_exits_1(self) -> None:
+        """Without PEXELS_API_KEY env, command exits with clean error."""
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("PEXELS_API_KEY", None)
+            result = self.runner.invoke(
+                self.app, ["gen", "pexels", "photos", "--query", "x", "--dry-run"],
+            )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("missing_api_key", result.stdout)
+
+    def test_pexels_photos_json_output_shape(self) -> None:
+        from unittest.mock import patch
+        from assetboy.execution.pexels_runner import PexelsResult
+        import tempfile, json as _json
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = PexelsResult(
+                pack_id="P", query="q", output_dir=Path(tmp),
+                kind="photos", items_matched=3, items_downloaded=3, ok=True,
+            )
+            with patch(
+                "assetboy.execution.pexels_runner.run_pexels_photo_batch",
+                return_value=fake,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "pexels", "photos", "--query", "q", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["kind"], "photos")
+        self.assertEqual(data["items_downloaded"], 3)
+
     def test_comfy_submit_workflow_help_renders(self) -> None:
         result = self.runner.invoke(
             self.app, ["gen", "comfyui", "submit-workflow", "--help"]
