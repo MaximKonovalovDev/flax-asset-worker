@@ -1,0 +1,47 @@
+__provenance__: execution/playwright_runner.py — Mixamo character presets + adapter-key inventory.
+data:
+  _MIXAMO_CHARACTER_PRESETS:
+    RA_PACK_CHR_CORE_SLICE_01:
+      search_terms:
+      - vanguard
+      result_text: Vanguard By T. Choonyung
+      type: character
+      notes: shared male body/rig baseline — export T-pose FBX with skin
+    RA_PACK_CHR_DUELIST_SLICE_01:
+      search_terms:
+      - paladin
+      result_text: Paladin J Nordstrom
+      type: character
+      notes: temporary non-mock duelist fallback — replace with Roman class kit after Fab/manual sourcing
+    RA_PACK_CHR_SKIRMISHER_SLICE_01:
+      search_terms:
+      - xbot
+      result_text: X Bot
+      type: character
+      notes: temporary non-mock skirmisher fallback — replace with Roman class kit after Fab/manual sourcing
+    RA_PACK_CHR_SLINGER_SLICE_01:
+      search_terms:
+      - erika archer
+      result_text: Erika Archer
+      type: character
+      notes: temporary non-mock slinger fallback — replace with Roman class kit after Fab/manual sourcing
+    RA_PACK_ANM_COMBAT_SLICE_01:
+      search_terms:
+      - walk run sprint idle
+      - sword shield slash
+      - javelin throw
+      - sling throw attack
+      - hit react stumble death
+      - trap react knockback
+      type: animation
+      notes: Roman combat baseline — export FBX animations without skin
+  ADAPTER_STEP_BUILDERS_keys:
+  - fab
+  - mixamo
+  - mixamo_animations
+  - unity_asset_store
+  ADAPTER_STRUCTURED_STEP_BUILDERS_keys:
+  - fab
+  - mixamo
+  - mixamo_animations
+  - unity_asset_store

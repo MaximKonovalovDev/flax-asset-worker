@@ -1,0 +1,96 @@
+__provenance__: From assetboy.execution.museum_runner (Path B s2 data park).
+data:
+  MUSEUM_PRESETS:
+  - - MUSEUM_SI_ROMAN_GLADIUS
+    - https://3d.si.edu/object/3d/gladius-roman-short-sword:d8c63c83-4ebc-11ea-b77f-2e728ce88125
+    - Smithsonian — Roman Gladius short sword scan. Public domain.
+    - - roman
+      - weapon
+      - sword
+      - museum
+    - Public Domain
+    - browser
+  - - MUSEUM_SI_ROMAN_HELMET
+    - https://3d.si.edu/object/3d/roman-helmet:d8c63c83-4ebc-11ea-b77f-2e728ce88126
+    - Smithsonian — Roman legionary helmet scan. Public domain.
+    - - roman
+      - armor
+      - helmet
+      - museum
+    - Public Domain
+    - browser
+  - - MUSEUM_SI_AMPHORA
+    - https://3d.si.edu/object/3d/amphora:dc4eefae-4ebc-11ea-b77f-2e728ce88125
+    - Smithsonian — Greek/Roman amphora vessel scan. Public domain.
+    - - roman
+      - prop
+      - vessel
+      - museum
+    - Public Domain
+    - browser
+  - - MUSEUM_SI_COIN_ROMAN
+    - https://3d.si.edu/object/3d/roman-coin:dc4eefae-4ebc-11ea-b77f-2e728ce88126
+    - Smithsonian — Roman denarius coin scan. Public domain.
+    - - roman
+      - prop
+      - coin
+      - museum
+    - Public Domain
+    - browser
+  - - MUSEUM_SI_BUST_CAESAR
+    - https://3d.si.edu/object/3d/bust-julius-caesar:d8c63c83-4ebc-11ea-b77f-2e728ce88127
+    - Smithsonian — Bust of Julius Caesar. Public domain.
+    - - roman
+      - character
+      - bust
+      - museum
+    - Public Domain
+    - browser
+  - - MUSEUM_SF_ROMAN_SHIELD_SCUTUM
+    - https://sketchfab.com/3d-models/roman-scutum-shield
+    - Sketchfab — Roman Scutum shield photogrammetry. CC0.
+    - - roman
+      - weapon
+      - shield
+      - museum
+    - CC0
+    - browser
+  - - MUSEUM_SF_GREEK_VASE
+    - https://sketchfab.com/3d-models/greek-vase-museum-scan
+    - Sketchfab — Greek vase photogrammetry museum scan. CC0.
+    - - roman
+      - prop
+      - vessel
+      - museum
+      - greek
+    - CC0
+    - browser
+  - - MUSEUM_SF_MEDIEVAL_SWORD
+    - https://sketchfab.com/3d-models/medieval-sword-museum-scan
+    - Sketchfab — Medieval sword museum scan. CC0.
+    - - medieval
+      - weapon
+      - sword
+      - museum
+    - CC0
+    - browser
+  - - MUSEUM_NASA_VOYAGER
+    - https://nasa3d.arc.nasa.gov/models/printable
+    - NASA 3D — Voyager spacecraft model. Public domain.
+    - - scifi
+      - vehicle
+      - prop
+      - museum
+      - nasa
+    - Public Domain
+    - browser
+  - - MUSEUM_NASA_CURIOSITY
+    - https://nasa3d.arc.nasa.gov/detail/msl-curiosity-rover
+    - NASA 3D — Curiosity Mars rover. Public domain.
+    - - scifi
+      - vehicle
+      - prop
+      - museum
+      - nasa
+    - Public Domain
+    - browser

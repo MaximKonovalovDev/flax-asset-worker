@@ -1,0 +1,64 @@
+__provenance__: From assetboy.execution.vfx_runner (Path B s2 data park).
+data:
+  VFX_PRESETS:
+  - - SHARED_VFX_KENNEY_PARTICLES
+    - https://kenney.nl/assets/particle-pack
+    - Kenney Particle Pack — smoke, fire, sparks, explosion sprites. CC0.
+    - - particles
+      - smoke
+      - fire
+      - explosion
+      - spark
+      - all
+  - - SHARED_VFX_KENNEY_SMOKE_PARTICLES
+    - https://kenney.nl/assets/smoke-particles
+    - Kenney Smoke Particles — smoke, explosion, and dust effect sprites. CC0.
+    - - particles
+      - smoke
+      - explosion
+      - dust
+      - combat
+      - all
+  - - SHARED_VFX_KENNEY_SPLAT_PACK
+    - https://kenney.nl/assets/splat-pack
+    - Kenney Splat Pack — impact splats, bursts, and stylized hit overlays. CC0.
+    - - particles
+      - impact
+      - combat
+      - stylized
+      - all
+  - - SHARED_VFX_KENNEY_1BIT
+    - https://kenney.nl/assets/1-bit-pack
+    - Kenney 1-Bit Pack — stylized retro particles, sprites, and effect support. CC0.
+    - - pixel
+      - retro
+      - stylized
+      - all
+  OGA_MANUAL_DROP_TARGETS:
+  - pack_id: OGA_VFX_EXPLOSION_ANIMATED
+    url: https://opengameart.org/content/explosion-animated
+    description: Animated explosion sprite sheet. CC0.
+    tags:
+    - explosion
+    - combat
+    - animation
+    license: CC0
+    manual_drop_path: vfx/oga/explosion_animated/
+  - pack_id: OGA_VFX_MAGIC_CIRCLE
+    url: https://opengameart.org/content/magic-circle
+    description: Magic circle VFX sprites. CC0.
+    tags:
+    - magic
+    - fantasy
+    - vfx
+    license: CC0
+    manual_drop_path: vfx/oga/magic_circle/
+  - pack_id: OGA_VFX_FIRE_SPRITES
+    url: https://opengameart.org/content/fire-animation-sprite-sheet
+    description: Fire animation sprite sheet. CC0.
+    tags:
+    - fire
+    - environment
+    - particles
+    license: CC0
+    manual_drop_path: vfx/oga/fire_sprites/

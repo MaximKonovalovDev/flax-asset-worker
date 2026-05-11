@@ -1,0 +1,59 @@
+__provenance__: execution/music_runner.py:22+ — music source URLs + prompt presets.
+data:
+  ROMAN_MUSIC_PRESETS:
+  - pack_id: RA_PACK_MUS_COMBAT_01
+    title: Combat Theme
+    source: suno
+    prompt: epic roman gladiator battle theme, war drums, brass fanfare, intense orchestral, no vocals, loop-friendly
+    tags:
+    - combat
+    - orchestral
+    - battle
+    - drums
+  - pack_id: RA_PACK_MUS_AMBIENT_01
+    title: Arena Ambient
+    source: suno
+    prompt: ancient roman arena ambient atmosphere, crowd murmur, light strings, warm midday sun, subtle tension, no melody
+    tags:
+    - ambient
+    - atmosphere
+    - crowd
+    - loop
+  - pack_id: RA_PACK_MUS_VICTORY_01
+    title: Victory Fanfare
+    source: suno
+    prompt: short roman victory fanfare, trumpet brass, triumphant, 10 seconds, no vocals, ancient roman feel
+    tags:
+    - victory
+    - fanfare
+    - short
+    - brass
+  - pack_id: RA_PACK_MUS_MENU_01
+    title: Main Menu Theme
+    source: suno
+    prompt: ancient roman epic main menu music, cinematic orchestral, grand, building strings and drums, no vocals
+    tags:
+    - menu
+    - cinematic
+    - orchestral
+    - intro
+  - pack_id: RA_PACK_MUS_DEATH_01
+    title: Defeat Sting
+    source: suno
+    prompt: short dramatic defeat sting, sad descending melody, ancient roman feel, under 8 seconds, no vocals
+    tags:
+    - defeat
+    - sting
+    - short
+    - sad
+  - pack_id: RA_PACK_MUS_MIXKIT_01
+    title: Battle Stock Track
+    source: mixkit
+    search: epic battle action adventure
+    tags:
+    - battle
+    - action
+    - stock
+  MIXKIT_BASE: https://mixkit.co/free-stock-music
+  SUNO_BASE: https://suno.ai
+  UDIO_BASE: https://www.udio.com

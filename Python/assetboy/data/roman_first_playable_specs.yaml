@@ -1,0 +1,699 @@
+__provenance__: From workflows/roman_first_playable.py:149 + :497 (Path B s9 will consume).
+data:
+  main_specs:
+  - pack_id: RA_PACK_CHR_CORE_SLICE_01
+    roman_category: characters
+    priority: P0
+    expected_contents:
+    - shared male body/rig
+    - 6 heads
+    - shared tunic
+    - shared sandals/footwear
+    - team overlays
+    bootstrap_lane: manual_browser
+    matured_quality_lane: licensed/manual character and clothing sets
+    generator_lane: small overlay and gap variants only; never duelist-first
+    blender_required: true
+    output_formats:
+    - fbx
+    - glb
+    - png
+    - jpg
+    - tga
+    extra_sidecars:
+    - cleanup_plan.json
+    - rig_notes.md
+    - preview.png
+    shared_family_tags:
+    - shared_human_base_rigs
+    flax_intended_use: shared fighter base plus class loadouts
+    default_maturity_label: experimental
+    asset_category: character_base
+    bridge_id: mixamo_browser
+    source_adapter: mixamo
+    source_strategy: Bootstrap the shared male rig/body first, then layer heads, tunic, sandals, and team overlays around
+      the approved base.
+    fallback_adapters:
+    - fab
+    - unity_asset_store
+    search_terms:
+    - male humanoid muscular
+    - fighter male base
+    - roman fighter base
+    quality_keywords:
+    - body
+    - head
+    - tunic
+    - sandal
+    - team
+    min_keyword_hits: 4
+    min_payload_files: 5
+    request_count: 1
+    accept_archive_payload: false
+    asset_kind: character
+    animated: true
+  - pack_id: RA_PACK_CHR_SKIRMISHER_SLICE_01
+    roman_category: characters
+    priority: P0
+    expected_contents:
+    - 'class kit: skirmisher'
+    bootstrap_lane: manual_browser
+    matured_quality_lane: licensed/manual character and clothing sets
+    generator_lane: small cloth and overlay gap variants only
+    blender_required: true
+    output_formats:
+    - fbx
+    - glb
+    - png
+    - jpg
+    - tga
+    extra_sidecars:
+    - cleanup_plan.json
+    - rig_notes.md
+    - preview.png
+    shared_family_tags: []
+    flax_intended_use: javelin skirmisher class silhouette
+    default_maturity_label: experimental
+    asset_category: character_base
+    bridge_id: fab_browser
+    source_adapter: fab
+    source_strategy: Use source-first class clothing or kitbash parts around the approved shared body; keep the skirmisher
+      light and readable.
+    fallback_adapters:
+    - mixamo
+    - unity_asset_store
+    search_terms:
+    - roman skirmisher tunic javelin
+    - light fighter wrap
+    quality_keywords:
+    - skirmisher
+    - javelin
+    - light
+    - wrap
+    min_keyword_hits: 1
+    min_payload_files: 1
+    request_count: 1
+    accept_archive_payload: false
+    asset_kind: character
+    animated: true
+  - pack_id: RA_PACK_CHR_SLINGER_SLICE_01
+    roman_category: characters
+    priority: P0
+    expected_contents:
+    - 'class kit: slinger'
+    bootstrap_lane: manual_browser
+    matured_quality_lane: licensed/manual character and clothing sets
+    generator_lane: small cloth and pouch gap variants only
+    blender_required: true
+    output_formats:
+    - fbx
+    - glb
+    - png
+    - jpg
+    - tga
+    extra_sidecars:
+    - cleanup_plan.json
+    - rig_notes.md
+    - preview.png
+    shared_family_tags: []
+    flax_intended_use: slinger class silhouette and pouch read
+    default_maturity_label: experimental
+    asset_category: character_base
+    bridge_id: fab_browser
+    source_adapter: fab
+    source_strategy: Use source-first class clothing or kitbash parts around the approved shared body; make the sling read
+      instantly at match distance.
+    fallback_adapters:
+    - mixamo
+    - unity_asset_store
+    search_terms:
+    - roman slinger tunic pouch
+    - light slinger wrap
+    quality_keywords:
+    - slinger
+    - sling
+    - pouch
+    - light
+    min_keyword_hits: 1
+    min_payload_files: 1
+    request_count: 1
+    accept_archive_payload: false
+    asset_kind: character
+    animated: true
+  - pack_id: RA_PACK_CHR_DUELIST_SLICE_01
+    roman_category: characters
+    priority: P0
+    expected_contents:
+    - 'class kit: duelist'
+    bootstrap_lane: manual_browser
+    matured_quality_lane: licensed/manual character and clothing sets
+    generator_lane: not a primary lane for this pack
+    blender_required: true
+    output_formats:
+    - fbx
+    - glb
+    - png
+    - jpg
+    - tga
+    extra_sidecars:
+    - cleanup_plan.json
+    - rig_notes.md
+    - preview.png
+    shared_family_tags: []
+    flax_intended_use: duelist class silhouette with stronger Roman read
+    default_maturity_label: experimental
+    asset_category: character_base
+    bridge_id: fab_browser
+    source_adapter: fab
+    source_strategy: Avoid generator-first here. Use manual or licensed class parts that keep the duelist historically grounded.
+    fallback_adapters:
+    - mixamo
+    - unity_asset_store
+    search_terms:
+    - roman duelist shield tunic
+    - roman arena duelist
+    quality_keywords:
+    - duelist
+    - shield
+    - roman
+    min_keyword_hits: 1
+    min_payload_files: 1
+    request_count: 1
+    accept_archive_payload: false
+    asset_kind: character
+    animated: true
+  - pack_id: RA_PACK_WPN_COMBAT_SLICE_01
+    roman_category: weapons_props
+    priority: P0
+    expected_contents:
+    - light javelin
+    - heavy javelin
+    - short spear
+    - hand sling
+    - sling stone
+    - stone pouch
+    - hardwood club
+    - gladius
+    - scutum
+    - javelin bundle
+    bootstrap_lane: manual_browser
+    matured_quality_lane: licensed/manual hero weapons
+    generator_lane: carry-prop gap fill only after source-first pass
+    blender_required: true
+    output_formats:
+    - glb
+    - fbx
+    - png
+    - jpg
+    - tga
+    extra_sidecars:
+    - cleanup_plan.json
+    - preview.png
+    shared_family_tags:
+    - historic_tech_props_core
+    flax_intended_use: hands, loadouts, and pickups
+    default_maturity_label: experimental
+    asset_category: weapon
+    bridge_id: fab_browser
+    source_adapter: fab
+    source_strategy: Source the core Roman loadout first. Only use generator support for small carry-prop gaps after the hero
+      silhouettes are credible.
+    fallback_adapters:
+    - museum_page
+    - unity_asset_store
+    search_terms:
+    - roman weapons pack
+    - gladius scutum javelin spear sling
+    quality_keywords:
+    - javelin
+    - spear
+    - sling
+    - stone
+    - pouch
+    - club
+    - gladius
+    - scutum
+    - bundle
+    min_keyword_hits: 6
+    min_payload_files: 6
+    request_count: 1
+    accept_archive_payload: false
+    asset_kind: weapon
+    animated: false
+  - pack_id: RA_PACK_ENV_SANDSTONE_BOWL_SLICE_01
+    roman_category: environment_architecture
+    priority: P0
+    expected_contents:
+    - sandstone bowl arena shell
+    - floor
+    - mound
+    - walls
+    - gate
+    - tunnel
+    - stairs
+    - barriers
+    - columns
+    - shield rack
+    - banners
+    - urns
+    bootstrap_lane: manual_browser
+    matured_quality_lane: licensed modular Roman kits
+    generator_lane: fill missing shell pieces only after source-first pass
+    blender_required: true
+    output_formats:
+    - glb
+    - fbx
+    - png
+    - jpg
+    - tga
+    extra_sidecars:
+    - cleanup_plan.json
+    - collision_notes.md
+    - preview.png
+    shared_family_tags:
+    - historic_roman_architecture_core
+    flax_intended_use: assemble the playable arena shell
+    default_maturity_label: usable_with_manual_steps
+    asset_category: architecture
+    bridge_id: fab_browser
+    source_adapter: fab
+    source_strategy: Use a compact Roman-adjacent modular shell first. Keep the pack tight enough to build one honest arena
+      instead of a giant environment dump.
+    fallback_adapters:
+    - unity_asset_store
+    search_terms:
+    - roman arena modular
+    - sandstone colosseum bowl
+    quality_keywords:
+    - arena
+    - wall
+    - gate
+    - stair
+    - tunnel
+    - column
+    - banner
+    - urn
+    min_keyword_hits: 2
+    min_payload_files: 8
+    request_count: 1
+    accept_archive_payload: false
+    asset_kind: architecture
+    animated: false
+  - pack_id: RA_PACK_TRAP_SLICE_01
+    roman_category: traps
+    priority: P0
+    expected_contents:
+    - spike grate
+    - fire urn
+    - pendulum
+    - portcullis
+    - trigger plate
+    - intact/active/readable states
+    bootstrap_lane: manual_browser
+    matured_quality_lane: owned/licensed mechanical props
+    generator_lane: fire patch or small damage variants only
+    blender_required: true
+    output_formats:
+    - glb
+    - fbx
+    - png
+    - jpg
+    - tga
+    extra_sidecars:
+    - cleanup_plan.json
+    - state_manifest.json
+    - preview.png
+    shared_family_tags: []
+    flax_intended_use: placed hazard states
+    default_maturity_label: experimental
+    asset_category: prop
+    bridge_id: fab_browser
+    source_adapter: fab
+    source_strategy: Kitbash the trap families from readable mechanical pieces first. Keep the active and intact states obvious
+      before chasing fidelity.
+    fallback_adapters:
+    - unity_asset_store
+    search_terms:
+    - spike trap portcullis pendulum trap
+    - arena trap mechanical
+    quality_keywords:
+    - spike
+    - fire
+    - pendulum
+    - portcullis
+    - trigger
+    min_keyword_hits: 4
+    min_payload_files: 4
+    request_count: 1
+    accept_archive_payload: false
+    asset_kind: prop
+    animated: false
+  - pack_id: RA_PACK_MAT_AND_POLISH_SLICE_01
+    roman_category: materials_textures
+    priority: P1
+    expected_contents:
+    - sand
+    - sandstone
+    - leather
+    - wood
+    - iron
+    - coarse cloth
+    bootstrap_lane: direct_url
+    matured_quality_lane: licensed scans and curated material families
+    generator_lane: variant fill only after source baselines land
+    blender_required: false
+    output_formats:
+    - png
+    - jpg
+    - tga
+    - hdr
+    - exr
+    extra_sidecars:
+    - material_notes.md
+    - license_snapshot.txt
+    - preview.png
+    shared_family_tags:
+    - historic_roman_materials_core
+    flax_intended_use: sand, sandstone, leather, wood, iron, and cloth materials
+    default_maturity_label: usable_with_manual_steps
+    asset_category: material
+    bridge_id: ambientcg
+    source_adapter: ambientcg
+    source_strategy: Bootstrap with legally clear direct-download materials first. Upgrade to stronger scans later without
+      locking the repo into free forever.
+    fallback_adapters: []
+    search_terms:
+    - sand
+    - stone
+    - leather
+    - wood
+    - metal
+    - fabric
+    quality_keywords:
+    - sand
+    - stone
+    - leather
+    - wood
+    - metal
+    - fabric
+    min_keyword_hits: 4
+    min_payload_files: 4
+    request_count: 6
+    accept_archive_payload: true
+    asset_kind: material
+    animated: false
+  - pack_id: RA_PACK_ANM_COMBAT_SLICE_01
+    roman_category: animations
+    priority: P0
+    expected_contents:
+    - shared locomotion
+    - shared state
+    - shared reacts
+    - javelin set
+    - sling set
+    - duelist set
+    - trap react set
+    bootstrap_lane: manual_browser
+    matured_quality_lane: licensed/manual combat clips
+    generator_lane: AnimationGPT only after source baseline proves the timing
+    blender_required: true
+    output_formats:
+    - fbx
+    - bvh
+    extra_sidecars:
+    - retarget_notes.md
+    - clip_manifest.json
+    - preview.png
+    shared_family_tags:
+    - shared_combat_animation_baseline
+    flax_intended_use: combat graph clips and class action sets
+    default_maturity_label: experimental
+    asset_category: animation
+    bridge_id: mixamo_browser
+    source_adapter: mixamo_animations
+    source_strategy: Source grounded locomotion, reacts, throws, and class-specific attacks first. Generator support is for
+      clear gaps only.
+    fallback_adapters: []
+    search_terms:
+    - walk run sprint idle
+    - hit react stumble death
+    - javelin throw attack
+    - sling throw attack
+    - sword shield slash
+    - trap react knockback
+    quality_keywords:
+    - idle
+    - run
+    - react
+    - javelin
+    - sling
+    - duelist
+    - trap
+    min_keyword_hits: 5
+    min_payload_files: 6
+    request_count: 1
+    accept_archive_payload: false
+    asset_kind: animation
+    animated: true
+  - pack_id: RA_PACK_AUD_SFX_SLICE_01
+    roman_category: audio_sfx
+    priority: P0
+    expected_contents:
+    - combat SFX baseline
+    - trap warning/impact baseline
+    - UI/combat feedback baseline
+    bootstrap_lane: direct_url
+    matured_quality_lane: licensed SFX library
+    generator_lane: small accent gap-fill only
+    blender_required: false
+    output_formats:
+    - wav
+    - ogg
+    - mp3
+    extra_sidecars:
+    - mastering_notes.md
+    - clip_manifest.json
+    shared_family_tags: []
+    flax_intended_use: combat, trap, and UI cues
+    default_maturity_label: experimental
+    asset_category: sfx
+    bridge_id: mixkit_audio
+    source_adapter: mixkit
+    source_strategy: Curate a small direct-download baseline that covers weapon impacts, warnings, footsteps, and UI confirms
+      before any generator fill.
+    fallback_adapters: []
+    search_terms:
+    - combat footsteps
+    - shield impact
+    - trap warning
+    - ui confirm
+    quality_keywords:
+    - impact
+    - footstep
+    - trap
+    - warning
+    - ui
+    - fire
+    min_keyword_hits: 3
+    min_payload_files: 3
+    request_count: 4
+    accept_archive_payload: true
+    asset_kind: audio
+    animated: false
+  - pack_id: RA_PACK_AUD_MUSIC_SLICE_01
+    roman_category: music
+    priority: P0
+    expected_contents:
+    - one arena/combat ambience or loop baseline
+    bootstrap_lane: direct_url
+    matured_quality_lane: licensed or owned loop
+    generator_lane: temporary style gap cover only
+    blender_required: false
+    output_formats:
+    - wav
+    - ogg
+    - mp3
+    extra_sidecars:
+    - loop_notes.md
+    - mastering_notes.md
+    shared_family_tags: []
+    flax_intended_use: one loopable arena/combat bed
+    default_maturity_label: experimental
+    asset_category: music
+    bridge_id: mixkit_audio
+    source_adapter: mixkit
+    source_strategy: Choose one honest loopable arena/combat bed from a legally clear source before considering generator
+      backups.
+    fallback_adapters: []
+    search_terms:
+    - roman combat loop
+    - arena ambience loop
+    quality_keywords:
+    - arena
+    - combat
+    - loop
+    - ambience
+    min_keyword_hits: 2
+    min_payload_files: 1
+    request_count: 1
+    accept_archive_payload: true
+    asset_kind: audio
+    animated: false
+  default_only_specs:
+  - pack_id: RA_PACK_COMBAT_PREP_SLICE_01
+    roman_category: combat_presentation
+    priority: P0
+    expected_contents:
+    - coherent Kevin or B-hips body lane
+    - first-person arms candidate
+    - primary spear mesh
+    - idle, walk, run, sprint, strafe, jump begin, jump land
+    - spear carry and combat idle
+    - light polearm melee and heavy melee partial
+    - death plus explicit fallback stagger and throw coverage
+    bootstrap_lane: manual_browser
+    matured_quality_lane: reviewed coherent Kevin-lane body, arms candidate, spear, and grounded combat clips
+    generator_lane: generator fill is a last resort after coherent source-first coverage
+    blender_required: true
+    output_formats:
+    - fbx
+    - glb
+    extra_sidecars:
+    - cleanup_plan.json
+    - rig_notes.md
+    - clip_manifest.json
+    - preview.png
+    shared_family_tags:
+    - shared_combat_animation_baseline
+    - shared_human_base_rigs
+    flax_intended_use: baseline first-person and third-person Roman spear combat lane
+    default_maturity_label: experimental
+    asset_category: character_base
+    bridge_id: mixamo_browser
+    source_adapter: mixamo
+    source_strategy: Prefer one coherent Kevin or B-hips lane that already covers locomotion, spear carry, melee, and a usable
+      upper-body arms candidate before filling gaps.
+    fallback_adapters:
+    - fab
+    - unity_asset_store
+    search_terms:
+    - Kevin HumanM spear polearm combat
+    - Mixamo spear carry run strafe jump
+    - first person arms polearm combat
+    quality_keywords:
+    - arms
+    - spear
+    - idle
+    - run
+    - strafe
+    - jump
+    - melee
+    - death
+    min_keyword_hits: 5
+    min_payload_files: 8
+    request_count: 1
+    accept_archive_payload: false
+    asset_kind: character
+    animated: true
+  - pack_id: RA_PACK_COMBAT_PREP_SLICE_02
+    roman_category: combat_presentation
+    priority: P0
+    expected_contents:
+    - true first-person arms or stronger viewmodel lane
+    - same-lane crouch locomotion
+    - same-lane throw windup, release, and recover
+    - same-lane upper and lower hit reacts
+    - same-lane stagger and recovery
+    - same-lane wounded or limp locomotion
+    - weapon grip and left-hand support targets
+    bootstrap_lane: manual_browser
+    matured_quality_lane: reviewed coherent follow-up combat body and arms lane with the missing authored clips
+    generator_lane: generator fill only after coherent source-first slice-02 search fails
+    blender_required: true
+    output_formats:
+    - fbx
+    - glb
+    extra_sidecars:
+    - cleanup_plan.json
+    - rig_notes.md
+    - clip_manifest.json
+    - preview.png
+    shared_family_tags:
+    - shared_combat_animation_baseline
+    - shared_human_base_rigs
+    flax_intended_use: close the missing first-person combat coverage for throw, reacts, wounded, and crouch
+    default_maturity_label: experimental
+    asset_category: character_base
+    bridge_id: mixamo_browser
+    source_adapter: mixamo
+    source_strategy: Stay on one coherent humanoid lane and only accept source-first slices that close the crouch, throw,
+      hit-react, and wounded gaps without rig drift.
+    fallback_adapters:
+    - fab
+    - unity_asset_store
+    search_terms:
+    - Kevin HumanM crouch throw stagger wounded
+    - Mixamo polearm throw hit react limp
+    - first person arms wounded combat
+    quality_keywords:
+    - arms
+    - crouch
+    - throw
+    - hit
+    - stagger
+    - wounded
+    - limp
+    min_keyword_hits: 5
+    min_payload_files: 6
+    request_count: 1
+    accept_archive_payload: false
+    asset_kind: character
+    animated: true
+  - pack_id: RA_PACK_ANM_COMBAT_SLICE_02
+    roman_category: animations
+    priority: P0
+    expected_contents:
+    - throw windup, release, and recover
+    - upper-body hit reacts
+    - lower-body hit reacts
+    - stagger and knockback recovery
+    - wounded or limp locomotion
+    - same-lane crouch locomotion
+    bootstrap_lane: manual_browser
+    matured_quality_lane: reviewed combat gap-fill clips on the same Roman humanoid lane
+    generator_lane: AnimationGPT only after source-first clip search proves the gaps are still real
+    blender_required: true
+    output_formats:
+    - fbx
+    - bvh
+    extra_sidecars:
+    - retarget_notes.md
+    - clip_manifest.json
+    - preview.png
+    shared_family_tags:
+    - shared_combat_animation_baseline
+    flax_intended_use: animation-only gap fill for Roman spear combat coverage
+    default_maturity_label: experimental
+    asset_category: animation
+    bridge_id: mixamo_browser
+    source_adapter: mixamo_animations
+    source_strategy: Source clip-level throw, react, crouch, and wounded coverage on the same humanoid lane before accepting
+      cross-rig filler.
+    fallback_adapters: []
+    search_terms:
+    - javelin throw windup release recover
+    - hit react stagger knockback
+    - wounded limp crouch locomotion
+    quality_keywords:
+    - throw
+    - hit
+    - stagger
+    - wounded
+    - limp
+    - crouch
+    min_keyword_hits: 4
+    min_payload_files: 5
+    request_count: 1
+    accept_archive_payload: false
+    asset_kind: animation
+    animated: true

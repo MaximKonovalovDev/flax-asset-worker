@@ -1,0 +1,105 @@
+__provenance__: From assetboy.execution.game_icons_runner (Path B s2 data park).
+data:
+  GAME_ICONS_GITHUB_ZIP: https://github.com/game-icons/icons/archive/refs/heads/master.zip
+  GAME_ICONS_LICENSE: CC BY 3.0
+  GAME_ICONS_ATTRIBUTION: Icons by game-icons.net (CC BY 3.0)
+  GAME_ICONS_AUTHOR_URL: https://game-icons.net
+  CATEGORY_KEYWORDS:
+    combat:
+    - sword
+    - axe
+    - shield
+    - bow
+    - arrow
+    - spear
+    - mace
+    - dagger
+    - crossbow
+    - war
+    - battle
+    magic:
+    - magic
+    - crystal
+    - potion
+    - wand
+    - spell
+    - scroll
+    - rune
+    character:
+    - player
+    - hero
+    - warrior
+    - knight
+    - wizard
+    - archer
+    - rogue
+    - thief
+    ui:
+    - heart
+    - star
+    - coin
+    - gem
+    - key
+    - lock
+    - map
+    - compass
+    - timer
+    - clock
+    - skull
+    nature:
+    - tree
+    - leaf
+    - flower
+    - cloud
+    - sun
+    - moon
+    - rain
+    - fire
+    - water
+    - stone
+    - rock
+    scifi:
+    - laser
+    - robot
+    - alien
+    - rocket
+    - planet
+    - satellite
+    - cyber
+    - nano
+    horror:
+    - skull
+    - ghost
+    - spider
+    - zombie
+    - blood
+    - bone
+    - grave
+    - poison
+    medieval:
+    - castle
+    - tower
+    - gate
+    - banner
+    - crown
+    - throne
+    - catapult
+    - siege
+    transport:
+    - car
+    - truck
+    - ship
+    - boat
+    - airplane
+    - horse
+    - cart
+    - wheel
+    food:
+    - bread
+    - apple
+    - fish
+    - meat
+    - cheese
+    - vegetable
+    - fruit
+    - mushroom

@@ -1,0 +1,105 @@
+__provenance__: execution/dialogue_runner.py:21+ — voice-line presets + provider maps.
+data:
+  DIALOGUE_PRESETS:
+  - - DIA_ANN_WELCOME
+    - Citizens of Rome! Welcome to the grand arena! Tonight, blood will be spilled!
+    - announcer
+    - - announcer
+      - roman
+      - intro
+  - - DIA_ANN_FIGHT
+    - Let the fight begin!
+    - announcer
+    - - announcer
+      - roman
+      - begin
+  - - DIA_ANN_VICTORY
+    - The crowd has spoken! A magnificent victory for the champion!
+    - announcer
+    - - announcer
+      - roman
+      - victory
+  - - DIA_ANN_DEFEAT
+    - He falls! The arena claims another soul!
+    - announcer
+    - - announcer
+      - roman
+      - defeat
+  - - DIA_ANN_ROUND_START
+    - Round two! Show no mercy!
+    - announcer
+    - - announcer
+      - roman
+      - round
+  - - DIA_GLB_TAUNT_1
+    - Is that all you have? I have fought beasts stronger than you!
+    - hero
+    - - gladiator
+      - roman
+      - taunt
+  - - DIA_GLB_PAIN
+    - Argh! You will pay for that!
+    - hero
+    - - gladiator
+      - roman
+      - hit
+  - - DIA_GLB_VICTORY
+    - For Rome! For glory!
+    - hero
+    - - gladiator
+      - roman
+      - victory
+  - - DIA_GLB_LOW_HEALTH
+    - Not yet... I still breathe...
+    - hero
+    - - gladiator
+      - roman
+      - low_health
+  - - DIA_GRD_HALT
+    - Halt! No one passes without a permit from the Legate.
+    - male_narrator
+    - - guard
+      - roman
+      - npc
+  - - DIA_GRD_ALERT
+    - Intruder! Sound the alarm!
+    - male_narrator
+    - - guard
+      - roman
+      - alert
+  - - DIA_MRC_GREET
+    - Finest weapons and armour in all of Rome, my friend. What do you need?
+    - female_narrator
+    - - merchant
+      - roman
+      - shop
+  - - DIA_MRC_SALE
+    - For you? A special price. Don't tell the others.
+    - female_narrator
+    - - merchant
+      - roman
+      - shop
+  - - DIA_CRD_CHEER
+    - Kill him! Kill him! Kill him!
+    - announcer
+    - - crowd
+      - roman
+      - ambience
+  SUPPORTED_PROVIDERS:
+  - edge_tts
+  - elevenlabs
+  EDGE_TTS_VOICE_MAP:
+    announcer: en-US-GuyNeural
+    hero: en-US-ChristopherNeural
+    male_narrator: en-GB-RyanNeural
+    female_narrator: en-GB-SoniaNeural
+  ELEVENLABS_VOICE_MAP:
+    announcer: ErXwobaYiN019PkySvjV
+    hero: TxGEqnHWrfWFTfGW9XjX
+    male_narrator: pNInz6obpgDQGcFmaJgB
+    female_narrator: EXAVITQu4vr4xnSDxMaL
+  ELEVENLABS_VOICE_ENV_MAP:
+    announcer: ELEVENLABS_VOICE_ID_ANNOUNCER
+    hero: ELEVENLABS_VOICE_ID_HERO
+    male_narrator: ELEVENLABS_VOICE_ID_MALE_NARRATOR
+    female_narrator: ELEVENLABS_VOICE_ID_FEMALE_NARRATOR

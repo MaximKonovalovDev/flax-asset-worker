@@ -1,0 +1,40 @@
+__provenance__: From assetboy.execution.quaternius_runner (Path B s2 data park).
+data:
+  QUATERNIUS_PRESETS:
+  - - SHARED_QUAT_ULTIMATE_CHARACTERS_01
+    - https://quaternius.com/packs/universalbasecharacters.html
+    - Universal Base Characters — lowpoly humanoid base characters CC0.
+    - - character
+      - humanoid
+      - lowpoly
+      - cc0
+  - - SHARED_QUAT_ULTIMATE_ANIMATED_01
+    - https://quaternius.com/packs/ultimatedanimatedcharacter.html
+    - Ultimate Animated Character — rigged and animated lowpoly CC0.
+    - - character
+      - animated
+      - rigged
+      - cc0
+  - - SHARED_QUAT_ULTIMATE_WEAPONS_01
+    - https://quaternius.com/packs/medievalweapons.html
+    - Medieval Weapons — swords, axes, shields, and melee props. CC0.
+    - - weapon
+      - prop
+      - lowpoly
+      - cc0
+  - - SHARED_QUAT_MODULAR_DUNGEON_01
+    - https://quaternius.com/packs/ultimatemodularruins.html
+    - Ultimate Modular Ruins — stone arches, pillars, floors, and ruins-friendly pieces. CC0.
+    - - environment
+      - modular
+      - stone
+      - roman_crossover
+      - cc0
+  - - SHARED_QUAT_NATURE_01
+    - https://quaternius.com/packs/ultimatenature.html
+    - Ultimate Nature — rocks, trees, ruins-compatible vegetation, CC0
+    - - environment
+      - nature
+      - rocks
+      - cc0
+  QUATERNIUS_DIRECT_ZIPS: {}

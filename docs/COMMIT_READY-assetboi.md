@@ -53,3 +53,46 @@ written: C:\flax\flax-asset-worker\state\canary\canary_status.json
 - State dir bug found + fixed: `state_root(__file__)` resolved one dir too high because canary.py is shallower than paths.py. Fix: call `state_root()` with no args (defaults to paths.py's own `__file__`).
 
 **Next:** s2 — delete Tier-4 DEAD files per PATH-B §2.
+
+---
+
+## Slice s2 — Day 2 DEAD-file purge (2026-05-10)
+
+**Status:** SHIPPED partial (data parked + 1 file deleted). Full purge deferred to s2.5 (after cli rewrite) + s2.6 (after KEEP-file rewires).
+
+**Peer-opus deep import-trace revealed:** only **1 of 22** listed DEAD files (`tts_runner.py`) is truly safe to delete today. The other 21 are blocked by **KEEP-list code** that imports them — specifically `provider_readiness.py`, `library_map.py`, `unity_runner.py`, `unreal_runner.py`, `browser_automation.py`, `freesound_runner.py`, `pack_pipeline.py` (via `flax_wrapper.py`), `blender_runner.py`, plus the cli.py god-object with 26 lazy-import handler blocks.
+
+**What shipped this slice:**
+
+1. **Created `Python/assetboy/data/` directory** + **one-shot extractor script** `_extract_dead_data.py` that imports every DEAD module + dumps its module-level constants to YAML.
+2. **Ran extractor — 10/10 extractors green**, 80+ KB of structured YAML data parked:
+   - `roman_first_playable_specs.yaml` (20 KB) — main ROMAN_FIRST_PLAYABLE_SPECS + default-only specs. Source of truth for s9.
+   - `animationgpt_presets.yaml` (4 KB) — 20 combat-anim text prompts.
+   - `colab_pipelines.yaml` (16 KB) — Hunyuan3D/Trellis pip stacks + verbatim source dump.
+   - `dialogue_presets.yaml`, `music_presets.yaml`, `vehicle_presets.yaml`, `vfx_presets.yaml`, `museum_presets.yaml`, `font_presets.yaml`, `game_icons_presets.yaml`, `quaternius_presets.yaml` — runner preset tables.
+   - `playwright_presets.yaml` (1.6 KB) — Mixamo character presets + adapter-keys inventory.
+   - `provider_profiles.yaml` (18 KB) — AI_PROVIDER_PROFILES + ENGINE_BRIDGE_PROFILES + EXTRACTOR_PROFILES + STATIC_PROVIDER_RUNBOOKS.
+   - `pack_family_plan_data.yaml` (1.3 KB) — BROWSER_SOURCE_URLS + SOURCE_PAGE_URLS + DEFAULT_PROFILE_BY_BRIDGE_ID + ENGINE_KIND_BY_BRIDGE_ID.
+   - `roman_source_presets.yaml` — per-pack mixamo/helper presets.
+3. **Deleted `Python/assetboy/execution/tts_runner.py`** — only file with zero non-DEAD importers (peer-opus verified). The `run-tts-batch` CLI handler at `cli.py:8398` actually uses `dialogue_runner.run_dialogue_line`, not `tts_runner`. Filename was misleading.
+4. **Test gate:** 26/26 canary tests still green after deletion.
+
+**Deferred into new slices:**
+
+- **s2.5** — strip cli.py DEAD-imports + delete dead command handlers. Depends on s5/s6 cli rewrite. Will delete 7 eager imports + 26 lazy-import handler blocks.
+- **s2.6** — rewire KEEP files to drop dead-bridge deps, then delete bridges. Specifically:
+  - `provider_readiness.py` → drop ai_bridge/generator/runbooks deps (load from YAML instead)
+  - `library_map.py` + `epic_vault.py` → fold `emit_extractor_job` inline
+  - `unity_runner.py` + `unreal_runner.py` → fold `emit_engine_export_job` inline
+  - `browser_automation.py` + `freesound_runner.py` → inline playwright_runner helpers
+  - `pack_pipeline.py` → drop `flax_wrapper` import (and delete `flax_wrapper.py` + `execution_kit.py`)
+  - Then delete: ai_bridge, engine_bridge, extractor_bridge, generator, runbooks, playwright_runner, plus 15 execution runners, plus 4 roman_* workflows.
+
+**Why this is correct:** PATH-B-EXECUTION §2 was written before tracing the import graph. The honest read is that deletion ordering matters — data first, KEEP rewires second, deletes last. Saving data NOW (this slice) means s9 (Roman YAML port) can proceed in parallel with s5+s6 (cli rewrite).
+
+**Files staged for commit:**
+- `Python/assetboy/data/_extract_dead_data.py` (new, one-shot extractor)
+- `Python/assetboy/data/*.yaml` (16 new YAML files, ~80 KB total)
+- `Python/assetboy/execution/tts_runner.py` (deleted)
+
+**Next:** s3 — extract Quixel scanner from `library_map.py` per PATH-B Day 3.

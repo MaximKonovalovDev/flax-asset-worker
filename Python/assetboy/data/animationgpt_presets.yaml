@@ -1,0 +1,173 @@
+__provenance__: 20 combat-anim text prompts from execution/animationgpt_runner.py:44.
+data:
+- preset_id: SK_SWORD_SLASH_HORIZONTAL
+  category: A warrior performs a fast horizontal sword slash to the right
+  prompt: sword
+  duration_s: attack
+  notes:
+  - sword
+  - melee
+  - attack
+  - roman
+- preset_id: SK_SWORD_OVERHEAD_SMASH
+  category: A warrior performs a slow heavy overhead sword swing downward
+  prompt: sword
+  duration_s: attack
+  notes:
+  - sword
+  - melee
+  - attack
+  - heavy
+- preset_id: SK_SWORD_THRUST
+  category: A warrior thrusts the sword forward with a quick lunging stab
+  prompt: sword
+  duration_s: attack
+  notes:
+  - sword
+  - melee
+  - attack
+  - roman
+- preset_id: SK_SWORD_COMBO_THREE
+  category: 'A warrior performs a three-hit sword combo: slash right, slash left, then thrust'
+  prompt: sword
+  duration_s: combo
+  notes:
+  - sword
+  - melee
+  - combo
+- preset_id: SK_SWORD_BLOCK
+  category: A warrior raises the sword to block an incoming horizontal attack
+  prompt: sword
+  duration_s: defense
+  notes:
+  - sword
+  - melee
+  - defense
+  - block
+- preset_id: SK_AXE_OVERHEAD_SMASH
+  category: A warrior swings a heavy axe overhead and slams it down with great force
+  prompt: axe
+  duration_s: attack
+  notes:
+  - axe
+  - melee
+  - attack
+  - heavy
+- preset_id: SK_AXE_SPINNING_SWEEP
+  category: A warrior spins and sweeps the axe in a wide horizontal arc
+  prompt: axe
+  duration_s: attack
+  notes:
+  - axe
+  - melee
+  - attack
+  - aoe
+- preset_id: SK_SPEAR_THRUST
+  category: A warrior thrusts a spear forward rapidly in a quick jab
+  prompt: spear
+  duration_s: attack
+  notes:
+  - spear
+  - polearm
+  - attack
+  - roman
+- preset_id: SK_SPEAR_SWEEP
+  category: A warrior sweeps the spear in a low horizontal arc to knock enemies off balance
+  prompt: spear
+  duration_s: attack
+  notes:
+  - spear
+  - polearm
+  - attack
+  - sweep
+- preset_id: SK_SHIELD_BASH
+  category: A warrior charges forward and slams the shield into an enemy
+  prompt: shield
+  duration_s: attack
+  notes:
+  - shield
+  - melee
+  - attack
+  - roman
+- preset_id: SK_SHIELD_RAISE
+  category: A warrior holds up the shield in a defensive pose bracing for impact
+  prompt: shield
+  duration_s: defense
+  notes:
+  - shield
+  - defense
+  - block
+- preset_id: SK_UNARMED_PUNCH_COMBO
+  category: A fighter performs a fast left-right punch combination followed by an uppercut
+  prompt: unarmed
+  duration_s: combo
+  notes:
+  - unarmed
+  - melee
+  - combo
+  - brawl
+- preset_id: SK_UNARMED_KICK
+  category: A fighter delivers a powerful roundhouse kick to the right side
+  prompt: unarmed
+  duration_s: attack
+  notes:
+  - unarmed
+  - melee
+  - attack
+- preset_id: SK_MAGIC_CAST_FIREBALL
+  category: A mage raises both hands forward and releases a powerful fireball spell
+  prompt: magic
+  duration_s: cast
+  notes:
+  - magic
+  - fantasy
+  - cast
+  - ranged
+- preset_id: SK_MAGIC_AOE_GROUND_SLAM
+  category: A mage slams both hands into the ground releasing a shockwave of magical energy
+  prompt: magic
+  duration_s: cast
+  notes:
+  - magic
+  - fantasy
+  - cast
+  - aoe
+- preset_id: SK_HIT_STAGGER_BACK
+  category: A warrior staggers backward after being hit by a heavy blow
+  prompt: none
+  duration_s: hit_reaction
+  notes:
+  - reaction
+  - hit
+  - stagger
+  - all
+- preset_id: SK_DEATH_FALL_FORWARD
+  category: A warrior stumbles and falls forward to the ground after a fatal blow
+  prompt: none
+  duration_s: death
+  notes:
+  - death
+  - all
+- preset_id: SK_DEATH_FALL_BACKWARD
+  category: A warrior is struck and falls backward to the ground
+  prompt: none
+  duration_s: death
+  notes:
+  - death
+  - all
+- preset_id: SK_DODGE_ROLL_LEFT
+  category: A warrior dives and rolls to the left to evade an attack
+  prompt: none
+  duration_s: dodge
+  notes:
+  - dodge
+  - mobility
+  - all
+- preset_id: SK_DODGE_BACKSTEP
+  category: A warrior quickly steps backward to avoid a forward thrust
+  prompt: none
+  duration_s: dodge
+  notes:
+  - dodge
+  - mobility
+  - all

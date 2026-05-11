@@ -1,0 +1,32 @@
+__provenance__: workflows/pack_family_plan.py:18+ — URL/profile maps (s5+ to fold into bridge_registry).
+data:
+  BROWSER_SOURCE_URLS:
+    mixamo_browser: https://www.mixamo.com/
+    fab_browser: https://www.fab.com/
+    unity_store_browser: https://assetstore.unity.com/
+    museum_browser: https://3d.si.edu/
+    freesound_browser_audio: https://freesound.org/
+    browser_use_generic: ''
+  SOURCE_PAGE_URLS:
+    poly_haven: https://polyhaven.com/
+    ambientcg: https://ambientcg.com/
+    kenney: https://kenney.nl/assets
+    game_icons_net: https://game-icons.net/
+    mixkit_audio: https://mixkit.co/
+    freesound_audio: https://freesound.org/
+    zapsplat: https://www.zapsplat.com/
+    musopen_classical: https://musopen.org/
+    ccmixter_music: https://ccmixter.org/
+    google_fonts: https://fonts.google.com/
+    kenney_vfx: https://kenney.nl/assets
+    polyhaven_skybox: https://polyhaven.com/hdris
+    polyhaven_terrain: https://polyhaven.com/textures
+    smithsonian_museum: https://3d.si.edu/
+  DEFAULT_PROFILE_BY_BRIDGE_ID:
+    hunyuan3d2_3d: hunyuan3d2.production
+    trellis_3d: trellis.secondary
+    animationgpt_colab: animationgpt.pilot
+    animationgpt_gap_fill: animationgpt.pilot
+  ENGINE_KIND_BY_BRIDGE_ID:
+    unity_engine_bridge: unity
+    unreal_engine_bridge: unreal

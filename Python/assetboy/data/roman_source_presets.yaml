@@ -1,0 +1,36 @@
+__provenance__: workflows/roman_source_presets.py:16-44 — per-pack helper/mixamo presets.
+data:
+  DIRECT_DOWNLOAD_SUFFIXES:
+  - .7z
+  - .png
+  - .blend
+  - .obj
+  - .mp3
+  - .fbx
+  - .gltf
+  - .zip
+  - .jpg
+  - .wav
+  - .jpeg
+  - .rar
+  - .unitypackage
+  - .glb
+  PACK_MIXAMO_PRESETS:
+    RA_PACK_ANM_COMBAT_SLICE_01:
+    - walk run sprint idle
+    - hit react stumble death
+    - javelin throw attack
+    - sling throw attack
+    - sword shield slash
+    - trap react knockback
+  HELPER_PACK_PRESETS:
+    makehuman:
+      pack_id: RA_PACK_CHR_MAKEHUMAN_BASELINE_01
+      source_adapter: makehuman_direct
+      search_terms: []
+    mixamo_baseline:
+      pack_id: RA_PACK_ANM_MIXAMO_BASELINE_01
+      source_adapter: mixamo_animations
+      search_terms:
+      - walk run sprint idle
+      - sword attack combat idle hit react

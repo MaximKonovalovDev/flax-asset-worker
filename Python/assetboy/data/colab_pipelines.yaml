@@ -1,0 +1,134 @@
+__provenance__: Verbatim source dump of execution/colab_runner.py (s9 will distill).
+data:
+  source_module: assetboy.execution.colab_runner
+  source_text: "\"\"\"\ncolab_runner.py — Emits a Colab notebook and batch artifacts for manual execution.\n\nThis module\
+    \ reads the batch artifact emitted by `emit_generator_setup` and\nprepares each job for the active colab_exec MCP server.\
+    \ The CLI path writes\nthe notebook and prompt batch, but does not itself execute the Colab runtime.\n\nUsage (via CLI):\n\
+    \    python -m assetboy.cli run-hunyuan-batch --pack-id RA_PACK_WPN_COMBAT_SLICE_01\n    python -m assetboy.cli run-colab-batch\
+    \ --batch-file path/to/prompt_batch.json\n\"\"\"\nfrom __future__ import annotations\n\nimport json\nimport re\nfrom pathlib\
+    \ import Path\n\nfrom assetboy.execution.gdrive_mcp_merger import build_drive_stage_plan, drive_folder_for_colab\nfrom\
+    \ assetboy.library.files import write_json, write_text\nfrom assetboy.library.paths import generated_output_root\n\n\n\
+    # ---------------------------------------------------------------------------\n# Batch reading helpers\n# ---------------------------------------------------------------------------\n\
+    \ndef load_prompt_batch(batch_path: str | Path) -> dict:\n    path = Path(batch_path)\n    if not path.exists():\n   \
+    \     raise FileNotFoundError(f\"Prompt batch not found: {path}\")\n    return json.loads(path.read_text(encoding=\"utf-8\"\
+    ))\n\n\ndef _slug(value: str, fallback: str = \"item\") -> str:\n    cleaned = re.sub(r\"[^A-Za-z0-9._-]+\", \"_\", str(value).strip())\n\
+    \    cleaned = cleaned.strip(\"._-\")\n    return cleaned or fallback\n\n\ndef _colab_notebook_for_profile(profile_id:\
+    \ str) -> str:\n    \"\"\"Return a Colab-ready Python cell block for a given profile.\"\"\"\n    if \"hunyuan3d\" in profile_id:\n\
+    \        return _hunyuan3d_colab_code()\n    if \"trellis\" in profile_id:\n        return _trellis_colab_code()\n   \
+    \ if \"animationgpt\" in profile_id:\n        return _animationgpt_colab_code()\n    raise ValueError(f\"No Colab template\
+    \ for profile: {profile_id}\")\n\n\ndef _hunyuan3d_colab_code() -> str:\n    return \"\"\"\\\n# === AssetBoy: Hunyuan3D-2\
+    \ Batch Runner ===\nimport subprocess, sys, json, shutil\nfrom pathlib import Path\n\n# Install\nsubprocess.run([sys.executable,\
+    \ \"-m\", \"pip\", \"install\", \"-q\",\n    \"git+https://github.com/tencent/hunyuan3d-2\",\n    \"torch\", \"diffusers\"\
+    , \"Pillow\"], check=True)\n\nimport torch\nfrom hunyuan3d2 import Hunyuan3DPipeline\nfrom PIL import Image\n\npipe =\
+    \ Hunyuan3DPipeline.from_pretrained(\"tencent/Hunyuan3D-2\")\nif torch.cuda.is_available():\n    pipe = pipe.to(\"cuda\"\
+    )\n\nimport json, pathlib, os\n\nbatch = json.loads(pathlib.Path(\"/content/prompt_batch.json\").read_text())\nout_root\
+    \ = pathlib.Path(\"/content/outputs\")\nout_root.mkdir(exist_ok=True)\n\nfor job in batch[\"jobs\"]:\n    prompt = job[\"\
+    payload\"][\"prompt\"]\n    job_name = job[\"job_name\"]\n    print(f\"Generating: {job_name} | {prompt}\")\n    result\
+    \ = pipe(prompt=prompt, num_inference_steps=30)\n    mesh_path = out_root / f\"{job_name}.glb\"\n    result.save(str(mesh_path))\n\
+    \    print(f\"Saved: {mesh_path}\")\n\nprint(\"=== DONE ===\")\n\"\"\"\n\n\ndef _trellis_colab_code() -> str:\n    return\
+    \ \"\"\"\\\n# === AssetBoy: TRELLIS Batch Runner ===\nimport subprocess, sys\nsubprocess.run([sys.executable, \"-m\",\
+    \ \"pip\", \"install\", \"-q\",\n    \"git+https://github.com/microsoft/TRELLIS\",\n    \"torch\", \"Pillow\"], check=True)\n\
+    \nimport json, pathlib, torch\nfrom PIL import Image\nfrom trellis.pipelines import TrellisImageTo3DPipeline\n\npipe =\
+    \ TrellisImageTo3DPipeline.from_pretrained(\"microsoft/TRELLIS-image-large\")\nif torch.cuda.is_available():\n    pipe.to(\"\
+    cuda\")\n\nbatch = json.loads(pathlib.Path(\"/content/prompt_batch.json\").read_text())\nout_root = pathlib.Path(\"/content/outputs\"\
+    )\nout_root.mkdir(exist_ok=True)\n\nfor job in batch[\"jobs\"]:\n    prompt = job[\"payload\"][\"prompt\"]\n    job_name\
+    \ = job[\"job_name\"]\n    print(f\"Generating: {job_name} | {prompt}\")\n    # TRELLIS image-to-3D requires a reference\
+    \ image, use a blank or prompted one\n    outputs = pipe(prompt, output_formats=[\"mesh\"])\n    mesh_path = out_root\
+    \ / f\"{job_name}.glb\"\n    outputs[\"mesh\"].save(str(mesh_path))\n    print(f\"Saved: {mesh_path}\")\n\nprint(\"===\
+    \ DONE ===\")\n\"\"\"\n\n\ndef _animationgpt_colab_code() -> str:\n    return \"\"\"\\\n# === AssetBoy: AnimationGPT Pilot\
+    \ Batch Runner ===\nimport subprocess, sys\nsubprocess.run([sys.executable, \"-m\", \"pip\", \"install\", \"-q\",\n  \
+    \  \"git+https://github.com/cuducos/animationgpt\",\n    \"torch\"], check=True)\n\nimport json, pathlib\nbatch = json.loads(pathlib.Path(\"\
+    /content/prompt_batch.json\").read_text())\nout_root = pathlib.Path(\"/content/outputs\")\nout_root.mkdir(exist_ok=True)\n\
+    \nfor job in batch[\"jobs\"]:\n    prompt = job[\"payload\"][\"prompt\"]\n    job_name = job[\"job_name\"]\n    clip_len\
+    \ = job[\"payload\"].get(\"clip_length_sec\", 1.5)\n    print(f\"Generating animation: {job_name} | {prompt} | {clip_len}s\"\
+    )\n    # AnimationGPT integration placeholder — wire to active model API here\n    out_path = out_root / f\"{job_name}.bvh\"\
+    \n    out_path.write_text(f\"# AnimationGPT output for: {prompt}\")\n    print(f\"Saved: {out_path}\")\n\nprint(\"===\
+    \ DONE ===\")\n\"\"\"\n\n\n# ---------------------------------------------------------------------------\n# Submission\n\
+    # ---------------------------------------------------------------------------\n\nclass ColabSubmissionResult:\n    \"\"\
+    \"Result of submitting a batch to a Colab execution server.\"\"\"\n\n    def __init__(\n        self,\n        profile_id:\
+    \ str,\n        pack_id: str,\n        batch_path: Path,\n        output_dir: Path,\n        job_count: int,\n       \
+    \ drive_folder: str,\n        handoff_manifest_path: Path,\n        drive_stage_plan_path: Path,\n        dry_run: bool\
+    \ = False,\n    ) -> None:\n        self.profile_id = profile_id\n        self.pack_id = pack_id\n        self.batch_path\
+    \ = batch_path\n        self.output_dir = output_dir\n        self.job_count = job_count\n        self.drive_folder =\
+    \ drive_folder\n        self.handoff_manifest_path = handoff_manifest_path\n        self.drive_stage_plan_path = drive_stage_plan_path\n\
+    \        self.dry_run = dry_run\n\n    def to_dict(self) -> dict:\n        return {\n            \"profile_id\": self.profile_id,\n\
+    \            \"pack_id\": self.pack_id,\n            \"batch_path\": str(self.batch_path),\n            \"output_dir\"\
+    : str(self.output_dir),\n            \"job_count\": self.job_count,\n            \"drive_folder\": self.drive_folder,\n\
+    \            \"handoff_manifest_path\": str(self.handoff_manifest_path),\n            \"drive_stage_plan_path\": str(self.drive_stage_plan_path),\n\
+    \            \"dry_run\": self.dry_run,\n        }\n\n\ndef _companion_paths(root_dir: Path) -> dict[str, Path]:\n   \
+    \ candidates = {\n        \"prompt_batch\": root_dir / \"prompt_batch.json\",\n        \"colab_notebook\": root_dir /\
+    \ \"colab_notebook.py\",\n        \"provenance_template\": root_dir / \"provenance_template.json\",\n        \"review_checklist\"\
+    : root_dir / \"review_checklist.md\",\n        \"cleanup_plan\": root_dir / \"cleanup_plan.json\",\n        \"payload_target\"\
+    : root_dir / \"payload_target.txt\",\n    }\n    return {key: value for key, value in candidates.items() if value.exists()}\n\
+    \n\ndef _build_handoff_manifest(\n    *,\n    profile_id: str,\n    pack_id: str,\n    batch_id: str,\n    game_scope:\
+    \ str,\n    root_dir: Path,\n    notebook_code_path: Path,\n    batch_copy_path: Path,\n    drive_folder: str,\n    companions:\
+    \ dict[str, Path],\n) -> dict[str, object]:\n    upload_items: list[dict[str, object]] = [\n        {\n            \"\
+    role\": \"prompt_batch\",\n            \"path\": str(batch_copy_path),\n            \"drive_name\": batch_copy_path.name,\n\
+    \            \"required\": True,\n        },\n        {\n            \"role\": \"colab_notebook\",\n            \"path\"\
+    : str(notebook_code_path),\n            \"drive_name\": notebook_code_path.name,\n            \"required\": True,\n  \
+    \      },\n    ]\n    for role in (\"provenance_template\", \"review_checklist\", \"cleanup_plan\", \"payload_target\"\
+    ):\n        path = companions.get(role)\n        if path is not None:\n            upload_items.append(\n            \
+    \    {\n                    \"role\": role,\n                    \"path\": str(path),\n                    \"drive_name\"\
+    : path.name,\n                    \"required\": role in {\"provenance_template\", \"review_checklist\", \"cleanup_plan\"\
+    , \"payload_target\"},\n                }\n            )\n\n    download_items = [\n        {\n            \"role\": \"\
+    colab_outputs\",\n            \"path\": str(root_dir / \"outputs\"),\n            \"drive_name\": \"outputs\",\n     \
+    \   },\n        {\n            \"role\": \"execution_log\",\n            \"path\": str(root_dir / \"execution_log.json\"\
+    ),\n            \"drive_name\": \"execution_log.json\",\n        },\n    ]\n\n    return {\n        \"schema_version\"\
+    : \"assetboy.colab_handoff.v1\",\n        \"profile_id\": profile_id,\n        \"pack_id\": pack_id,\n        \"batch_id\"\
+    : batch_id,\n        \"game_scope\": game_scope,\n        \"local_artifacts_dir\": str(root_dir),\n        \"drive_folder\"\
+    : drive_folder,\n        \"upload_items\": upload_items,\n        \"download_items\": download_items,\n        \"companion_roles\"\
+    : sorted(companions.keys()),\n        \"notes\": [\n            \"Upload the prompt batch, notebook, and companion artifacts\
+    \ to the listed Drive folder.\",\n            \"Run the notebook in Colab from that Drive folder, then sync the outputs\
+    \ back into the local artifacts dir.\",\n        ],\n    }\n\n\ndef submit_batch_to_colab(\n    batch_path: str | Path,\n\
+    \    *,\n    output_dir: str | Path | None = None,\n    drive_folder: str | None = None,\n    dry_run: bool = False,\n\
+    ) -> ColabSubmissionResult:\n    \"\"\"\n    Prepare a prompt_batch.json for Colab execution.\n\n    When dry_run=True,\
+    \ the code is printed locally instead of prepared.\n    This is the safe default when the colab_exec MCP server is not\
+    \ active.\n    \"\"\"\n    batch = load_prompt_batch(batch_path)\n    profile_id = batch.get(\"profile\", {}).get(\"profile_id\"\
+    , \"unknown\")\n    pack_id = batch.get(\"pack_id\", \"unknown\")\n    game_scope = str(batch.get(\"game_scope\", \"unknown\"\
+    ))\n    batch_id = str(batch.get(\"batch_id\", f\"{game_scope}_{_slug(pack_id)}_{_slug(profile_id)}\"))\n    jobs = batch.get(\"\
+    jobs\", [])\n\n    colab_code = _colab_notebook_for_profile(profile_id)\n\n    root_dir = (\n        Path(output_dir)\n\
+    \        if output_dir is not None\n        else generated_output_root() / profile_id / pack_id / \"colab_run\"\n    )\n\
+    \    root_dir.mkdir(parents=True, exist_ok=True)\n\n    # Write the Colab notebook code locally (also referenced by the\
+    \ MCP call)\n    notebook_code_path = root_dir / \"colab_notebook.py\"\n    notebook_code_path.write_text(colab_code,\
+    \ encoding=\"utf-8\")\n\n    # Copy the batch file into the run dir so Colab can read it from /content\n    batch_copy_path\
+    \ = root_dir / \"prompt_batch.json\"\n    import shutil\n    shutil.copy2(batch_path, batch_copy_path)\n\n    companions\
+    \ = _companion_paths(Path(batch_path).parent)\n    if \"prompt_batch\" not in companions:\n        companions[\"prompt_batch\"\
+    ] = batch_copy_path\n\n    drive_folder_value = drive_folder or drive_folder_for_colab(profile_id, pack_id, batch_id)\n\
+    \    handoff_manifest = _build_handoff_manifest(\n        profile_id=profile_id,\n        pack_id=pack_id,\n        batch_id=batch_id,\n\
+    \        game_scope=game_scope,\n        root_dir=root_dir,\n        notebook_code_path=notebook_code_path,\n        batch_copy_path=batch_copy_path,\n\
+    \        drive_folder=drive_folder_value,\n        companions=companions,\n    )\n    handoff_manifest_path = write_json(root_dir\
+    \ / \"colab_handoff_manifest.json\", handoff_manifest)\n    drive_stage_plan = build_drive_stage_plan(\n        local_artifacts_dir=root_dir,\n\
+    \        drive_folder=drive_folder_value,\n        upload_items=handoff_manifest[\"upload_items\"],\n        download_items=handoff_manifest[\"\
+    download_items\"],\n        notes=list(handoff_manifest[\"notes\"]),\n    )\n    drive_stage_plan_path = write_json(root_dir\
+    \ / \"drive_stage_plan.json\", drive_stage_plan)\n    write_text(\n        root_dir / \"colab_handoff.md\",\n        \"\
+    \\n\".join(\n            [\n                f\"# Colab Handoff\",\n                \"\",\n                f\"- Pack: `{pack_id}`\"\
+    ,\n                f\"- Profile: `{profile_id}`\",\n                f\"- Batch: `{batch_id}`\",\n                f\"-\
+    \ Drive folder: `{drive_folder_value}`\",\n                \"\",\n                \"## Upload\",\n                *[f\"\
+    - `{item['role']}` -> `{item['drive_name']}`\" for item in handoff_manifest[\"upload_items\"]],\n                \"\"\
+    ,\n                \"## Download\",\n                *[f\"- `{item['role']}` -> `{item['drive_name']}`\" for item in handoff_manifest[\"\
+    download_items\"]],\n                \"\",\n            ]\n        )\n        + \"\\n\",\n    )\n\n    if dry_run:\n \
+    \       print(f\"[DRY RUN] Would prepare {len(jobs)} jobs for Colab profile={profile_id}\")\n        print(f\"[DRY RUN]\
+    \ Batch: {batch_path}\")\n        print(f\"[DRY RUN] Notebook written to: {notebook_code_path}\")\n        print(f\"[DRY\
+    \ RUN] Handoff manifest: {handoff_manifest_path}\")\n        print(f\"[DRY RUN] Drive stage plan: {drive_stage_plan_path}\"\
+    )\n        print(f\"[DRY RUN] Drive folder: {drive_folder_value}\")\n        print(\"[DRY RUN] To execute for real, open\
+    \ the notebook in colab_exec and run it there.\")\n    else:\n        print(f\"Prepared {len(jobs)} Colab jobs for profile={profile_id}\"\
+    )\n        print(f\"Profile: {profile_id} | Pack: {pack_id}\")\n        print(f\"Batch: {batch_path}\")\n        print(f\"\
+    Notebook: {notebook_code_path}\")\n        print(f\"Handoff manifest: {handoff_manifest_path}\")\n        print(f\"Drive\
+    \ stage plan: {drive_stage_plan_path}\")\n        print(f\"Drive folder: {drive_folder_value}\")\n        print()\n  \
+    \      print(\">>> This command emits the notebook and batch only; it does not invoke colab_exec.\")\n        print(\"\
+    >>> Open the notebook in colab_exec_a or colab_exec_b to perform the actual run.\")\n\n    return ColabSubmissionResult(\n\
+    \        profile_id=profile_id,\n        pack_id=pack_id,\n        batch_path=Path(batch_path),\n        output_dir=root_dir,\n\
+    \        job_count=len(jobs),\n        drive_folder=drive_folder_value,\n        handoff_manifest_path=handoff_manifest_path,\n\
+    \        drive_stage_plan_path=drive_stage_plan_path,\n        dry_run=dry_run,\n    )\n"
+  hf_pip_refs:
+  - 'if "trellis" in profile_id:'
+  - return _trellis_colab_code()
+  - '"git+https://github.com/tencent/hunyuan3d-2",'
+  - pipe = Hunyuan3DPipeline.from_pretrained("tencent/Hunyuan3D-2")
+  - 'def _trellis_colab_code() -> str:'
+  - '# === AssetBoy: TRELLIS Batch Runner ==='
+  - '"git+https://github.com/microsoft/TRELLIS",'
+  - from trellis.pipelines import TrellisImageTo3DPipeline
+  - pipe = TrellisImageTo3DPipeline.from_pretrained("microsoft/TRELLIS-image-large")
+  - '# TRELLIS image-to-3D requires a reference image, use a blank or prompted one'
+  - '"git+https://github.com/cuducos/animationgpt",'

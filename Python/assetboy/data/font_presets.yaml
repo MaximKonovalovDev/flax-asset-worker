@@ -1,0 +1,99 @@
+__provenance__: From assetboy.execution.font_runner (Path B s2 data park).
+data:
+  FONT_PRESETS:
+  - - SHARED_FONT_UNCIAL_ONE
+    - https://raw.githubusercontent.com/google/fonts/main/ofl/uncialantiqua/UncialAntiqua-Regular.ttf
+    - Uncial Antiqua — medieval/fantasy display font. OFL. Replaces the removed Uncial One preset source.
+    - - medieval
+      - fantasy
+      - display
+  - - SHARED_FONT_CINZEL
+    - https://raw.githubusercontent.com/google/fonts/main/ofl/cinzel/Cinzel%5Bwght%5D.ttf
+    - Cinzel — Roman/classical serif display font. OFL.
+    - - roman
+      - classical
+      - serif
+      - display
+  - - SHARED_FONT_CINZEL_DECO
+    - https://github.com/google/fonts/raw/main/ofl/cinzeldecorative/CinzelDecorative-Regular.ttf
+    - Cinzel Decorative — ornate Roman display font. OFL.
+    - - roman
+      - classical
+      - display
+      - ornate
+  - - SHARED_FONT_MEDIEVAL_SHARP
+    - https://github.com/google/fonts/raw/main/ofl/medievalsharp/MedievalSharp.ttf
+    - MedievalSharp — gothic/horror title font. OFL.
+    - - medieval
+      - gothic
+      - horror
+      - display
+  - - SHARED_FONT_ALMENDRA
+    - https://github.com/google/fonts/raw/main/ofl/almendradisplay/AlmendraDisplay-Regular.ttf
+    - Almendra Display — fantasy/elf elegant display. OFL.
+    - - fantasy
+      - elegant
+      - display
+  - - SHARED_FONT_ORBITRON
+    - https://raw.githubusercontent.com/google/fonts/main/ofl/orbitron/Orbitron%5Bwght%5D.ttf
+    - Orbitron — sci-fi futuristic display font. OFL.
+    - - scifi
+      - futuristic
+      - display
+  - - SHARED_FONT_EXO2
+    - https://raw.githubusercontent.com/google/fonts/main/ofl/exo2/Exo2%5Bwght%5D.ttf
+    - Exo 2 — clean sci-fi UI body font. OFL.
+    - - scifi
+      - ui
+      - body
+  - - SHARED_FONT_RAJDHANI
+    - https://github.com/google/fonts/raw/main/ofl/rajdhani/Rajdhani-Regular.ttf
+    - Rajdhani — compact bold HUD indicator font. OFL.
+    - - hud
+      - ui
+      - bold
+      - compact
+      - scifi
+  - - SHARED_FONT_PRESS_START
+    - https://github.com/google/fonts/raw/main/ofl/pressstart2p/PressStart2P-Regular.ttf
+    - Press Start 2P — pixel/8-bit retro UI font. OFL.
+    - - pixel
+      - retro
+      - ui
+  - - SHARED_FONT_PIRATA
+    - https://github.com/google/fonts/raw/main/ofl/pirataone/PirataOne-Regular.ttf
+    - Pirata One — pirate/skull style display. OFL.
+    - - pirate
+      - horror
+      - display
+  - - SHARED_FONT_CREEPSTER
+    - https://github.com/google/fonts/raw/main/ofl/creepster/Creepster-Regular.ttf
+    - Creepster — horror/halloween display. OFL.
+    - - horror
+      - halloween
+      - display
+  - - SHARED_FONT_BANGERS
+    - https://github.com/google/fonts/raw/main/ofl/bangers/Bangers-Regular.ttf
+    - Bangers — comic action title font. OFL.
+    - - comic
+      - action
+      - display
+  - - SHARED_FONT_INTER
+    - https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz,wght%5D.ttf
+    - Inter — clean modern UI/HUD body font. OFL.
+    - - ui
+      - hud
+      - body
+      - modern
+  - - SHARED_FONT_ROBOTO
+    - https://raw.githubusercontent.com/google/fonts/main/ofl/roboto/Roboto%5Bwdth,wght%5D.ttf
+    - Roboto — standard HUD readable body font. OFL.
+    - - ui
+      - hud
+      - body
+  - - SHARED_FONT_CABIN
+    - https://raw.githubusercontent.com/google/fonts/main/ofl/cabin/Cabin%5Bwdth,wght%5D.ttf
+    - Cabin — neutral UI sans-serif body. OFL.
+    - - ui
+      - body
+      - neutral

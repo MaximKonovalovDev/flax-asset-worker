@@ -1,0 +1,61 @@
+__provenance__: From assetboy.execution.vehicle_runner (Path B s2 data park).
+data:
+  VEHICLE_PRESETS:
+  - - SHARED_VEH_KENNEY_VEHICLE_KIT
+    - https://kenney.nl/assets/car-kit
+    - Kenney Car Kit — cars, trucks, SUVs, and road vehicles. CC0.
+    - - vehicle
+      - car
+      - truck
+      - modern
+      - all
+  - - SHARED_VEH_KENNEY_RACING_KIT
+    - https://kenney.nl/assets/racing-kit
+    - Kenney Racing Kit — race cars, barriers, track elements. CC0.
+    - - vehicle
+      - car
+      - racing
+      - all
+  - - SHARED_VEH_KENNEY_CITY_VEHICLES
+    - https://kenney.nl/assets/city-kit-roads
+    - Kenney City Roads Kit — roads, buses, trams, road props. CC0.
+    - - vehicle
+      - city
+      - bus
+      - modern
+      - all
+  - - SHARED_VEH_KENNEY_HOLIDAY_TRAIN
+    - https://kenney.nl/assets/holiday-kit
+    - Kenney Holiday Kit — includes train and cart vehicles. CC0.
+    - - vehicle
+      - train
+      - cart
+      - holiday
+      - all
+  - - SHARED_VEH_KENNEY_PIRATE_SHIPS
+    - https://kenney.nl/assets/pirate-kit
+    - Kenney Pirate Kit — ships, boats, cannon carts. CC0.
+    - - vehicle
+      - ship
+      - boat
+      - pirate
+      - fantasy
+      - roman
+      - all
+  - - SHARED_VEH_KENNEY_SPACE_SHIPS
+    - https://kenney.nl/assets/space-kit
+    - Kenney Space Kit — spacecraft, rockets, modules. CC0.
+    - - vehicle
+      - spacecraft
+      - scifi
+      - space
+      - all
+  - - SHARED_VEH_KENNEY_SCIFI_VEHICLES
+    - https://kenney.nl/assets/modular-space-kit
+    - Kenney Modular Space Kit — ships, modules, and sci-fi vehicle-friendly parts. CC0.
+    - - vehicle
+      - tank
+      - scifi
+      - hover
+      - all
+  VEHICLE_DIRECT_ZIPS: {}
