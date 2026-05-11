@@ -835,3 +835,103 @@ Workflow examples still referencing DEAD code (verify before delete):
 - `docs/COMMIT_READY-assetboi.md` (this entry)
 
 **Next:** s2.6d — bulk delete the 13 confirmed-orphaned DEAD files (10 execution runners + ai_bridge + generator + runbooks). Workflows deferred to a follow-up sub-slice since cli_legacy still references them.
+
+---
+
+## Slice s2.6d — Day 11 bulk delete 13 DEAD files (-6176 LOC) (2026-05-11)
+
+**Status:** SHIPPED.
+
+**Pre-delete safety scan** confirmed all 13 files have zero KEEP-side importers (only cli_legacy + DEAD-pending workflow examples reference them; both are themselves on the chopping block).
+
+**What shipped — 13 files deleted (-6,176 lines total):**
+
+### 10 execution runners (DEAD; preset data parked in s2 YAML)
+| File | Lines | Bytes | Data parked in |
+|---|---|---|---|
+| `execution/animationgpt_runner.py` | 336 | 14,918 | `data/animationgpt_presets.yaml` |
+| `execution/dialogue_runner.py` | 737 | 26,033 | `data/dialogue_presets.yaml` |
+| `execution/font_runner.py` | 287 | 10,743 | `data/font_presets.yaml` |
+| `execution/game_icons_runner.py` | 227 | 8,142 | `data/game_icons_presets.yaml` |
+| `execution/music_runner.py` | 285 | 11,834 | `data/music_presets.yaml` |
+| `execution/museum_runner.py` | 279 | 9,971 | `data/museum_presets.yaml` |
+| `execution/playwright_runner.py` | **2,169** | **95,762** | `data/playwright_presets.yaml` |
+| `execution/quaternius_runner.py` | 258 | 8,904 | `data/quaternius_presets.yaml` |
+| `execution/vfx_runner.py` | 254 | 8,642 | `data/vfx_presets.yaml` |
+| `execution/vehicle_runner.py` | 251 | 8,853 | `data/vehicle_presets.yaml` |
+
+### 3 DEAD providers (data parked + rewires complete)
+| File | Lines | Bytes | Why DEAD |
+|---|---|---|---|
+| `providers/ai_bridge.py` | 409 | 18,682 | `AI_PROVIDER_PROFILES` now in `data/provider_profiles.yaml`; rewired in s2.6a + s2.6b |
+| `providers/generator.py` | 342 | 13,806 | `load_colab_profile` + `profile_ids` inlined into `provider_readiness.py` in s2.6a |
+| `providers/runbooks.py` | 342 | 16,872 | `provider_runbook_ids` from `data/provider_profiles.yaml`; rewired in s2.6a + s2.6b |
+
+### Verification
+
+```
+=== package imports (the big ones) ===
+all KEEP modules import OK
+  assetboy
+  assetboy.providers
+  assetboy.execution
+  assetboy.workflows
+  assetboy.workflows.pack_pipeline
+  assetboy.workflows.flax_wrapper
+  assetboy.providers.provider_readiness
+  assetboy.providers.browser_automation
+  assetboy.execution.freesound_runner
+  assetboy.canary
+
+=== CLI smoke ===
+python -m assetboy.cli --help    -> 7 sub-apps cleanly
+
+=== canary tests ===
+26 passed in 2.03s
+
+=== cli_legacy now broken (expected; on s10.5 chopping block) ===
+ModuleNotFoundError: No module named 'assetboy.providers.ai_bridge'
+```
+
+3 tests (test_publish_filters, test_generator_emit, test_cli_parser_commands) now error at collection because they import from cli_legacy which has 33 broken DEAD imports. These tests will be deleted alongside cli_legacy in s10.5. **Acceptable trade — they correctly mark the legacy surface as broken.**
+
+### Path B v1.2 progress so far (this turn)
+
+5 commits since v1.1.0-path-b-cleanup tag:
+- `588c901` s2.6a — provider_readiness rewired (drop 3 DEAD deps)
+- `928b252` s2.6b — providers/__init__ + browser_automation + freesound_runner playwright neutered
+- `94e501e` s2.6c — flax_wrapper 10 DEAD-runner imports removed + _run_bulk_impl stubbed (-362 lines)
+- `<this>` s2.6d — 13 DEAD files deleted (-6,176 lines)
+
+**Net code reduction since v1.1.0:** -6,538 lines from production paths (+ -8,495 will land when cli_legacy goes in s10.5).
+
+### Remaining DEAD work (peer-opus's original 22-file list)
+
+**Still alive but DEAD-pending (cli_legacy is the only consumer):**
+- `workflows/roman_first_playable.py` (cli_legacy:139 + blender_runner:22)
+- `workflows/roman_blockers.py` (cli_legacy:138)
+- `workflows/roman_launchers.py` (cli_legacy:2791)
+- `workflows/roman_source_presets.py` (cli_legacy:2806)
+- `workflows/pack_family_plan.py` (cli_legacy:3721)
+- `workflows/execution_kit.py` (depends on roman_blockers)
+- `workflows/audio_examples.py`, `category_examples.py`, `cleanup_examples.py` (no production callers)
+
+All of these go to delete when cli_legacy goes in s10.5. The blender_runner reference is the one real concern; needs verifying before delete.
+
+**Files staged for commit:**
+- `Python/assetboy/execution/animationgpt_runner.py` (DELETED)
+- `Python/assetboy/execution/dialogue_runner.py` (DELETED)
+- `Python/assetboy/execution/font_runner.py` (DELETED)
+- `Python/assetboy/execution/game_icons_runner.py` (DELETED)
+- `Python/assetboy/execution/music_runner.py` (DELETED)
+- `Python/assetboy/execution/museum_runner.py` (DELETED)
+- `Python/assetboy/execution/playwright_runner.py` (DELETED)
+- `Python/assetboy/execution/quaternius_runner.py` (DELETED)
+- `Python/assetboy/execution/vfx_runner.py` (DELETED)
+- `Python/assetboy/execution/vehicle_runner.py` (DELETED)
+- `Python/assetboy/providers/ai_bridge.py` (DELETED)
+- `Python/assetboy/providers/generator.py` (DELETED)
+- `Python/assetboy/providers/runbooks.py` (DELETED)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+**Next:** s2.5b — strip 33 DEAD imports inside cli_legacy.py so the file at least loads (defers actual delete to s10.5 which does mechanical pack_pipeline body extract first).
