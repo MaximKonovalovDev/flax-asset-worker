@@ -2031,3 +2031,57 @@ Notably the `SANDBOX_GEN_COMFY_IMG2IMG_01` pack documents the **v1.5.2 input_ima
 - **-24,487 LOC** net
 
 **Next:** loop continues. The README + HEARTBEAT + COMMIT_READY all reflect current state. Test suite stable. Recipe count: 4 (primitive_tech + roman_arena + sandbox_one_pack + sandbox_generator). All 9 tags landed.
+
+---
+
+## Slice v1.5.5.gen-list-presets-fix — --provider filter + dict-iteration fix (2026-05-11)
+
+**Status:** SHIPPED.
+
+**Bug fix + enhancement:**
+
+### 1. `cli/gen.py` — fixed dict-key resolution + added --provider filter + included stable_audio
+
+**Bug:** the original `gen list-presets` printed `name=?` for every ComfyUI preset because it looked for `id`/`name` keys, but `ROMAN_MATERIAL_PRESETS` uses `pack_id` + `type` + `prompt`. Also missed `UI_PROMPT_TEMPLATES` being a `dict[str, dict]` (not a list), and didn't include Stable Audio presets at all.
+
+**Fixes:**
+- `_normalize_dict_preset` helper looks for `id` / `pack_id` / `name` (in order) — resolves all 6 ComfyUI presets correctly.
+- `UI_PROMPT_TEMPLATES` iteration switched to `.items()` (it's a dict).
+- Added `STABLE_AUDIO_PRESETS` to the listing — all 3 generator providers covered.
+- New `--provider` / `-p` filter restricts output to one source (comfyui | local_image | sd.cpp | sd | stable_audio | stable_audio_open_small).
+
+**New output sections per provider:**
+- `gen_comfyui_preset_count=...` + per-preset `id=` and `type=`
+- `gen_local_image_preset_count=...` + per-preset `id=`
+- `gen_stable_audio_preset_count=...` + per-preset `id=` and `duration_s=`
+
+### 2. 4 new tests in `test_cli_typer.py`
+
+- `test_gen_list_presets_default_shows_all_three_providers` — verifies all 3 sections appear by default.
+- `test_gen_list_presets_provider_filter_stable_audio` — `--provider stable_audio` shows only stable_audio; other 2 sections absent.
+- `test_gen_list_presets_provider_filter_comfyui_resolves_ids` — verifies the bug fix: no more `id=?` / `name=?`; real preset IDs like `SHARED_MAT_*` appear.
+- `test_gen_list_presets_json_mode` — `--json` emits parseable JSON with all 3 keys.
+
+### Verification
+
+```
+=== full test suite ===
+242 passed, 1 skipped in 15.71s
+(was 238 at v1.5.4)
+```
+
+### Files staged for commit
+
+- `Python/assetboy/cli/gen.py` (MODIFIED, ~95 lines of `list_presets_cmd` rewritten)
+- `Tests/python/test_cli_typer.py` (MODIFIED, +4 tests)
+- `docs/COMMIT_READY-assetboi.md` (this entry)
+
+### Turn metrics (post-v1.5.5)
+
+- **35 commits** since v1.1.0 tag this turn
+- **10 tags** (v1.1.0 ... v1.5.4-onboarding-ready)
+- **242 tests** passing (started at 26)
+- **-24,487 LOC** net
+- **5 docs shipped:** README + ROADMAP + COMMIT_READY + PATH_B_DAY11_PLAN + MONOREPO_FACADE_DESIGN + SETUP + HEARTBEAT (7 actually)
+
+**Next:** loop continues per Rule 3.
