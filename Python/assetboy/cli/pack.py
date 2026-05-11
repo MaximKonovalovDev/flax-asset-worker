@@ -607,6 +607,23 @@ def validate_cmd(
             help="Treat warnings as errors (exit 1 if any warning).",
         ),
     ] = False,
+    fix: Annotated[
+        bool,
+        typer.Option(
+            "--fix",
+            help=(
+                "v1.9.s24: auto-apply fixes for common warnings (missing "
+                "source_url, license, asset_kind). Requires --out."
+            ),
+        ),
+    ] = False,
+    out: Annotated[
+        str,
+        typer.Option(
+            "--out",
+            help="Output path for --fix mode. Required if --fix is set.",
+        ),
+    ] = "",
 ) -> None:
     """Lint a recipe YAML against the v1 schema.
 
@@ -675,6 +692,59 @@ def validate_cmd(
         for idx, warn in enumerate(result.warnings, start=1):
             print(f"pack_validate_warning_{idx}={warn}")
 
+    # v1.9.s24: --fix path - apply auto-fixes and write to --out
+    if fix:
+        if not out:
+            msg = "fix_requires_out: --fix needs --out <path> for the fixed recipe"
+            if json_out:
+                json.dump({"error": msg, "ok": False}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"pack_validate_error={msg}")
+            raise typer.Exit(code=1)
+        from assetboy.workflows.recipe_validator import auto_fix_warnings
+        try:
+            doc = _load_recipe(resolved)
+        except Exception as exc:
+            msg = f"recipe_reload_for_fix_failed: {exc}"
+            if json_out:
+                json.dump({"error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"pack_validate_error={msg}")
+            raise typer.Exit(code=1)
+        fixed_doc, fixes_applied = auto_fix_warnings(doc)
+        out_path = Path(out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            import yaml
+            out_path.write_text(
+                yaml.safe_dump(fixed_doc, sort_keys=False, allow_unicode=True, width=120),
+                encoding="utf-8",
+            )
+        except ImportError:
+            msg = "pyyaml_not_installed"
+            print(f"pack_validate_error={msg}")
+            raise typer.Exit(code=1)
+        if json_out:
+            json.dump({
+                "ok": True,
+                "fix_mode": True,
+                "fixes_applied": fixes_applied,
+                "fix_count": len(fixes_applied),
+                "out_path": str(out_path),
+                "out_bytes": out_path.stat().st_size,
+            }, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_validate_fix_applied_count={len(fixes_applied)}")
+            for idx, f in enumerate(fixes_applied, start=1):
+                print(f"pack_validate_fix_{idx}={f}")
+            print(f"pack_validate_fix_out_path={out_path}")
+            print(f"pack_validate_fix_out_bytes={out_path.stat().st_size}")
+        # Auto-fix mode exits 0 if fixed (operator should then re-validate)
+        return
+
     exit_code = 0 if result.ok else 1
     if strict and result.warnings:
         exit_code = 1
@@ -682,6 +752,8 @@ def validate_cmd(
         raise typer.Exit(code=exit_code)
 
 
+# --------------------------------------------------------------------------- #
+# pack validate-all (v1.8.s19)
 # --------------------------------------------------------------------------- #
 # pack export-summary (v1.8.s17)
 # --------------------------------------------------------------------------- #

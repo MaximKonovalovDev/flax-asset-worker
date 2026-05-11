@@ -253,6 +253,84 @@ class WarningsTests(unittest.TestCase):
         self.assertTrue(any("no 'license' block" in w for w in r.warnings))
 
 
+class AutoFixWarningsTests(unittest.TestCase):
+    """v1.9.s24: auto_fix_warnings(doc) -> (fixed_doc, fixes_list)."""
+
+    def setUp(self) -> None:
+        from assetboy.workflows.recipe_validator import auto_fix_warnings
+        self.auto_fix = auto_fix_warnings
+
+    def test_manual_browser_missing_source_url_gets_default(self) -> None:
+        """Fab pack with no source_url -> default https://www.fab.com/"""
+        doc = {
+            "recipe": {"id": "x", "game": "test"},
+            "packs": [{
+                "id": "PACK_FAB",
+                "provider": "fab",
+                "acquisition_method": "manual_browser",
+                "asset_kind": "model",
+            }],
+        }
+        fixed, fixes = self.auto_fix(doc)
+        self.assertIn("https://www.fab.com/", fixed["packs"][0].get("source_url", ""))
+        self.assertTrue(any("source_url" in f for f in fixes))
+
+    def test_missing_license_block_filled_per_provider(self) -> None:
+        """polyhaven without license -> cc0 default."""
+        doc = {
+            "recipe": {"id": "x", "game": "test"},
+            "packs": [{
+                "id": "PACK_PH",
+                "provider": "polyhaven",
+                "acquisition_method": "direct_url",
+                "asset_kind": "texture",
+                "assets": [{"asset_id": "x"}],
+            }],
+        }
+        fixed, fixes = self.auto_fix(doc)
+        self.assertEqual(fixed["packs"][0]["license"]["kind"], "cc0")
+        self.assertTrue(fixed["packs"][0]["license"]["commercial_ok"])
+        self.assertTrue(any("license" in f for f in fixes))
+
+    def test_missing_asset_kind_gets_default_prop(self) -> None:
+        doc = {
+            "recipe": {"id": "x", "game": "test"},
+            "packs": [{
+                "id": "PACK_NO_KIND",
+                "provider": "polyhaven",
+                "acquisition_method": "direct_url",
+                "license": {"kind": "cc0"},
+                "assets": [{"asset_id": "x"}],
+            }],
+        }
+        fixed, fixes = self.auto_fix(doc)
+        self.assertEqual(fixed["packs"][0]["asset_kind"], "prop")
+
+    def test_already_valid_pack_unchanged_minus_minor(self) -> None:
+        """If a pack already has all three fields, no manual_browser/license fix applies."""
+        doc = {
+            "recipe": {"id": "x", "game": "test"},
+            "packs": [{
+                "id": "PACK_OK",
+                "provider": "fab",
+                "acquisition_method": "manual_browser",
+                "asset_kind": "model",
+                "license": {"kind": "fab_standard"},
+                "source_url": "https://www.fab.com/listings/abc",
+            }],
+        }
+        fixed, fixes = self.auto_fix(doc)
+        # Source_url preserved exactly
+        self.assertEqual(fixed["packs"][0]["source_url"], "https://www.fab.com/listings/abc")
+        self.assertEqual(fixed["packs"][0]["license"]["kind"], "fab_standard")
+        self.assertEqual(fixes, [])
+
+    def test_non_dict_doc_returns_unchanged(self) -> None:
+        fixed, fixes = self.auto_fix("not a dict")  # type: ignore[arg-type]
+        self.assertEqual(fixed, "not a dict")
+        self.assertEqual(fixes, [])
+
+
 class RealRecipeIntegrationTests(unittest.TestCase):
     """Sanity-check that all shipped recipes pass validation."""
 

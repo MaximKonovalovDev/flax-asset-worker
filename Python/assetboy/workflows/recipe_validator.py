@@ -318,4 +318,116 @@ __all__ = [
     "GENERATOR_PROVIDERS",
     "validate_recipe_doc",
     "validate_recipe_file",
+    "auto_fix_warnings",
 ]
+
+
+# --------------------------------------------------------------------------- #
+# Auto-fix (v1.9.s24)
+# --------------------------------------------------------------------------- #
+
+# Default source_url per manual_browser provider. Used by auto-fix when a
+# manual_browser pack is missing source_url. These are "safe defaults" --
+# generic landing pages the operator can refine.
+_DEFAULT_MANUAL_BROWSER_URLS = {
+    "fab": "https://www.fab.com/",
+    "mixamo": "https://www.mixamo.com/",
+    "unity": "https://assetstore.unity.com/",
+    "unity_asset_store": "https://assetstore.unity.com/",
+    "epic": "https://store.epicgames.com/",
+    "epic_games": "https://store.epicgames.com/",
+    "epic_vault": "https://www.fab.com/vault",
+}
+
+# Default license-block shape per provider. Sensible commercial_ok defaults.
+_DEFAULT_LICENSE_BY_PROVIDER = {
+    "polyhaven": {"kind": "cc0", "commercial_ok": True, "attribution_required": False},
+    "kenney": {"kind": "cc0", "commercial_ok": True, "attribution_required": False},
+    "ambientcg": {"kind": "cc0", "commercial_ok": True, "attribution_required": False},
+    "quaternius": {"kind": "cc0", "commercial_ok": True, "attribution_required": False},
+    "freesound": {"kind": "cc0_or_cc_by_filtered", "commercial_ok": True, "attribution_required": "per-file"},
+    "fab": {"kind": "fab_standard", "commercial_ok": True, "cross_engine_ok": True},
+    "mixamo": {"kind": "mixamo_free", "commercial_ok": True, "attribution_required": False},
+    "unity": {"kind": "manual_per_source", "commercial_ok": True, "cross_engine_ok": True},
+    "unity_asset_store": {"kind": "manual_per_source", "commercial_ok": True, "cross_engine_ok": True},
+    "epic": {"kind": "manual_per_source", "commercial_ok": True, "cross_engine_ok": True},
+    "comfyui": {"kind": "comfyui_workflow_dependent"},
+    "local_image": {"kind": "sd_model_dependent"},
+    "sd.cpp": {"kind": "sd_model_dependent"},
+    "stable_audio_open_small": {"kind": "stability_community", "commercial_ok": True, "training_data_clean": True},
+    "stable_audio": {"kind": "stability_community", "commercial_ok": True, "training_data_clean": True},
+}
+
+
+def auto_fix_warnings(doc: dict) -> tuple[dict, list[str]]:
+    """Auto-fix common validator warnings.
+
+    Path B v1.9.s24 (2026-05-11). Returns (fixed_doc, list_of_fix_descriptions).
+
+    Fixes applied (in order):
+      1. manual_browser packs missing 'source_url' get a default per-provider
+         landing page (Fab.com root, Mixamo root, etc.) so operators see a
+         real URL instead of nothing.
+      2. Packs missing 'license' block get a sensible per-provider default
+         (cc0 for polyhaven/kenney/ambientcg/quaternius; fab_standard for
+         fab; stability_community for stable_audio; etc.).
+      3. Packs missing 'asset_kind' get a conservative 'prop' default.
+
+    Does NOT fix:
+      - Hard errors (missing id, unknown method, etc.) -- those need
+        operator decision, not autocomplete.
+      - License kind values the operator already set -- only fills empty.
+
+    The returned doc is a shallow-modified copy of the input (top-level
+    keys preserved; only 'packs' list entries get patched in place).
+    """
+    if not isinstance(doc, dict):
+        return doc, []
+
+    fixed_doc = dict(doc)
+    fixes: list[str] = []
+    packs = list(fixed_doc.get("packs") or [])
+    new_packs: list[dict] = []
+
+    for idx, pack in enumerate(packs):
+        if not isinstance(pack, dict):
+            new_packs.append(pack)
+            continue
+        patched = dict(pack)
+        pack_id = patched.get("id", f"packs[{idx}]")
+        method = str(patched.get("acquisition_method", "")).strip().lower()
+        provider = str(patched.get("provider", "")).strip().lower()
+
+        # Fix 1: manual_browser missing source_url + assets
+        if method == "manual_browser":
+            has_url = bool(patched.get("source_url"))
+            has_assets = bool(patched.get("assets"))
+            if not has_url and not has_assets:
+                default_url = _DEFAULT_MANUAL_BROWSER_URLS.get(provider)
+                if default_url:
+                    patched["source_url"] = default_url
+                    fixes.append(
+                        f"{pack_id}: added default source_url={default_url!r} for manual_browser/{provider}"
+                    )
+
+        # Fix 2: missing license block
+        if "license" not in patched or not patched["license"]:
+            default_license = _DEFAULT_LICENSE_BY_PROVIDER.get(provider)
+            if default_license:
+                patched["license"] = dict(default_license)
+                fixes.append(
+                    f"{pack_id}: added default license block "
+                    f"(kind={default_license.get('kind', '?')}) for provider {provider!r}"
+                )
+
+        # Fix 3: missing asset_kind
+        if "asset_kind" not in patched or not str(patched.get("asset_kind", "")).strip():
+            patched["asset_kind"] = "prop"
+            fixes.append(
+                f"{pack_id}: added default asset_kind='prop' (operator can refine)"
+            )
+
+        new_packs.append(patched)
+
+    fixed_doc["packs"] = new_packs
+    return fixed_doc, fixes
