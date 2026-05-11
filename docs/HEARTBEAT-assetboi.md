@@ -1,12 +1,90 @@
 # HEARTBEAT — assetboi (operator hibernation read-back)
 
-> **Last update:** 2026-05-11 (mid-turn, 13 commits + 4 tags shipped this turn)
+> **Last update:** 2026-05-11 (mid-turn, **102 commits + 51 tags shipped this turn**)
 > **Repo:** `flax-asset-worker` (this repo; assetboi commits freely here)
 > **Loop status:** **NEVER-STOP ACTIVE** per BOSS Rule 3
 
 This is the single doc to read first if you (operator) just woke up.
 Everything else (PATH_B_DAY11_PLAN.md, COMMIT_READY-assetboi.md, README,
 ROADMAP) is supporting detail.
+
+---
+
+## TL;DR — top-of-loop milestone (v1.11.4, this turn)
+
+**102 commits, 51 tags, 568 tests passing, 10 new public-API providers shipped.**
+
+Major milestone reached: **R1A TOP-10 PUBLIC API CATALOG COMPLETE** (v1.10.9
+tag `v1.10.9-unsplash-COMPLETE-R1A`). FAW now has fetcher commands for:
+
+```
+NO-KEY (always works):
+  gen met-museum fetch       Met Open Access (CC0)
+  gen wikimedia fetch        Wikimedia Commons (CC0/CC-BY/SA/PD)
+  gen archive-org fetch      Internet Archive (CC/PD)
+  gen scryfall fetch         Scryfall MTG cards (CC-BY-SA-4.0)
+  gen iconify fetch          Iconify icons (MIT/Apache/CC0/OFL)
+
+KEY-REQUIRED (free signup):
+  gen pexels photos|videos   PEXELS_API_KEY
+  gen pixabay photos|videos  PIXABAY_API_KEY
+  gen unsplash photos        UNSPLASH_ACCESS_KEY
+  gen rawg games             RAWG_API_KEY        (REFERENCE-ONLY)
+  gen jamendo tracks         JAMENDO_CLIENT_ID   (CC music)
+
+FAN-OUT scout commands:
+  gen all-no-key   --query X  -> hits all 5 no-key providers in one shot
+  gen all-key      --query X  -> hits all 5 key-required (skips missing keys)
+```
+
+**FAW asset-class coverage after R1A:**
+
+- IMAGES: 9 providers spanning UI / photos / art / icons
+- VIDEO: 2 providers (Pexels, Pixabay) — FAW first-class
+- AUDIO: 2 providers (Freesound for sfx + Jamendo for tracks)
+- 3D MODELS: 4 pre-existing (Polyhaven, Kenney, AmbientCG, Fab)
+- HDRI / SKYBOX: 1 (Polyhaven HDRIs)
+
+**Schema/lane integration:**
+
+- v1.11.0 — recipe pack schema accepts `video_refs`, `music_refs`,
+  `icon_refs`, `reference_image_urls` list-of-URL fields (validated).
+- v1.11.4 — all 10 R1A providers registered in `providers/lanes.py`
+  `SOURCE_ADAPTERS` as DIRECT_URL adapters with env-var docs.
+
+**Operator's first action tomorrow:**
+
+```powershell
+# Set keys you have (skip ones you don't):
+$env:PEXELS_API_KEY = "..."
+$env:PIXABAY_API_KEY = "..."
+$env:UNSPLASH_ACCESS_KEY = "..."
+$env:RAWG_API_KEY = "..."
+$env:JAMENDO_CLIENT_ID = "..."
+
+# Scout no-key providers (always works):
+python -m assetboy.cli gen all-no-key -q "stone wall" -n 2 --dry-run
+
+# Scout key-required (skips missing keys gracefully):
+python -m assetboy.cli gen all-key -q "fire" --include-video -n 2 --dry-run
+```
+
+Full operator guide updated at `docs/SETUP.md` section 5.5 (v1.11.3).
+
+---
+
+## What's stable + what's the surface today
+
+- `dotnet build` clean, `dotnet test` 568 passed / 1 skipped / 0 failed.
+- 27+ Typer CLI commands across 8 sub-apps (gen, pack, library, fab,
+  unity, epic, import, then 10 new R1A sub-apps).
+- 12 HTTP endpoints on `:8790` (unchanged this batch).
+- 51 tags on origin; latest is `v1.11.4-lane-adapters` (commit `125196a`).
+- 0 Rule violations through entire batch (every file edit <3 per slice).
+
+---
+
+## Older TL;DR (pre-R1A, kept for context)
 
 ---
 
