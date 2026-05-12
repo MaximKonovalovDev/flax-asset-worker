@@ -1,6 +1,6 @@
 # HEARTBEAT — assetboi (operator hibernation read-back)
 
-> **Last update:** 2026-05-12 (continuous loop, **166 commits + 108 tags shipped this run**, origin verified)
+> **Last update:** 2026-05-12 (continuous loop, **185 commits + 126 tags shipped this run**, origin verified)
 > **Repo:** `flax-asset-worker` (this repo; assetboi commits freely here)
 > **Loop status:** **NEVER-STOP ACTIVE** per BOSS Rule 3
 
@@ -71,6 +71,20 @@ v1.15 wave additions on top of v1.14 milestone:
   - v1.15.1 — install-r1a-pack --recipe (whole-recipe enumerate mode)
   - v1.15.2 — FAW_POLITE_SLEEP_S env override helper
   - v1.15.3 — gen iconify list-sets (browse 150+ icon sets with SPDX)
+
+v1.16 wave additions on top of v1.15:
+  - v1.16.0 — polite-sleep override applied to all 12 R1A runners
+  - v1.16.1 — history snapshot enriched (wall_time_s + command_shape)
+  - v1.16.2 — pack manifest-stats --history mode (aggregates snapshots)
+  - v1.16.3 — gen iconify fetch attribution badge in stdout
+  - v1.16.4 — library r1a-status --html --open auto-launch
+
+v1.17 wave additions on top of v1.16:
+  - v1.17.0 — gen all-key --write-history (keyed-fanout snapshots)
+  - v1.17.1 — pack list-recipes --reverse
+  - v1.17.2 — gen scout-by-license --parallel
+  - v1.17.3 — recipe.output_folder portability validation
+  - v1.17.s124 — 24 new JSON contract tests; reached 766-test milestone
 
 The v1.11 milestone reference (R1A wave complete) was:
 
