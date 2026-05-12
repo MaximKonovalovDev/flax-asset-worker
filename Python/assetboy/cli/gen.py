@@ -3441,5 +3441,146 @@ def scout_by_license_cmd(
                   f"downloaded={r['downloaded']:3d}{note}")
 
 
+# --------------------------------------------------------------------------- #
+# gen history-tail  (v1.24.s162)
+# --------------------------------------------------------------------------- #
+
+
+@app.command("history-tail")
+def history_tail_cmd(
+    n: Annotated[
+        int,
+        typer.Option(
+            "--last",
+            help=(
+                "v1.24.s162: number of most-recent r1a_history snapshots"
+                " to aggregate (default 10). 0 = all available."
+            ),
+        ),
+    ] = 10,
+    kind_filter: Annotated[
+        str,
+        typer.Option(
+            "--kind",
+            help=(
+                "Filter by run kind: 'all_no_key', 'all_key', or empty"
+                " for both (default)."
+            ),
+        ),
+    ] = "",
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Summarize the last N R1A fan-out runs from state/r1a_history.
+
+    v1.24.s162: companion to --write-history flags on gen all-no-key
+    and gen all-key. Reports per-provider rolling averages: matched
+    count, downloaded count, ok-rate, and total runs seen.
+
+    Useful for spotting provider regressions or rate-limit creep.
+    """
+    history_root = Path("state") / "r1a_history"
+    if not history_root.exists():
+        msg = f"history_root_not_found: {history_root}"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_history_tail_error={msg}")
+        raise typer.Exit(code=1)
+
+    # Collect snapshot files sorted by mtime desc (newest first).
+    snapshots = sorted(
+        history_root.glob("*.json"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+
+    # Optional kind filter (operates on filename prefix).
+    kind_norm = kind_filter.strip().lower()
+    if kind_norm:
+        if kind_norm not in ("all_no_key", "all_key"):
+            msg = (
+                f"unknown_kind: {kind_norm!r}"
+                " (valid: 'all_no_key', 'all_key', or empty)"
+            )
+            if json_out:
+                json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"gen_history_tail_error={msg}")
+            raise typer.Exit(code=1)
+        snapshots = [
+            s for s in snapshots if s.name.startswith(kind_norm)
+        ]
+
+    # Apply --last truncation (0 = all).
+    if n > 0:
+        snapshots = snapshots[:n]
+
+    # Aggregate per-provider totals.
+    per_provider: dict[str, dict] = {}
+    runs_seen = 0
+    for snap_path in snapshots:
+        try:
+            doc = json.loads(snap_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        runs_seen += 1
+        for p in (doc.get("providers") or []):
+            name = p.get("provider", "?")
+            slot = per_provider.setdefault(name, {
+                "runs": 0, "matched_sum": 0, "downloaded_sum": 0,
+                "ok_count": 0, "skipped_count": 0,
+            })
+            slot["runs"] += 1
+            slot["matched_sum"] += int(p.get("matched", 0) or 0)
+            slot["downloaded_sum"] += int(p.get("downloaded", 0) or 0)
+            if p.get("ok"):
+                slot["ok_count"] += 1
+            if p.get("skipped"):
+                slot["skipped_count"] += 1
+
+    # Compute derived stats (avg + ok_rate).
+    summary: list[dict] = []
+    for name, slot in sorted(per_provider.items()):
+        runs = slot["runs"] or 1
+        summary.append({
+            "provider": name,
+            "runs": slot["runs"],
+            "avg_matched": round(slot["matched_sum"] / runs, 2),
+            "avg_downloaded": round(slot["downloaded_sum"] / runs, 2),
+            "ok_rate": round(slot["ok_count"] / runs, 3),
+            "skipped_count": slot["skipped_count"],
+        })
+
+    payload = {
+        "ok": True,
+        "history_root": str(history_root),
+        "runs_seen": runs_seen,
+        "kind_filter": kind_norm or None,
+        "last_n": n if n > 0 else None,
+        "providers_seen": len(summary),
+        "providers": summary,
+    }
+
+    if json_out:
+        json.dump(payload, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"gen_history_tail_history_root={history_root}")
+        print(f"gen_history_tail_runs_seen={runs_seen}")
+        print(f"gen_history_tail_providers_seen={len(summary)}")
+        if kind_norm:
+            print(f"gen_history_tail_kind={kind_norm}")
+        for row in summary:
+            print(
+                f"  {row['provider']:18s} runs={row['runs']:3d}  "
+                f"avg_matched={row['avg_matched']:6.2f}  "
+                f"avg_downloaded={row['avg_downloaded']:6.2f}  "
+                f"ok_rate={row['ok_rate']:.3f}  "
+                f"skipped={row['skipped_count']}"
+            )
+
+
 if __name__ == "__main__":
     app()

@@ -1546,6 +1546,99 @@ class TyperCliSmokeTests(unittest.TestCase):
     # gen scout-by-license (v1.13.s94)
     # ----------------------------------------------------------------- #
 
+    # ----------------------------------------------------------------- #
+    # gen history-tail (v1.24.s162)
+    # ----------------------------------------------------------------- #
+
+    def test_history_tail_no_dir_exits_1(self) -> None:
+        """v1.24.s162: missing state/r1a_history -> exit 1."""
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmp:
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                result = self.runner.invoke(
+                    self.app, ["gen", "history-tail", "--json"],
+                )
+            finally:
+                os.chdir(old_cwd)
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("history_root_not_found", result.stdout)
+
+    def test_history_tail_aggregates_synthetic_snapshots(self) -> None:
+        """Writes 3 fake snapshots; verifies rolling avg + ok_rate."""
+        import tempfile, os, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            hist_dir = tmp_p / "state" / "r1a_history"
+            hist_dir.mkdir(parents=True)
+            # Snapshot 1: met=10/8 ok, wikimedia=5/3 ok.
+            (hist_dir / "all_no_key_001.json").write_text(_json.dumps({
+                "kind": "all_no_key",
+                "providers": [
+                    {"provider": "met_museum", "matched": 10,
+                     "downloaded": 8, "ok": True, "skipped": False},
+                    {"provider": "wikimedia", "matched": 5,
+                     "downloaded": 3, "ok": True, "skipped": False},
+                ],
+            }), encoding="utf-8")
+            # Snapshot 2: met=20/15 ok, wikimedia=0/0 RED.
+            (hist_dir / "all_no_key_002.json").write_text(_json.dumps({
+                "kind": "all_no_key",
+                "providers": [
+                    {"provider": "met_museum", "matched": 20,
+                     "downloaded": 15, "ok": True, "skipped": False},
+                    {"provider": "wikimedia", "matched": 0,
+                     "downloaded": 0, "ok": False, "skipped": False},
+                ],
+            }), encoding="utf-8")
+            # Snapshot 3: met=30/22 ok.
+            (hist_dir / "all_no_key_003.json").write_text(_json.dumps({
+                "kind": "all_no_key",
+                "providers": [
+                    {"provider": "met_museum", "matched": 30,
+                     "downloaded": 22, "ok": True, "skipped": False},
+                ],
+            }), encoding="utf-8")
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                result = self.runner.invoke(
+                    self.app, ["gen", "history-tail", "--json"],
+                )
+            finally:
+                os.chdir(old_cwd)
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        self.assertEqual(data["runs_seen"], 3)
+        self.assertEqual(data["providers_seen"], 2)
+        met = next(p for p in data["providers"] if p["provider"] == "met_museum")
+        wiki = next(p for p in data["providers"] if p["provider"] == "wikimedia")
+        self.assertEqual(met["runs"], 3)
+        self.assertEqual(met["avg_matched"], 20.0)  # (10+20+30)/3
+        self.assertEqual(met["avg_downloaded"], 15.0)  # (8+15+22)/3
+        self.assertEqual(met["ok_rate"], 1.0)
+        # wiki: 2 runs, ok_rate=0.5 (1 ok / 2 runs).
+        self.assertEqual(wiki["runs"], 2)
+        self.assertEqual(wiki["ok_rate"], 0.5)
+
+    def test_history_tail_kind_filter_invalid_exits_1(self) -> None:
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "state" / "r1a_history").mkdir(parents=True)
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "history-tail", "--kind", "bogus", "--json"],
+                )
+            finally:
+                os.chdir(old_cwd)
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("unknown_kind", result.stdout)
+
     def test_scout_by_license_help_renders(self) -> None:
         result = self.runner.invoke(self.app, ["gen", "scout-by-license", "--help"])
         self.assertEqual(result.exit_code, 0)
