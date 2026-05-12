@@ -1215,6 +1215,33 @@ class TyperCliSmokeTests(unittest.TestCase):
     # gen jamendo tracks (v1.10.s34)
     # ----------------------------------------------------------------- #
 
+    def test_jamendo_tracks_instrument_threads_through(self) -> None:
+        """v1.21.s146: --instrument flows into runner kwargs."""
+        from unittest.mock import patch
+        from assetboy.execution.jamendo_runner import JamendoResult
+        import os, tempfile
+        captured: dict = {}
+
+        def capture(**kwargs):
+            captured.update(kwargs)
+            return JamendoResult(
+                pack_id="x", query="q", output_dir=Path(tempfile.gettempdir()),
+                tracks_matched=0, ok=True, error="no_matches",
+            )
+
+        with patch.dict(os.environ, {"JAMENDO_CLIENT_ID": "test"}):
+            with patch(
+                "assetboy.execution.jamendo_runner.run_jamendo_tracks_batch",
+                side_effect=capture,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "jamendo", "tracks", "--query", "q",
+                     "--instrument", "piano", "--dry-run"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(captured.get("instrument"), "piano")
+
     def test_jamendo_tracks_help_renders(self) -> None:
         result = self.runner.invoke(self.app, ["gen", "jamendo", "tracks", "--help"])
         self.assertEqual(result.exit_code, 0)

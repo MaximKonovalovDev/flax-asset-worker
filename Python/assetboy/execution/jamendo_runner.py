@@ -132,9 +132,13 @@ def search_jamendo_tracks(
     *,
     client_id: str,
     limit: int = 10,
+    instrument: str | None = None,
     timeout: float = 20.0,
 ) -> list[dict]:
-    """Hit /tracks?search=...; return results list."""
+    """Hit /tracks?search=...; return results list.
+
+    v1.21.s146: optional instrument= filter (Jamendo tags.instruments field).
+    """
     params = {
         "client_id": client_id,
         "format": "json",
@@ -143,6 +147,8 @@ def search_jamendo_tracks(
         "include": "licenses+musicinfo",
         "audiodlformat": "mp32",
     }
+    if instrument and instrument.strip():
+        params["fuzzytags"] = instrument.strip()
     url = f"{JAMENDO_API}/tracks?{urllib.parse.urlencode(params)}"
     payload = _get_json(url, timeout=timeout)
     return list(payload.get("results", []))
@@ -155,6 +161,7 @@ def run_jamendo_tracks_batch(
     pack_id: str | None = None,
     count: int = 4,
     allow_restrictive: bool = False,
+    instrument: str | None = None,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.5,
     dry_run: bool = False,
@@ -187,7 +194,10 @@ def run_jamendo_tracks_batch(
         return result
 
     try:
-        tracks = search_jamendo_tracks(query, client_id=cid, limit=min(count * 3, 200))
+        tracks = search_jamendo_tracks(
+            query, client_id=cid, limit=min(count * 3, 200),
+            instrument=instrument,
+        )
     except urllib.error.HTTPError as exc:
         result.ok = False
         result.error = f"search_failed: HTTP {exc.code}"

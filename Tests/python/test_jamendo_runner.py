@@ -86,6 +86,20 @@ class JamendoSearchTests(unittest.TestCase):
         from assetboy.execution import jamendo_runner
         self.mod = jamendo_runner
 
+    def test_search_includes_instrument_param(self) -> None:
+        """v1.21.s146: instrument= maps to fuzzytags= URL param."""
+        captured_urls: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured_urls.append(str(req.full_url))
+            return _json_response({"results": []})
+
+        with patch.object(self.mod.urllib.request, "urlopen", side_effect=capture):
+            self.mod.search_jamendo_tracks(
+                "x", client_id="cid", instrument="piano",
+            )
+        self.assertIn("fuzzytags=piano", captured_urls[0])
+
     def test_search_returns_results(self) -> None:
         payload = {"results": [{"id": 1}, {"id": 2}]}
         with patch.object(

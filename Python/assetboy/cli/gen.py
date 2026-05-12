@@ -1954,6 +1954,16 @@ def jamendo_tracks_cmd(
             help="Also accept CC-NC / CC-ND variants (default: only CC-BY/CC-BY-SA).",
         ),
     ] = False,
+    instrument: Annotated[
+        str,
+        typer.Option(
+            "--instrument",
+            help=(
+                "v1.21.s146: filter by instrument tag (e.g. 'piano', 'guitar',"
+                " 'synthesizer'). Uses Jamendo's fuzzytags= parameter."
+            ),
+        ),
+    ] = "",
     pack_id: Annotated[str, typer.Option("--pack-id")] = "",
     output_dir: Annotated[Path, typer.Option("--output-dir")] = Path(""),
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
@@ -1980,11 +1990,13 @@ def jamendo_tracks_cmd(
 
     out_dir_arg: Path | None = output_dir if str(output_dir) else None
     pack_id_arg: str | None = pack_id if pack_id else None
+    instrument_arg: str | None = instrument.strip() or None  # v1.21.s146
 
     try:
         result = run_jamendo_tracks_batch(
             query=query, pack_id=pack_id_arg, count=count,
             allow_restrictive=allow_restrictive,
+            instrument=instrument_arg,
             output_dir=out_dir_arg, dry_run=dry_run,
         )
     except Exception as exc:
