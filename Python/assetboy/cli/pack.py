@@ -603,12 +603,23 @@ def from_recipe_cmd(
             "meets_expected_min": meets,
         }
 
+    # v1.20.s141 — honor recipe.min_required_passes.
+    completed_count = sum(1 for r in results if r["status"] == "completed")
+    min_passes = recipe_meta.get("min_required_passes")
+    min_passes_status: dict | None = None
+    if isinstance(min_passes, int) and not isinstance(min_passes, bool) and min_passes >= 0:
+        min_passes_status = {
+            "min_required_passes": min_passes,
+            "completed_seen": completed_count,
+            "meets_min_passes": completed_count >= min_passes,
+        }
+
     if json_out:
         payload = {
             "recipe_id": recipe_meta.get("id"),
             "game": game_scope,
             "total_packs": len(packs),
-            "completed": sum(1 for r in results if r["status"] == "completed"),
+            "completed": completed_count,
             "failed": fail_count,
             "required_failed": required_fail,
             "block_on_missing_required": block_on_missing,
@@ -616,12 +627,14 @@ def from_recipe_cmd(
         }
         if expected_status is not None:
             payload["expected_min_check"] = expected_status
+        if min_passes_status is not None:
+            payload["min_required_passes_check"] = min_passes_status
         json.dump(payload, sys.stdout, indent=2, default=str)
         sys.stdout.write("\n")
     else:
         print()
         print(f"pack_from_recipe_total={len(packs)}")
-        print(f"pack_from_recipe_completed={sum(1 for r in results if r['status'] == 'completed')}")
+        print(f"pack_from_recipe_completed={completed_count}")
         print(f"pack_from_recipe_failed={fail_count}")
         print(f"pack_from_recipe_required_failed={'true' if required_fail else 'false'}")
         if expected_status is not None:
@@ -630,6 +643,13 @@ def from_recipe_cmd(
                 f"pack_from_recipe_expected_min_check=[{ok_label}] "
                 f"downloaded={expected_status['total_downloaded_seen']} "
                 f"expected_min={expected_status['expected_min_assets']}"
+            )
+        if min_passes_status is not None:
+            ok2 = "OK" if min_passes_status["meets_min_passes"] else "WARN"
+            print(
+                f"pack_from_recipe_min_passes_check=[{ok2}] "
+                f"completed={min_passes_status['completed_seen']} "
+                f"min_required={min_passes_status['min_required_passes']}"
             )
 
     if required_fail and block_on_missing:

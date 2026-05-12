@@ -338,6 +338,33 @@ class TyperCliSmokeTests(unittest.TestCase):
         "      - asset_id: test_asset\n"
     )
 
+    def test_pack_from_recipe_min_required_passes_emits_check(self) -> None:
+        """v1.20.s141: when recipe has min_required_passes, output includes check."""
+        inline = (
+            "recipe:\n"
+            "  id: mrp_test\n"
+            "  game: sandbox\n"
+            "  min_required_passes: 2\n"
+            "packs:\n"
+            "  - id: P_MRP\n"
+            "    provider: polyhaven\n"
+            "    acquisition_method: direct_url\n"
+            "    assets:\n"
+            "      - asset_id: test\n"
+        )
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "from-recipe", "--inline-yaml", inline,
+             "--dry-run", "--json"],
+        )
+        import json as _json
+        data = _json.loads(result.stdout)
+        self.assertIn("min_required_passes_check", data)
+        chk = data["min_required_passes_check"]
+        self.assertEqual(chk["min_required_passes"], 2)
+        self.assertEqual(chk["completed_seen"], 0)
+        self.assertFalse(chk["meets_min_passes"])
+
     def test_pack_from_recipe_expected_min_assets_emits_check(self) -> None:
         """v1.19.s132: when recipe has expected_min_assets, output includes the check."""
         inline = (

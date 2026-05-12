@@ -160,6 +160,21 @@ def validate_recipe_doc(doc: Any, source_label: str = "<recipe>") -> ValidationR
                     f"{source_label}: recipe.expected_min_assets must be"
                     f" non-negative; got {ema!r}"
                 )
+        # v1.20.s141 — optional min_required_passes (int >= 0).
+        if "min_required_passes" in recipe and recipe["min_required_passes"] is not None:
+            mrp = recipe["min_required_passes"]
+            if not isinstance(mrp, int) or isinstance(mrp, bool):
+                result.ok = False
+                result.errors.append(
+                    f"{source_label}: recipe.min_required_passes must be"
+                    f" an integer; got {type(mrp).__name__}"
+                )
+            elif mrp < 0:
+                result.ok = False
+                result.errors.append(
+                    f"{source_label}: recipe.min_required_passes must be"
+                    f" non-negative; got {mrp!r}"
+                )
 
     packs = doc.get("packs")
     if not isinstance(packs, list):
