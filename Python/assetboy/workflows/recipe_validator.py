@@ -145,6 +145,21 @@ def validate_recipe_doc(doc: Any, source_label: str = "<recipe>") -> ValidationR
         )
         # v1.17.s123 — output_folder soft validation.
         _validate_output_folder(recipe, source_label, result)
+        # v1.18.s130 — optional integer expected_min_assets field.
+        if "expected_min_assets" in recipe and recipe["expected_min_assets"] is not None:
+            ema = recipe["expected_min_assets"]
+            if not isinstance(ema, int) or isinstance(ema, bool):
+                result.ok = False
+                result.errors.append(
+                    f"{source_label}: recipe.expected_min_assets must be"
+                    f" an integer; got {type(ema).__name__}"
+                )
+            elif ema < 0:
+                result.ok = False
+                result.errors.append(
+                    f"{source_label}: recipe.expected_min_assets must be"
+                    f" non-negative; got {ema!r}"
+                )
 
     packs = doc.get("packs")
     if not isinstance(packs, list):

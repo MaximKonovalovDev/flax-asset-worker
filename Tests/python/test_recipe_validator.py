@@ -253,6 +253,55 @@ class WarningsTests(unittest.TestCase):
         self.assertTrue(any("no 'license' block" in w for w in r.warnings))
 
 
+class ExpectedMinAssetsTests(unittest.TestCase):
+    """v1.18.s130: optional non-negative int recipe.expected_min_assets."""
+
+    def setUp(self) -> None:
+        from assetboy.workflows.recipe_validator import validate_recipe_doc
+        self.validate = validate_recipe_doc
+
+    def _doc(self, **recipe_extra):
+        return {
+            "recipe": {"id": "r", "game": "test", "tags": ["t"], **recipe_extra},
+            "packs": [{
+                "id": "P", "provider": "polyhaven",
+                "acquisition_method": "direct_url",
+                "license": {"kind": "cc0"}, "asset_kind": "x",
+                "assets": [{"asset_id": "x"}], "tier": 2,
+            }],
+        }
+
+    def test_zero_accepted(self) -> None:
+        r = self.validate(self._doc(expected_min_assets=0))
+        self.assertTrue(r.ok)
+
+    def test_positive_accepted(self) -> None:
+        r = self.validate(self._doc(expected_min_assets=42))
+        self.assertTrue(r.ok)
+
+    def test_negative_rejected(self) -> None:
+        r = self.validate(self._doc(expected_min_assets=-1))
+        self.assertFalse(r.ok)
+        self.assertTrue(any("non-negative" in e for e in r.errors))
+
+    def test_string_rejected(self) -> None:
+        r = self.validate(self._doc(expected_min_assets="10"))
+        self.assertFalse(r.ok)
+        self.assertTrue(any("integer" in e for e in r.errors))
+
+    def test_bool_rejected(self) -> None:
+        r = self.validate(self._doc(expected_min_assets=True))
+        self.assertFalse(r.ok)
+
+    def test_absent_no_complaint(self) -> None:
+        r = self.validate(self._doc())
+        self.assertTrue(r.ok)
+
+    def test_none_no_complaint(self) -> None:
+        r = self.validate(self._doc(expected_min_assets=None))
+        self.assertTrue(r.ok)
+
+
 class OutputFolderValidationTests(unittest.TestCase):
     """v1.17.s123: recipe.output_folder soft validation."""
 
