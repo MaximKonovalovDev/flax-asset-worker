@@ -208,5 +208,44 @@ class HttpRetryBudgetTests(unittest.TestCase):
         self.assertEqual(self.used(), 3)
 
 
+class PoliteSleepOverrideTests(unittest.TestCase):
+    """v1.15.s110: FAW_POLITE_SLEEP_S env override."""
+
+    def setUp(self) -> None:
+        from assetboy.execution._http_retry import get_polite_sleep_s
+        self.fn = get_polite_sleep_s
+
+    def test_unset_returns_default(self) -> None:
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("FAW_POLITE_SLEEP_S", None)
+            self.assertEqual(self.fn(0.2), 0.2)
+
+    def test_set_overrides_default(self) -> None:
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {"FAW_POLITE_SLEEP_S": "0.05"}):
+            self.assertEqual(self.fn(0.5), 0.05)
+
+    def test_set_zero_returns_zero(self) -> None:
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {"FAW_POLITE_SLEEP_S": "0"}):
+            self.assertEqual(self.fn(0.5), 0.0)
+
+    def test_negative_clamped_to_zero(self) -> None:
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {"FAW_POLITE_SLEEP_S": "-0.5"}):
+            self.assertEqual(self.fn(0.5), 0.0)
+
+    def test_unparseable_returns_default(self) -> None:
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {"FAW_POLITE_SLEEP_S": "fast"}):
+            self.assertEqual(self.fn(0.3), 0.3)
+
+
 if __name__ == "__main__":
     unittest.main()

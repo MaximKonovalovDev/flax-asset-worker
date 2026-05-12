@@ -128,8 +128,31 @@ def with_429_retry(
     raise last_error
 
 
+# v1.15.s110 — global polite-sleep override.
+# Each runner has a default polite_sleep_s argument. When this env var is
+# set, get_polite_sleep_s(default) returns the env override instead, letting
+# the operator tune all R1A runners at once.
+
+def get_polite_sleep_s(default: float) -> float:
+    """Return FAW_POLITE_SLEEP_S env override (if set, parseable, non-negative)
+    or the supplied default.
+
+    Use in runners:
+        time.sleep(get_polite_sleep_s(polite_sleep_s))
+    """
+    raw = os.environ.get("FAW_POLITE_SLEEP_S", "").strip()
+    if not raw:
+        return default
+    try:
+        v = float(raw)
+        return max(0.0, v)
+    except ValueError:
+        return default
+
+
 __all__ = [
     "with_429_retry",
     "get_retry_budget_used",
     "reset_retry_budget",
+    "get_polite_sleep_s",
 ]
