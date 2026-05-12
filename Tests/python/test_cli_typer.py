@@ -1936,6 +1936,22 @@ class TyperCliSmokeTests(unittest.TestCase):
         for p in data["providers"]:
             self.assertIsNone(p["live_ok"])
 
+    def test_library_r1a_status_bars_renders_section(self) -> None:
+        """v1.13.s90: --bars adds proportional ASCII bar section to plain output."""
+        result = self.runner.invoke(
+            self.app, ["library", "r1a-status", "--bars"],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        self.assertIn("Bytes-on-disk proportion", result.stdout)
+        # With no manifests on disk in CI, bars-section explains empty state.
+        self.assertIn("(no downloads recorded yet", result.stdout)
+
+    def test_library_r1a_status_bars_omitted_no_section(self) -> None:
+        """Without --bars, the ASCII chart section is not present."""
+        result = self.runner.invoke(self.app, ["library", "r1a-status"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertNotIn("Bytes-on-disk proportion", result.stdout)
+
     def test_library_r1a_status_json_shape(self) -> None:
         """JSON mode includes per-provider rows + aggregates."""
         result = self.runner.invoke(

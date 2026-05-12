@@ -690,6 +690,16 @@ def r1a_status_cmd(
             ),
         ),
     ] = False,
+    bars: Annotated[
+        bool,
+        typer.Option(
+            "--bars",
+            help=(
+                "v1.13.s90: render a 40-char ASCII bar per provider showing"
+                " proportional downloaded-bytes on disk. Plain-text only."
+            ),
+        ),
+    ] = False,
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -908,6 +918,23 @@ def r1a_status_cmd(
             f"bytes={p['bytes_on_disk']:>12d}  "
             f"{p['license']}"
         )
+
+    # v1.13.s90 — ASCII bars: proportional downloaded-bytes per provider.
+    if bars:
+        max_bytes = max((p["bytes_on_disk"] for p in providers_state), default=0)
+        BAR_WIDTH = 40
+        print()
+        print("Bytes-on-disk proportion (40-char bars):")
+        if max_bytes == 0:
+            print("  (no downloads recorded yet; bars are all empty)")
+        for p in providers_state:
+            b = p["bytes_on_disk"]
+            if max_bytes > 0:
+                fill = int(round(BAR_WIDTH * b / max_bytes))
+            else:
+                fill = 0
+            bar = "#" * fill + "-" * (BAR_WIDTH - fill)
+            print(f"  {p['id']:13s} [{bar}] {b:>12d} B")
 
 
 if __name__ == "__main__":
