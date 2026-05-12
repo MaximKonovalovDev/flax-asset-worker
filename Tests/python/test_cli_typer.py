@@ -2153,6 +2153,37 @@ class TyperCliSmokeTests(unittest.TestCase):
         for p in data["providers"]:
             self.assertIsNone(p["live_ok"])
 
+    def test_library_r1a_status_html_writes_file(self) -> None:
+        """v1.13.s97: --html <path> writes a standalone HTML report; stdout shows path."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "r1a_report.html"
+            result = self.runner.invoke(
+                self.app, ["library", "r1a-status", "--html", str(out)],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        self.assertIn("library_r1a_status_html_path=", result.stdout)
+        # File should exist + be a non-trivial HTML doc.
+        # (Tempdir is gone after the with; rebuild in single block.)
+
+    def test_library_r1a_status_html_content_includes_providers(self) -> None:
+        """HTML body contains every provider id + summary stats."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "r1a.html"
+            result = self.runner.invoke(
+                self.app, ["library", "r1a-status", "--html", str(out)],
+            )
+            self.assertEqual(result.exit_code, 0)
+            self.assertTrue(out.exists())
+            content = out.read_text(encoding="utf-8")
+            self.assertIn("<!doctype html>", content)
+            self.assertIn("FAW R1A Provider Status", content)
+            for pid in ("met-museum", "iconify", "pexels", "inaturalist"):
+                self.assertIn(pid, content)
+            # CSS bar class present.
+            self.assertIn(".bar", content)
+
     def test_library_r1a_status_bars_renders_section(self) -> None:
         """v1.13.s90: --bars adds proportional ASCII bar section to plain output."""
         result = self.runner.invoke(

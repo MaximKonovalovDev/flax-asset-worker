@@ -700,6 +700,17 @@ def r1a_status_cmd(
             ),
         ),
     ] = False,
+    html_out: Annotated[
+        Path,
+        typer.Option(
+            "--html",
+            help=(
+                "v1.13.s97: write a standalone HTML report to this path"
+                " (with CSS bars + status badges). No JSON or plain output"
+                " when --html is set; stdout shows only the written path."
+            ),
+        ),
+    ] = Path(""),
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -893,6 +904,79 @@ def r1a_status_cmd(
         "live_failed_count": live_failed_count,
         "providers": providers_state,
     }
+
+    # v1.13.s97 — HTML report (preempts both JSON and plain).
+    # Note: Typer default Path("") str()-renders as ".", so check
+    # for non-empty original string explicitly.
+    html_out_str = str(html_out)
+    if html_out_str and html_out_str != ".":
+        html_path = Path(html_out)
+        try:
+            html_path.parent.mkdir(parents=True, exist_ok=True)
+            max_bytes = max((p["bytes_on_disk"] for p in providers_state), default=0)
+            rows_html: list[str] = []
+            for p in providers_state:
+                if p["env_var"] is None:
+                    env_badge = "<span class='b-grey'>no key</span>"
+                elif p["env_set"]:
+                    env_badge = "<span class='b-green'>SET</span>"
+                else:
+                    env_badge = "<span class='b-red'>unset</span>"
+                pct = (
+                    100.0 * p["bytes_on_disk"] / max_bytes
+                    if max_bytes > 0 else 0.0
+                )
+                rows_html.append(
+                    "<tr>"
+                    f"<td>{p['id']}</td>"
+                    f"<td>{env_badge}</td>"
+                    f"<td class='num'>{p['manifests_on_disk']}</td>"
+                    f"<td class='num'>{p['downloaded_on_disk']}</td>"
+                    f"<td class='num'>{p['bytes_on_disk']}</td>"
+                    f"<td><div class='bar' style='width:{pct:.1f}%'></div></td>"
+                    f"<td>{p['license']}</td>"
+                    "</tr>"
+                )
+            html = (
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                "<title>FAW R1A Status</title>"
+                "<style>"
+                "body{font-family:system-ui,sans-serif;max-width:1100px;margin:2em auto;}"
+                "h1{margin-bottom:.2em}"
+                ".summary{color:#666;margin-bottom:1em}"
+                "table{border-collapse:collapse;width:100%}"
+                "th,td{padding:.4em .6em;border-bottom:1px solid #eee;text-align:left}"
+                "td.num{text-align:right;font-variant-numeric:tabular-nums}"
+                ".bar{background:#4a90e2;height:14px;border-radius:2px}"
+                ".b-green{background:#2e7d32;color:#fff;padding:2px 8px;border-radius:3px;font-size:.8em}"
+                ".b-red{background:#c62828;color:#fff;padding:2px 8px;border-radius:3px;font-size:.8em}"
+                ".b-grey{background:#9e9e9e;color:#fff;padding:2px 8px;border-radius:3px;font-size:.8em}"
+                "</style></head><body>"
+                "<h1>FAW R1A Provider Status</h1>"
+                "<p class='summary'>"
+                f"Total providers: {len(providers_state)} "
+                f"(no-key: {no_key_count}; keyed: {key_set + key_unset}; "
+                f"keys set: {key_set}/{key_set + key_unset}) "
+                f"&middot; manifests on disk: {manifests_scanned} "
+                f"&middot; total bytes: {total_bytes:,}"
+                "</p>"
+                "<table>"
+                "<thead><tr>"
+                "<th>Provider</th><th>Env</th><th>Manifests</th><th>Downloaded</th>"
+                "<th>Bytes</th><th>Bytes proportion</th><th>License</th>"
+                "</tr></thead><tbody>"
+                + "".join(rows_html)
+                + "</tbody></table>"
+                f"<p class='summary'>Manual drop root: <code>{scan_root}</code></p>"
+                "</body></html>"
+            )
+            html_path.write_text(html, encoding="utf-8")
+        except Exception as exc:
+            msg = f"html_write_failed: {exc}"
+            print(f"library_r1a_status_error={msg}")
+            raise typer.Exit(code=1)
+        print(f"library_r1a_status_html_path={html_path}")
+        return
 
     if json_out:
         json.dump(summary, sys.stdout, indent=2)
