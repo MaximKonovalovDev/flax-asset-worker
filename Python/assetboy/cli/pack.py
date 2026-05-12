@@ -78,6 +78,16 @@ def list_recipes_cmd(
             ),
         ),
     ] = "path",
+    reverse: Annotated[
+        bool,
+        typer.Option(
+            "--reverse",
+            help=(
+                "v1.17.s121: reverse the sorted order. Combined with"
+                " --sort tier yields least-critical-first."
+            ),
+        ),
+    ] = False,
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -213,12 +223,17 @@ def list_recipes_cmd(
             print(f"pack_list_recipes_error={msg}")
         raise typer.Exit(code=1)
 
+    # v1.17.s121 — reverse after sort.
+    if reverse:
+        entries.reverse()
+
     if json_out:
         out = {
             "recipes": entries,
             "count": len(entries),
             "filters_applied": [f"{fn}:{fv}" for fn, fv in parsed_filters],
             "sort": sort_norm or "path",
+            "reverse": reverse,
         }
         json.dump(out, sys.stdout, indent=2)
         sys.stdout.write("\n")

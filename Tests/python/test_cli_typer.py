@@ -206,6 +206,26 @@ class TyperCliSmokeTests(unittest.TestCase):
         data = _json.loads(result.stdout)
         self.assertEqual(data["sort"], "path")
 
+    def test_pack_list_recipes_reverse_flag_inverts_order(self) -> None:
+        """v1.17.s121: --reverse reverses sorted order; reverse field echoed in JSON."""
+        result_a = self.runner.invoke(
+            self.app, ["pack", "list-recipes", "--json"],
+        )
+        result_b = self.runner.invoke(
+            self.app, ["pack", "list-recipes", "--reverse", "--json"],
+        )
+        self.assertEqual(result_a.exit_code, 0)
+        self.assertEqual(result_b.exit_code, 0)
+        import json as _json
+        data_a = _json.loads(result_a.stdout)
+        data_b = _json.loads(result_b.stdout)
+        self.assertFalse(data_a["reverse"])
+        self.assertTrue(data_b["reverse"])
+        # Order should be inverted.
+        paths_a = [r["path"] for r in data_a["recipes"]]
+        paths_b = [r["path"] for r in data_b["recipes"]]
+        self.assertEqual(paths_a, list(reversed(paths_b)))
+
     def test_pack_list_recipes_sort_unknown_exits_1(self) -> None:
         result = self.runner.invoke(
             self.app, ["pack", "list-recipes", "--sort", "popularity"],
