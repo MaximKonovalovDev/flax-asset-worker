@@ -1,6 +1,6 @@
 # HEARTBEAT — assetboi (operator hibernation read-back)
 
-> **Last update:** 2026-05-11 (mid-turn, **132 commits + 78 tags shipped this turn**, origin verified)
+> **Last update:** 2026-05-11 (mid-turn, **137 commits + 83 tags shipped this turn**, origin verified)
 > **Repo:** `flax-asset-worker` (this repo; assetboi commits freely here)
 > **Loop status:** **NEVER-STOP ACTIVE** per BOSS Rule 3
 
@@ -32,11 +32,18 @@ v1.12 wave additions on top of v1.11 milestone:
   - v1.12.11 — POST /api/v1/library/r1a-status (15th HTTP endpoint)
   - v1.12.12 — pack manifest-stats --source filter
 
-R1A asset-mining stack now has full resilience + observability:
+R1A asset-mining stack now has full resilience + observability + live-probe:
   resilience    -> 429-retry in all 10 runners, ThreadPoolExecutor fan-out
   observability -> manifest-stats CLI + HTTP, list-providers filter,
                    library r1a-status combined view
   benchmarking  -> gen bench-fanout for tuning
+  live-probe    -> library r1a-status --check-live (CLI + HTTP body flag)
+
+v1.13 wave (live + autofix) on top of v1.12 milestone:
+  - v1.13.0 — keyed-provider live-API smoke tests (env-gated)
+  - v1.13.1 — library r1a-status --check-live (concurrent probes)
+  - v1.13.2 — auto_fix_warnings recipe.tags auto-fill
+  - v1.13.3 — HTTP /api/v1/library/r1a-status accepts check_live body flag
 
 The v1.11 milestone reference (R1A wave complete) was:
 
