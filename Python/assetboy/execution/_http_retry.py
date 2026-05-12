@@ -15,6 +15,8 @@ code duplication.
 
 from __future__ import annotations
 
+import os
+import threading
 import time
 import urllib.error
 from typing import Callable, TypeVar
@@ -23,6 +25,53 @@ T = TypeVar("T")
 
 # HTTP status codes that should trigger a retry.
 _RETRYABLE_STATUS_CODES = frozenset({429, 503, 502, 504})
+
+
+# v1.13.s99 — global retry budget per process.
+# FAW_HTTP_RETRY_BUDGET env var sets the max number of retry SLEEPS this
+# process will do in total before subsequent retryable errors short-circuit
+# to re-raise. 0 or unset = unlimited (preserves v1.12.s66 behavior).
+_BUDGET_LOCK = threading.Lock()
+_BUDGET_USED = 0
+
+
+def _budget_max() -> int:
+    raw = os.environ.get("FAW_HTTP_RETRY_BUDGET", "").strip()
+    if not raw:
+        return 0  # 0 == unlimited
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return 0
+
+
+def get_retry_budget_used() -> int:
+    """Diagnostic: how many retry sleeps the process has consumed this run."""
+    with _BUDGET_LOCK:
+        return _BUDGET_USED
+
+
+def reset_retry_budget() -> None:
+    """Reset the counter (test helper)."""
+    global _BUDGET_USED
+    with _BUDGET_LOCK:
+        _BUDGET_USED = 0
+
+
+def _budget_consume_one() -> bool:
+    """Try to consume one retry slot. Returns True if granted, False if exhausted."""
+    global _BUDGET_USED
+    cap = _budget_max()
+    if cap <= 0:
+        # Unlimited mode: still count for diagnostics but always grant.
+        with _BUDGET_LOCK:
+            _BUDGET_USED += 1
+        return True
+    with _BUDGET_LOCK:
+        if _BUDGET_USED >= cap:
+            return False
+        _BUDGET_USED += 1
+        return True
 
 
 def with_429_retry(
@@ -42,12 +91,16 @@ def with_429_retry(
         base_delay_s: initial delay; doubles each retry. Default 1.0s.
         cap_delay_s: maximum per-retry delay. Default 30s.
 
+    v1.13.s99: honors FAW_HTTP_RETRY_BUDGET env var (int). When that many
+    retry sleeps have been consumed process-wide, subsequent retryable
+    errors short-circuit to re-raise immediately. 0 / unset = unlimited.
+
     Returns:
         Whatever `fn()` returns on the first non-retryable success.
 
     Raises:
         urllib.error.HTTPError: with the LAST attempt's status code if
-            all retries are exhausted.
+            all retries are exhausted OR the global budget is exhausted.
         Anything else `fn()` raises: passed through immediately (no retry).
     """
     attempts = 0
@@ -62,6 +115,10 @@ def with_429_retry(
             attempts += 1
             if attempts > max_retries:
                 break
+            # v1.13.s99 — check global budget before sleeping.
+            if not _budget_consume_one():
+                # Budget exhausted: don't sleep, don't retry; re-raise now.
+                break
             delay = min(base_delay_s * (2 ** (attempts - 1)), cap_delay_s)
             time.sleep(delay)
         # Other exceptions (URLError, ValueError) are not retried per spec —
@@ -71,4 +128,8 @@ def with_429_retry(
     raise last_error
 
 
-__all__ = ["with_429_retry"]
+__all__ = [
+    "with_429_retry",
+    "get_retry_budget_used",
+    "reset_retry_budget",
+]

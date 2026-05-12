@@ -131,5 +131,82 @@ class HttpRetryTests(unittest.TestCase):
         self.assertEqual(recorded_delays[3], 4.0)
 
 
+class HttpRetryBudgetTests(unittest.TestCase):
+    """v1.13.s99: FAW_HTTP_RETRY_BUDGET env var caps total retry sleeps."""
+
+    def setUp(self) -> None:
+        from assetboy.execution._http_retry import (
+            with_429_retry, reset_retry_budget, get_retry_budget_used,
+        )
+        self.fn = with_429_retry
+        self.reset = reset_retry_budget
+        self.used = get_retry_budget_used
+        self.reset()
+
+    def tearDown(self) -> None:
+        self.reset()
+
+    def _make_http_error(self, code: int) -> urllib.error.HTTPError:
+        return urllib.error.HTTPError(
+            url="x", code=code, msg="test",
+            hdrs=None, fp=None,  # type: ignore[arg-type]
+        )
+
+    def test_budget_unlimited_when_env_unset(self) -> None:
+        """Default: unlimited retries possible; counter still increments."""
+        import os
+        from unittest.mock import patch
+        attempts = {"n": 0}
+
+        def flaky():
+            attempts["n"] += 1
+            if attempts["n"] < 3:
+                raise self._make_http_error(429)
+            return "ok"
+
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("FAW_HTTP_RETRY_BUDGET", None)
+            with patch("assetboy.execution._http_retry.time.sleep"):
+                result = self.fn(flaky, base_delay_s=0.01)
+        self.assertEqual(result, "ok")
+        self.assertEqual(self.used(), 2)  # 2 retry slots consumed
+
+    def test_budget_exhausted_short_circuits(self) -> None:
+        """When env caps budget < retries needed, error re-raised early."""
+        import os
+        from unittest.mock import patch
+        attempts = {"n": 0}
+
+        def always_429():
+            attempts["n"] += 1
+            raise self._make_http_error(429)
+
+        with patch.dict(os.environ, {"FAW_HTTP_RETRY_BUDGET": "1"}):
+            with patch("assetboy.execution._http_retry.time.sleep"):
+                with self.assertRaises(urllib.error.HTTPError):
+                    self.fn(always_429, max_retries=5, base_delay_s=0.01)
+        # Budget=1 -> 1 retry sleep, then short-circuit.
+        # Total attempts: 1 (initial) + 1 (after first budget grant) = 2.
+        self.assertEqual(attempts["n"], 2)
+        self.assertEqual(self.used(), 1)
+
+    def test_budget_zero_means_unlimited(self) -> None:
+        import os
+        from unittest.mock import patch
+        attempts = {"n": 0}
+
+        def flaky():
+            attempts["n"] += 1
+            if attempts["n"] < 4:
+                raise self._make_http_error(429)
+            return "got it"
+
+        with patch.dict(os.environ, {"FAW_HTTP_RETRY_BUDGET": "0"}):
+            with patch("assetboy.execution._http_retry.time.sleep"):
+                result = self.fn(flaky, max_retries=5, base_delay_s=0.01)
+        self.assertEqual(result, "got it")
+        self.assertEqual(self.used(), 3)
+
+
 if __name__ == "__main__":
     unittest.main()
