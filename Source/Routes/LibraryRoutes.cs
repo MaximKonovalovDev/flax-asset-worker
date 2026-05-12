@@ -164,16 +164,38 @@ namespace FAW.Routes
         }
 
         /// <summary>
-        /// v1.12.s76 — R1A operator readiness dashboard via subprocess.
+        /// v1.12.s76 / v1.13.s82 — R1A operator readiness dashboard via subprocess.
+        /// Request body may include {"check_live": true} to add live API probes
+        /// (adds ~2-5s to wall time; concurrent across 10 providers).
         /// </summary>
-        public static async Task<JObject> HandleR1aStatusAsync()
+        public static async Task<JObject> HandleR1aStatusAsync(HttpListenerContext ctx = null)
         {
             try
             {
+                bool checkLive = false;
+                if (ctx != null && ctx.Request != null && ctx.Request.HasEntityBody)
+                {
+                    try
+                    {
+                        var body = await new StreamReader(ctx.Request.InputStream).ReadToEndAsync();
+                        if (!string.IsNullOrWhiteSpace(body))
+                        {
+                            var req = JObject.Parse(body);
+                            checkLive = req["check_live"]?.Value<bool>() ?? false;
+                        }
+                    }
+                    catch { /* ignore malformed body; default check_live=false */ }
+                }
+
+                var args = checkLive
+                    ? "-m assetboy.cli library r1a-status --check-live --json"
+                    : "-m assetboy.cli library r1a-status --json";
+                var timeoutMs = checkLive ? 30000 : 15000;
+
                 var psi = new ProcessStartInfo
                 {
                     FileName = "python",
-                    Arguments = "-m assetboy.cli library r1a-status --json",
+                    Arguments = args,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
@@ -185,10 +207,10 @@ namespace FAW.Routes
                 proc.Start();
                 var stdoutTask = proc.StandardOutput.ReadToEndAsync();
                 var stderrTask = proc.StandardError.ReadToEndAsync();
-                if (!proc.WaitForExit(15000))
+                if (!proc.WaitForExit(timeoutMs))
                 {
                     try { proc.Kill(); } catch { }
-                    return Error("timeout: library r1a-status took > 15s");
+                    return Error($"timeout: library r1a-status took > {timeoutMs/1000}s");
                 }
                 var stdout = await stdoutTask;
                 var stderr = await stderrTask;

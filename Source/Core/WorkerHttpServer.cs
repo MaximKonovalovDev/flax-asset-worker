@@ -127,8 +127,9 @@ namespace FAW.Core
                 }
                 else if (path == "/api/v1/library/r1a-status" && method == "POST")
                 {
-                    // v1.12.s76 — R1A operator readiness dashboard.
-                    result = await LibraryRoutes.HandleR1aStatusAsync();
+                    // v1.12.s76 / v1.13.s82 — R1A operator readiness dashboard.
+                    // Body: {"check_live": true} adds live API probes.
+                    result = await LibraryRoutes.HandleR1aStatusAsync(ctx);
                 }
                 else if (path.StartsWith("/api/v1/library/asset/") && method == "GET")
                 {
