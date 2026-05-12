@@ -1729,6 +1729,16 @@ def manifest_stats_cmd(
             ),
         ),
     ] = False,
+    top: Annotated[
+        int,
+        typer.Option(
+            "--top",
+            help=(
+                "v1.23.s159: show only the top N providers by total bytes"
+                " (descending). 0 = show all (default)."
+            ),
+        ),
+    ] = 0,
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -1938,6 +1948,15 @@ def manifest_stats_cmd(
                     bucket["bytes"] += b
                     total_bytes += b
 
+    # v1.23.s159 — --top N restricts by_source to N largest by bytes.
+    per_source_view = per_source
+    top_truncated = False
+    if top > 0 and len(per_source) > top:
+        ranked = sorted(per_source.items(),
+                        key=lambda kv: kv[1].get("bytes", 0), reverse=True)
+        per_source_view = dict(ranked[:top])
+        top_truncated = True
+
     summary = {
         "root": str(scan_root),
         "manifests_scanned": len(manifests),
@@ -1949,7 +1968,9 @@ def manifest_stats_cmd(
         "total_skipped": total_skipped,
         "total_failed": total_failed,
         "total_bytes": total_bytes,
-        "by_source": per_source,
+        "top_filter": top if top > 0 else None,
+        "top_truncated": top_truncated,
+        "by_source": per_source_view,
     }
 
     if json_out:
@@ -1963,9 +1984,18 @@ def manifest_stats_cmd(
         print(f"pack_manifest_stats_total_skipped={total_skipped}")
         print(f"pack_manifest_stats_total_failed={total_failed}")
         print(f"pack_manifest_stats_total_bytes={total_bytes}")
-        if per_source:
+        if top_truncated:
+            print(f"pack_manifest_stats_top_filter={top}")
+        if per_source_view:
             print()
-            for src, b in sorted(per_source.items()):
+            # When --top is set, sort by bytes desc; else alpha.
+            iter_items = (
+                sorted(per_source_view.items(),
+                       key=lambda kv: kv[1].get("bytes", 0), reverse=True)
+                if top > 0
+                else sorted(per_source_view.items())
+            )
+            for src, b in iter_items:
                 print(
                     f"  {src:24s} manifests={b['manifests']:3d}  "
                     f"downloaded={b['downloaded']:5d}  "

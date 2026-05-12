@@ -2108,6 +2108,66 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("manifest", result.stdout.lower())
         self.assertIn("R1A", result.stdout)
 
+    def test_pack_manifest_stats_top_truncates_by_bytes(self) -> None:
+        """v1.23.s159: --top 1 keeps only the biggest provider by bytes."""
+        import tempfile, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            # Provider A: 100 bytes total.
+            (tmp_p / "a").mkdir()
+            (tmp_p / "a" / "a_manifest.json").write_text(
+                _json.dumps({
+                    "source": "aaa", "objects_downloaded": 1,
+                    "objects_skipped_non_pd": 0, "objects_failed": 0,
+                    "entries": [{"bytes": 100}],
+                }), encoding="utf-8",
+            )
+            # Provider B: 9000 bytes total.
+            (tmp_p / "b").mkdir()
+            (tmp_p / "b" / "b_manifest.json").write_text(
+                _json.dumps({
+                    "source": "bbb", "objects_downloaded": 1,
+                    "objects_skipped_non_pd": 0, "objects_failed": 0,
+                    "entries": [{"bytes": 9000}],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "manifest-stats", "--root", str(tmp_p),
+                 "--top", "1", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["top_filter"], 1)
+        self.assertTrue(data["top_truncated"])
+        self.assertEqual(len(data["by_source"]), 1)
+        # bbb wins (9000 > 100).
+        self.assertIn("bbb", data["by_source"])
+        # Aggregate totals stay full (not truncated).
+        self.assertEqual(data["total_bytes"], 9100)
+
+    def test_pack_manifest_stats_top_zero_keeps_all(self) -> None:
+        """--top 0 (default) keeps every provider; top_truncated False."""
+        import tempfile, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "x").mkdir()
+            (tmp_p / "x" / "x_manifest.json").write_text(
+                _json.dumps({
+                    "source": "xxx", "objects_downloaded": 1,
+                    "objects_skipped_non_pd": 0, "objects_failed": 0,
+                    "entries": [{"bytes": 50}],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "manifest-stats", "--root", str(tmp_p), "--json"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout.strip())
+        self.assertIsNone(data["top_filter"])
+        self.assertFalse(data["top_truncated"])
+
     def test_pack_manifest_stats_aggregates_from_synthetic_manifests(self) -> None:
         """Write 2 synthetic manifests to a tempdir; verify aggregation."""
         import tempfile, json as _json
