@@ -1,6 +1,6 @@
 # HEARTBEAT — assetboi (operator hibernation read-back)
 
-> **Last update:** 2026-05-12 (continuous loop, **153 commits + 96 tags shipped this run**, origin verified)
+> **Last update:** 2026-05-12 (continuous loop, **166 commits + 108 tags shipped this run**, origin verified)
 > **Repo:** `flax-asset-worker` (this repo; assetboi commits freely here)
 > **Loop status:** **NEVER-STOP ACTIVE** per BOSS Rule 3
 
@@ -58,6 +58,19 @@ v1.13 wave (live + autofix + new providers + scout/budget) on top of v1.12:
 
 R1A asset-mining stack grew from 11 -> 13 providers
 (10 R1A + iNaturalist + Open Library + comfyui + sd; 12 in gen catalog).
+
+v1.14 wave additions on top of v1.13 milestone:
+  - v1.14.0 — scout-by-license JSON contract test (700-pass milestone)
+  - v1.14.1 — library install-r1a-pack (manifest -> Library bridge)
+  - v1.14.2 — canary R1A rotation probe (100-tag milestone)
+  - v1.14.3 — pack list-recipes --sort tier
+  - v1.14.4 — POST /api/v1/library/health unified (17 HTTP endpoints)
+
+v1.15 wave additions on top of v1.14 milestone:
+  - v1.15.0 — gen all-no-key --write-history (state/r1a_history snapshots)
+  - v1.15.1 — install-r1a-pack --recipe (whole-recipe enumerate mode)
+  - v1.15.2 — FAW_POLITE_SLEEP_S env override helper
+  - v1.15.3 — gen iconify list-sets (browse 150+ icon sets with SPDX)
 
 The v1.11 milestone reference (R1A wave complete) was:
 
