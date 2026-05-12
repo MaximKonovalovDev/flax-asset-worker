@@ -100,6 +100,12 @@ unsplash_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
 )
+inaturalist_app = typer.Typer(
+    name="inaturalist",
+    help="iNaturalist CC-licensed nature observation photos (no key).",
+    add_completion=False,
+    no_args_is_help=True,
+)
 
 app.add_typer(comfy_app, name="comfyui")
 app.add_typer(sd_app, name="sd")
@@ -113,6 +119,7 @@ app.add_typer(pixabay_app, name="pixabay")
 app.add_typer(rawg_app, name="rawg")
 app.add_typer(jamendo_app, name="jamendo")
 app.add_typer(unsplash_app, name="unsplash")
+app.add_typer(inaturalist_app, name="inaturalist")
 
 
 # --------------------------------------------------------------------------- #
@@ -2665,6 +2672,96 @@ def bench_fanout_cmd(
         print("Per-provider sequential timing:")
         for pid, t in seq_per_provider.items():
             print(f"  {pid:14s} {t:.3f}s")
+
+
+# --------------------------------------------------------------------------- #
+# gen inaturalist fetch  (v1.13.s84)
+# --------------------------------------------------------------------------- #
+
+@inaturalist_app.command("fetch")
+def inaturalist_fetch_cmd(
+    query: Annotated[str, typer.Option("--query", "-q")],
+    count: Annotated[int, typer.Option("--count", "-n")] = 6,
+    allow_restrictive: Annotated[
+        bool,
+        typer.Option(
+            "--allow-restrictive",
+            help="Also accept CC-NC variants (default: only CC0/CC-BY/CC-BY-SA).",
+        ),
+    ] = False,
+    pack_id: Annotated[str, typer.Option("--pack-id")] = "",
+    output_dir: Annotated[Path, typer.Option("--output-dir")] = Path(""),
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Fetch CC-licensed nature photos from iNaturalist (Path B v1.13.s84).
+
+    iNaturalist citizen-science platform; ~200M+ observations of plants,
+    animals, fungi, etc. No API key. Default license gate: CC0/CC-BY/CC-BY-SA
+    (commercial-OK). Use --allow-restrictive for CC-NC variants (personal only).
+
+    Attribution: CC-BY/SA photos REQUIRE crediting; per-photo 'attribution'
+    string captured in manifest.
+
+    Examples:
+      assetboy gen inaturalist fetch -q "oak tree" -n 4
+      assetboy gen inaturalist fetch -q "wolf" -n 6
+      assetboy gen inaturalist fetch -q "mycelium" --allow-restrictive -n 8
+    """
+    from assetboy.execution.inaturalist_runner import run_inaturalist_batch
+
+    out_dir_arg: Path | None = output_dir if str(output_dir) else None
+    pack_id_arg: str | None = pack_id if pack_id else None
+
+    try:
+        result = run_inaturalist_batch(
+            query=query, pack_id=pack_id_arg, count=count,
+            allow_restrictive=allow_restrictive,
+            output_dir=out_dir_arg, dry_run=dry_run,
+        )
+    except Exception as exc:
+        msg = f"inaturalist_runner_crashed: {exc}"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_inaturalist_error={msg}")
+        raise typer.Exit(code=1)
+
+    summary = {
+        "ok": result.ok,
+        "pack_id": result.pack_id,
+        "query": result.query,
+        "output_dir": str(result.output_dir),
+        "observations_matched": result.observations_matched,
+        "observations_with_photo": result.observations_with_photo,
+        "photos_downloaded": result.photos_downloaded,
+        "photos_skipped_restricted": result.photos_skipped_restricted,
+        "photos_failed": result.photos_failed,
+        "downloaded_paths": [str(p) for p in result.downloaded_paths],
+        "manifest_path": str(result.manifest_path) if result.manifest_path else None,
+        "dry_run": result.dry_run,
+        "error": result.error,
+    }
+
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"gen_inaturalist_pack_id={result.pack_id}")
+        print(f"gen_inaturalist_query={result.query!r}")
+        print(f"gen_inaturalist_matched={result.observations_matched}")
+        print(f"gen_inaturalist_downloaded={result.photos_downloaded}")
+        print(f"gen_inaturalist_skipped_restricted={result.photos_skipped_restricted}")
+        print(f"gen_inaturalist_failed={result.photos_failed}")
+        print(f"gen_inaturalist_output_dir={result.output_dir}")
+        if result.manifest_path:
+            print(f"gen_inaturalist_manifest={result.manifest_path}")
+        if result.error:
+            print(f"gen_inaturalist_note={result.error}")
+
+    if not result.ok:
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":

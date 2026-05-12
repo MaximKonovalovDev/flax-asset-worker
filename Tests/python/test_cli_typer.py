@@ -910,6 +910,63 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["download_pings"], 4)
 
     # ----------------------------------------------------------------- #
+    # gen inaturalist fetch (v1.13.s84)
+    # ----------------------------------------------------------------- #
+
+    def test_inaturalist_fetch_help_renders(self) -> None:
+        result = self.runner.invoke(self.app, ["gen", "inaturalist", "fetch", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("iNaturalist", result.stdout)
+        self.assertIn("CC", result.stdout)
+
+    def test_inaturalist_fetch_dry_run_no_matches_exits_zero(self) -> None:
+        from unittest.mock import patch
+        from assetboy.execution.inaturalist_runner import INaturalistResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = INaturalistResult(
+                pack_id="T", query="zzz", output_dir=Path(tmp),
+                observations_matched=0, ok=True, error="no_matches",
+            )
+            with patch(
+                "assetboy.execution.inaturalist_runner.run_inaturalist_batch",
+                return_value=fake,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "inaturalist", "fetch", "--query", "zzz", "--dry-run"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("gen_inaturalist_matched=0", result.stdout)
+        self.assertIn("no_matches", result.stdout)
+
+    def test_inaturalist_fetch_json_output_shape(self) -> None:
+        from unittest.mock import patch
+        from assetboy.execution.inaturalist_runner import INaturalistResult
+        import tempfile, json as _json
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = INaturalistResult(
+                pack_id="P", query="q", output_dir=Path(tmp),
+                observations_matched=10, observations_with_photo=6,
+                photos_downloaded=6, photos_skipped_restricted=4, ok=True,
+            )
+            with patch(
+                "assetboy.execution.inaturalist_runner.run_inaturalist_batch",
+                return_value=fake,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "inaturalist", "fetch", "--query", "q", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["photos_downloaded"], 6)
+        self.assertEqual(data["photos_skipped_restricted"], 4)
+        self.assertTrue(data["ok"])
+
+    # ----------------------------------------------------------------- #
     # gen all-no-key (v1.11.s37)
     # ----------------------------------------------------------------- #
 
