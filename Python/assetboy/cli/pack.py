@@ -584,6 +584,25 @@ def from_recipe_cmd(
                 f"state={ledger.get('current_state', '?')}"
             )
 
+    # v1.19.s132 — honor recipe.expected_min_assets.
+    # Parse 'downloaded=N' patterns from each ledger.notes to sum.
+    expected_min = recipe_meta.get("expected_min_assets")
+    expected_status: dict | None = None
+    if isinstance(expected_min, int) and not isinstance(expected_min, bool) and expected_min >= 0:
+        import re as _re
+        _DL_PAT = _re.compile(r"downloaded=(\d+)")
+        total_downloaded = 0
+        for r in results:
+            notes = str(r.get("notes", "") or r.get("source_dir", ""))
+            for match in _DL_PAT.finditer(notes):
+                total_downloaded += int(match.group(1))
+        meets = total_downloaded >= expected_min
+        expected_status = {
+            "expected_min_assets": expected_min,
+            "total_downloaded_seen": total_downloaded,
+            "meets_expected_min": meets,
+        }
+
     if json_out:
         payload = {
             "recipe_id": recipe_meta.get("id"),
@@ -595,6 +614,8 @@ def from_recipe_cmd(
             "block_on_missing_required": block_on_missing,
             "results": results,
         }
+        if expected_status is not None:
+            payload["expected_min_check"] = expected_status
         json.dump(payload, sys.stdout, indent=2, default=str)
         sys.stdout.write("\n")
     else:
@@ -603,6 +624,13 @@ def from_recipe_cmd(
         print(f"pack_from_recipe_completed={sum(1 for r in results if r['status'] == 'completed')}")
         print(f"pack_from_recipe_failed={fail_count}")
         print(f"pack_from_recipe_required_failed={'true' if required_fail else 'false'}")
+        if expected_status is not None:
+            ok_label = "OK" if expected_status["meets_expected_min"] else "WARN"
+            print(
+                f"pack_from_recipe_expected_min_check=[{ok_label}] "
+                f"downloaded={expected_status['total_downloaded_seen']} "
+                f"expected_min={expected_status['expected_min_assets']}"
+            )
 
     if required_fail and block_on_missing:
         raise typer.Exit(code=1)

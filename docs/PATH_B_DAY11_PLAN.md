@@ -802,3 +802,29 @@ All v1.17+ s120..s124 SHIPPED. Five fresh ideas:
   total_downloaded against this; emit ledger warning if below.
 
 Ship order: s126, s127, s128, s129, s130.
+
+---
+
+## v1.19+ backlog (added 2026-05-12, s131)
+
+All v1.18+ s126..s130 SHIPPED. Five fresh ideas:
+
+- **s132 — `pack from-recipe` honors expected_min_assets**: post-run,
+  if `recipe.expected_min_assets` is set, compare against the total
+  downloaded count and emit a ledger warning (status='under_expected')
+  if below. Surfaces in `pack audit` output.
+
+- **s133 — `gen unsplash photos --collection <id>`**: Unsplash search
+  supports collection filter. Useful for curated theme buckets.
+
+- **s134 — `gen wikimedia fetch --category <name>`**: MediaWiki API
+  supports category-walk (`list=categorymembers`). Far more focused
+  than free-text search for asset prospecting.
+
+- **s135 — `library r1a-status --csv <path>`**: dump per-provider rows
+  to a CSV file. Spreadsheet-friendly alternative to --json.
+
+- **s136 — milestone v1.18-WAVE-COMPLETE + 800-test stretch**: capstone
+  once s132..s135 ship. 19 more tests to reach 800.
+
+Ship order: s132, s133, s134, s135, s136.

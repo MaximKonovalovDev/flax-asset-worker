@@ -338,6 +338,44 @@ class TyperCliSmokeTests(unittest.TestCase):
         "      - asset_id: test_asset\n"
     )
 
+    def test_pack_from_recipe_expected_min_assets_emits_check(self) -> None:
+        """v1.19.s132: when recipe has expected_min_assets, output includes the check."""
+        inline = (
+            "recipe:\n"
+            "  id: emc_test\n"
+            "  game: sandbox\n"
+            "  expected_min_assets: 5\n"
+            "packs:\n"
+            "  - id: P_EMC\n"
+            "    provider: polyhaven\n"
+            "    acquisition_method: direct_url\n"
+            "    assets:\n"
+            "      - asset_id: test\n"
+        )
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "from-recipe", "--inline-yaml", inline,
+             "--dry-run", "--json"],
+        )
+        import json as _json
+        data = _json.loads(result.stdout)
+        self.assertIn("expected_min_check", data)
+        chk = data["expected_min_check"]
+        self.assertEqual(chk["expected_min_assets"], 5)
+        self.assertEqual(chk["total_downloaded_seen"], 0)  # dry-run, no downloads
+        self.assertFalse(chk["meets_expected_min"])
+
+    def test_pack_from_recipe_no_expected_min_no_check(self) -> None:
+        """Without recipe.expected_min_assets, JSON has no expected_min_check key."""
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "from-recipe", "--inline-yaml", self.INLINE_RECIPE,
+             "--dry-run", "--json"],
+        )
+        import json as _json
+        data = _json.loads(result.stdout)
+        self.assertNotIn("expected_min_check", data)
+
     def test_pack_from_recipe_inline_yaml_accepts_string(self) -> None:
         """v1.6.s1: --inline-yaml lets the facade send recipe content directly."""
         result = self.runner.invoke(
