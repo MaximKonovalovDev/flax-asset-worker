@@ -2872,5 +2872,159 @@ def openlibrary_fetch_cmd(
         raise typer.Exit(code=1)
 
 
+# --------------------------------------------------------------------------- #
+# gen scout-by-license  (v1.13.s94)
+# --------------------------------------------------------------------------- #
+
+@app.command("scout-by-license")
+def scout_by_license_cmd(
+    license_token: Annotated[
+        str,
+        typer.Option(
+            "--license",
+            help=(
+                "Substring (case-insensitive) matched against each provider's"
+                " license string. Examples: 'cc0', 'cc-by', 'mit', 'pexels'."
+            ),
+        ),
+    ],
+    query: Annotated[
+        str, typer.Option("--query", "-q", help="Search query."),
+    ],
+    count: Annotated[
+        int, typer.Option("--count", "-n", help="Per-provider count."),
+    ] = 2,
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = True,
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Scout across providers filtered by license token (Path B v1.13.s94).
+
+    Picks every gen-catalog provider whose license string contains the given
+    token, then fans out the query across them. Useful when shipping art
+    needs strictly e.g. CC0:
+
+      assetboy gen scout-by-license --license cc0 --query "stone wall"
+        -> hits Met Museum + Pixabay (CC0-equivalent) + iNaturalist + ...
+
+      assetboy gen scout-by-license --license mit --query "sword"
+        -> hits Iconify only
+
+    Skips providers whose env key is unset (clean per-provider note).
+    """
+    import os
+
+    token = license_token.strip().lower()
+    if not token:
+        msg = "empty_license_token"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_scout_by_license_error={msg}")
+        raise typer.Exit(code=1)
+
+    # Provider catalog (mirror of list-providers but with runner refs).
+    from assetboy.execution.met_museum_runner import run_met_museum_batch
+    from assetboy.execution.wikimedia_runner import run_wikimedia_batch
+    from assetboy.execution.archive_org_runner import run_archive_org_batch
+    from assetboy.execution.scryfall_runner import run_scryfall_batch
+    from assetboy.execution.iconify_runner import run_iconify_batch
+    from assetboy.execution.inaturalist_runner import run_inaturalist_batch
+    from assetboy.execution.pexels_runner import run_pexels_photo_batch, get_api_key as _pexels_key
+    from assetboy.execution.pixabay_runner import run_pixabay_photo_batch, get_api_key as _pixabay_key
+    from assetboy.execution.unsplash_runner import run_unsplash_photo_batch, get_access_key as _unsplash_key
+
+    catalog = [
+        ("met-museum", "CC0", None, run_met_museum_batch, dict(query=query, count=count, dry_run=dry_run)),
+        ("wikimedia", "CC0 | CC-BY | CC-BY-SA | PD", None, run_wikimedia_batch, dict(query=query, count=count, dry_run=dry_run)),
+        ("archive-org", "CC-BY | CC-BY-SA | CC0 | PD", None, run_archive_org_batch, dict(query=query, mediatype="image", count=count, dry_run=dry_run)),
+        ("scryfall", "CC-BY-SA-4.0", None, run_scryfall_batch, dict(query=query, count=count, dry_run=dry_run)),
+        ("iconify", "MIT | Apache-2.0 | CC0 | CC-BY | OFL", None, run_iconify_batch, dict(query=query, count=count, dry_run=dry_run)),
+        ("inaturalist", "CC0 | CC-BY | CC-BY-SA", None, run_inaturalist_batch, dict(query=query, count=count, dry_run=dry_run)),
+        ("pexels", "Pexels License (free personal+commercial)", "PEXELS_API_KEY", run_pexels_photo_batch, dict(query=query, count=count, dry_run=dry_run)),
+        ("pixabay", "Pixabay Content License (CC0-equivalent)", "PIXABAY_API_KEY", run_pixabay_photo_batch, dict(query=query, count=count, dry_run=dry_run)),
+        ("unsplash", "Unsplash License", "UNSPLASH_ACCESS_KEY", run_unsplash_photo_batch, dict(query=query, count=count, dry_run=dry_run)),
+    ]
+
+    # Filter by license token.
+    matched = [t for t in catalog if token in t[1].lower()]
+
+    results: list[dict] = []
+    for pid, lic, env_var, fn, kwargs in matched:
+        if env_var and not os.environ.get(env_var, "").strip():
+            results.append({
+                "provider": pid, "license": lic, "ok": False,
+                "skipped": True, "matched": 0, "downloaded": 0,
+                "error": f"missing_env_key:{env_var}",
+            })
+            continue
+        # Per-provider extra kwargs.
+        call_kwargs = dict(kwargs)
+        if pid == "pexels":
+            call_kwargs["api_key"] = _pexels_key()
+        elif pid == "pixabay":
+            call_kwargs["api_key"] = _pixabay_key()
+        elif pid == "unsplash":
+            call_kwargs["access_key"] = _unsplash_key()
+        try:
+            r = fn(**call_kwargs)
+            results.append({
+                "provider": pid, "license": lic, "ok": r.ok,
+                "skipped": False,
+                "matched": getattr(r, "items_matched", 0)
+                           or getattr(r, "objects_matched", 0)
+                           or getattr(r, "files_matched", 0)
+                           or getattr(r, "cards_matched", 0)
+                           or getattr(r, "icons_matched", 0)
+                           or getattr(r, "observations_matched", 0)
+                           or getattr(r, "photos_matched", 0),
+                "downloaded": getattr(r, "items_downloaded", 0)
+                              or getattr(r, "objects_downloaded", 0)
+                              or getattr(r, "files_downloaded", 0)
+                              or getattr(r, "cards_downloaded", 0)
+                              or getattr(r, "icons_downloaded", 0)
+                              or getattr(r, "photos_downloaded", 0),
+                "error": r.error,
+            })
+        except Exception as exc:
+            results.append({
+                "provider": pid, "license": lic, "ok": False,
+                "skipped": False, "matched": 0, "downloaded": 0,
+                "error": f"crashed: {exc}",
+            })
+
+    summary = {
+        "license_token": token,
+        "query": query,
+        "count_per_provider": count,
+        "dry_run": dry_run,
+        "providers_matched_by_license": len(matched),
+        "providers_run": len(results),
+        "providers_ok": sum(1 for r in results if r["ok"]),
+        "providers_skipped": sum(1 for r in results if r["skipped"]),
+        "providers_failed": sum(1 for r in results if not r["ok"] and not r["skipped"]),
+        "total_matched": sum(r["matched"] for r in results),
+        "total_downloaded": sum(r["downloaded"] for r in results),
+        "providers": results,
+    }
+
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"gen_scout_by_license_token={token!r}")
+        print(f"gen_scout_by_license_query={query!r}")
+        print(f"gen_scout_by_license_providers_matched={len(matched)}")
+        print(f"gen_scout_by_license_providers_ok={summary['providers_ok']}/{len(results)}")
+        print(f"gen_scout_by_license_providers_skipped={summary['providers_skipped']}")
+        print(f"gen_scout_by_license_total_matched={summary['total_matched']}")
+        print(f"gen_scout_by_license_total_downloaded={summary['total_downloaded']}")
+        for r in results:
+            status = "SKP" if r["skipped"] else ("OK " if r["ok"] else "RED")
+            note = f" ({r['error']})" if r["error"] else ""
+            print(f"  [{status}] {r['provider']:13s} matched={r['matched']:3d} "
+                  f"downloaded={r['downloaded']:3d}{note}")
+
+
 if __name__ == "__main__":
     app()

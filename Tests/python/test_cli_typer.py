@@ -967,6 +967,117 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertTrue(data["ok"])
 
     # ----------------------------------------------------------------- #
+    # gen scout-by-license (v1.13.s94)
+    # ----------------------------------------------------------------- #
+
+    def test_scout_by_license_help_renders(self) -> None:
+        result = self.runner.invoke(self.app, ["gen", "scout-by-license", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("license", result.stdout.lower())
+
+    def test_scout_by_license_empty_token_exits_1(self) -> None:
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "scout-by-license", "--license", "  ", "--query", "x"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("empty_license_token", result.stdout)
+
+    def test_scout_by_license_cc0_matches_only_cc0_providers(self) -> None:
+        """--license cc0 picks Met (CC0), Wikimedia (CC0/CC-BY/SA/PD), Pixabay (CC0-equivalent),
+        iNaturalist (CC0/CC-BY/SA), archive-org (CC-BY/SA/CC0/PD); skips others.
+        With env keys cleared, key-required providers report skipped."""
+        import os
+        from unittest.mock import patch
+        from assetboy.execution.met_museum_runner import MetMuseumResult
+        from assetboy.execution.wikimedia_runner import WikimediaResult
+        from assetboy.execution.archive_org_runner import ArchiveOrgResult
+        from assetboy.execution.inaturalist_runner import INaturalistResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(os.environ, {}, clear=False):
+                for k in ("PEXELS_API_KEY", "PIXABAY_API_KEY",
+                          "UNSPLASH_ACCESS_KEY"):
+                    os.environ.pop(k, None)
+                with patch(
+                    "assetboy.execution.met_museum_runner.run_met_museum_batch",
+                    return_value=MetMuseumResult(
+                        pack_id="x", query="q", output_dir=Path(tmp),
+                        objects_matched=3, ok=True,
+                    ),
+                ), patch(
+                    "assetboy.execution.wikimedia_runner.run_wikimedia_batch",
+                    return_value=WikimediaResult(
+                        pack_id="x", query="q", output_dir=Path(tmp),
+                        files_matched=2, ok=True,
+                    ),
+                ), patch(
+                    "assetboy.execution.archive_org_runner.run_archive_org_batch",
+                    return_value=ArchiveOrgResult(
+                        pack_id="x", query="q", output_dir=Path(tmp),
+                        items_matched=1, ok=True,
+                    ),
+                ), patch(
+                    "assetboy.execution.inaturalist_runner.run_inaturalist_batch",
+                    return_value=INaturalistResult(
+                        pack_id="x", query="q", output_dir=Path(tmp),
+                        observations_matched=5, ok=True,
+                    ),
+                ), patch(
+                    "assetboy.execution.iconify_runner.run_iconify_batch",
+                    return_value=__import__(
+                        "assetboy.execution.iconify_runner",
+                        fromlist=["IconifyResult"],
+                    ).IconifyResult(
+                        pack_id="x", query="q", output_dir=Path(tmp),
+                        icons_matched=4, ok=True,
+                    ),
+                ):
+                    result = self.runner.invoke(
+                        self.app,
+                        ["gen", "scout-by-license",
+                         "--license", "cc0", "--query", "stone",
+                         "--dry-run", "--json"],
+                    )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        # CC0 token matches: met, wikimedia, archive-org, iconify, iNat, pixabay = 6.
+        self.assertEqual(data["providers_matched_by_license"], 6)
+        # 5 no-key providers all mocked OK; pixabay skipped (no env key).
+        self.assertEqual(data["providers_ok"], 5)
+        self.assertEqual(data["providers_skipped"], 1)
+        self.assertEqual(data["total_matched"], 3 + 2 + 1 + 5 + 4)
+
+    def test_scout_by_license_mit_matches_only_iconify(self) -> None:
+        """MIT is only in Iconify's license string."""
+        from unittest.mock import patch
+        from assetboy.execution.iconify_runner import IconifyResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch(
+                "assetboy.execution.iconify_runner.run_iconify_batch",
+                return_value=IconifyResult(
+                    pack_id="x", query="q", output_dir=Path(tmp),
+                    icons_matched=8, ok=True,
+                ),
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "scout-by-license",
+                     "--license", "mit", "--query", "sword",
+                     "--dry-run", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["providers_matched_by_license"], 1)
+        self.assertEqual(data["providers_ok"], 1)
+        self.assertEqual(data["providers"][0]["provider"], "iconify")
+
+    # ----------------------------------------------------------------- #
     # gen openlibrary fetch (v1.13.s91)
     # ----------------------------------------------------------------- #
 
@@ -2048,9 +2159,11 @@ class TyperCliSmokeTests(unittest.TestCase):
             self.app, ["library", "r1a-status", "--bars"],
         )
         self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        # Section header always present when --bars set.
         self.assertIn("Bytes-on-disk proportion", result.stdout)
-        # With no manifests on disk in CI, bars-section explains empty state.
-        self.assertIn("(no downloads recorded yet", result.stdout)
+        # Each provider id appears in a bar row (regardless of disk state).
+        for pid in ("met-museum", "iconify", "inaturalist"):
+            self.assertIn(pid, result.stdout)
 
     def test_library_r1a_status_bars_omitted_no_section(self) -> None:
         """Without --bars, the ASCII chart section is not present."""
