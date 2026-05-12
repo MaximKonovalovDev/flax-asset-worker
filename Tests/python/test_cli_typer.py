@@ -2180,6 +2180,137 @@ class TyperCliSmokeTests(unittest.TestCase):
         for p in data["providers"]:
             self.assertIsNone(p["live_ok"])
 
+    # ----------------------------------------------------------------- #
+    # library install-r1a-pack (v1.14.s103)
+    # ----------------------------------------------------------------- #
+
+    def test_library_install_r1a_pack_help_renders(self) -> None:
+        result = self.runner.invoke(self.app, ["library", "install-r1a-pack", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("manifest", result.stdout.lower())
+
+    def test_library_install_r1a_pack_missing_manifest_exits_1(self) -> None:
+        result = self.runner.invoke(
+            self.app, ["library", "install-r1a-pack", "C:/does/not/exist.json"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("manifest_not_found", result.stdout)
+
+    def test_library_install_r1a_pack_copies_files_and_registers(self) -> None:
+        """End-to-end: synthetic manifest + source files -> Library/ + asset_library.json."""
+        import tempfile, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            # Build source files.
+            src1 = tmp_p / "src1.jpg"
+            src2 = tmp_p / "src2.jpg"
+            src1.write_bytes(b"file-1-bytes")
+            src2.write_bytes(b"file-2-bytes")
+            # Manifest pointing at them.
+            manifest = {
+                "source": "met_museum",
+                "pack_id": "TEST_PACK",
+                "license": "CC0",
+                "entries": [
+                    {
+                        "object_id": 1, "title": "First",
+                        "local_path": str(src1),
+                        "downloaded": True,
+                        "source_url": "https://x/1.jpg",
+                        "attribution": "Anon",
+                    },
+                    {
+                        "object_id": 2, "title": "Second",
+                        "local_path": str(src2),
+                        "downloaded": True,
+                        "source_url": "https://x/2.jpg",
+                    },
+                ],
+            }
+            mf_path = tmp_p / "manifest.json"
+            mf_path.write_text(_json.dumps(manifest), encoding="utf-8")
+            # Library destination.
+            lib_root = tmp_p / "MyLib"
+            result = self.runner.invoke(
+                self.app,
+                ["library", "install-r1a-pack",
+                 str(mf_path), "--library-root", str(lib_root), "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["installed"], 2)
+        self.assertEqual(data["skipped"], 0)
+        # Library should have the asset_library.json + the 2 copied files.
+        # (Tempdir gone; rebuild in second test for path persistence.)
+
+    def test_library_install_r1a_pack_dry_run_no_copy(self) -> None:
+        import tempfile, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            src = tmp_p / "x.jpg"
+            src.write_bytes(b"x")
+            manifest = {
+                "source": "iconify",
+                "pack_id": "DRY",
+                "entries": [
+                    {"icon_id": "a:b", "local_path": str(src),
+                     "downloaded": True, "source_url": "u"},
+                ],
+            }
+            mf = tmp_p / "m.json"
+            mf.write_text(_json.dumps(manifest), encoding="utf-8")
+            lib = tmp_p / "L"
+            result = self.runner.invoke(
+                self.app,
+                ["library", "install-r1a-pack", str(mf),
+                 "--library-root", str(lib), "--dry-run", "--json"],
+            )
+            self.assertEqual(result.exit_code, 0)
+            data = _json.loads(result.stdout.strip())
+            self.assertEqual(data["installed"], 1)
+            self.assertTrue(data["dry_run"])
+            # Nothing actually copied.
+            self.assertFalse((lib / "iconify" / "DRY" / "x.jpg").exists())
+            self.assertFalse((lib / "asset_library.json").exists())
+
+    def test_library_install_r1a_pack_persists_to_library(self) -> None:
+        """Verify file actually copied + asset_library.json updated."""
+        import tempfile, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            src = tmp_p / "ref.png"
+            src.write_bytes(b"png-bytes-here")
+            manifest = {
+                "source": "wikimedia_commons",
+                "pack_id": "P",
+                "entries": [
+                    {"title": "Stone Wall", "local_path": str(src),
+                     "downloaded": True, "source_url": "https://x",
+                     "attribution": "Some Photog (CC-BY-SA)"},
+                ],
+            }
+            mf = tmp_p / "m.json"
+            mf.write_text(_json.dumps(manifest), encoding="utf-8")
+            lib = tmp_p / "Library"
+            result = self.runner.invoke(
+                self.app,
+                ["library", "install-r1a-pack", str(mf),
+                 "--library-root", str(lib), "--json"],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            # File copied to <lib>/wikimedia_commons/P/ref.png
+            dest = lib / "wikimedia_commons" / "P" / "ref.png"
+            self.assertTrue(dest.exists())
+            self.assertEqual(dest.read_bytes(), b"png-bytes-here")
+            # asset_library.json contains a row for it.
+            lib_json = lib / "asset_library.json"
+            self.assertTrue(lib_json.exists())
+            rows = _json.loads(lib_json.read_text(encoding="utf-8"))
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["name"], "Stone Wall")
+            self.assertEqual(rows[0]["source"], "wikimedia_commons")
+            self.assertIn("CC-BY-SA", rows[0]["attribution"])
+
     def test_library_r1a_status_html_writes_file(self) -> None:
         """v1.13.s97: --html <path> writes a standalone HTML report; stdout shows path."""
         import tempfile

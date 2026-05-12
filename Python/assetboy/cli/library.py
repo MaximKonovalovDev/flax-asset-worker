@@ -1021,5 +1021,162 @@ def r1a_status_cmd(
             print(f"  {p['id']:13s} [{bar}] {b:>12d} B")
 
 
+# --------------------------------------------------------------------------- #
+# library install-r1a-pack  (v1.14.s103)
+# --------------------------------------------------------------------------- #
+
+@app.command("install-r1a-pack")
+def install_r1a_pack_cmd(
+    manifest_path: Annotated[
+        Path,
+        typer.Argument(help="Path to an R1A manifest JSON (e.g. met_museum_manifest.json)."),
+    ],
+    library_root: Annotated[
+        Path,
+        typer.Option(
+            "--library-root",
+            help="Library destination root (default: ./Library/).",
+        ),
+    ] = Path("Library"),
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Show what would be installed; copy nothing."),
+    ] = False,
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Install R1A manifest entries into the Library/ directory (Path B v1.14.s103).
+
+    Reads an R1A `*_manifest.json` (written by any R1A runner) and copies
+    each entry's local_path into:
+      <library-root>/<source>/<pack_id>/<filename>
+
+    Registers each installed file as a row in Library/asset_library.json with
+    keys: name, category, source, license, attribution, file_path, original_url.
+
+    Examples:
+      assetboy library install-r1a-pack <manual_drop>/met_museum/MY_PACK/met_museum_manifest.json
+      assetboy library install-r1a-pack mf.json --library-root C:/proj/Library --dry-run
+    """
+    import shutil
+
+    if not manifest_path.exists():
+        msg = f"manifest_not_found: {manifest_path}"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"library_install_r1a_pack_error={msg}")
+        raise typer.Exit(code=1)
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        msg = f"manifest_unparseable: {exc}"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"library_install_r1a_pack_error={msg}")
+        raise typer.Exit(code=1)
+
+    source = str(manifest.get("source", "unknown"))
+    pack_id = str(manifest.get("pack_id", "unknown"))
+    entries = manifest.get("entries") or []
+    license_str = str(manifest.get("license", "")
+                      or manifest.get("license_policy", "")
+                      or manifest.get("use_policy_notice", ""))
+
+    dest_dir = library_root / source / pack_id
+    asset_lib_file = library_root / "asset_library.json"
+
+    installed: list[dict] = []
+    skipped: list[dict] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        local = entry.get("local_path")
+        if not local:
+            skipped.append({"reason": "no_local_path", "entry_id": str(entry.get("identifier") or entry.get("id") or entry.get("object_id") or "")})
+            continue
+        src_file = Path(local)
+        if not src_file.exists():
+            skipped.append({"reason": "source_file_missing", "path": local})
+            continue
+        # Skip entries explicitly marked not downloaded.
+        if entry.get("downloaded") is False and not dry_run:
+            skipped.append({"reason": "not_downloaded", "path": local})
+            continue
+
+        dest_file = dest_dir / src_file.name
+        record = {
+            "name": entry.get("title") or entry.get("name") or src_file.stem,
+            "category": str(manifest.get("kind", source)),
+            "source": source,
+            "license": license_str,
+            "attribution": str(entry.get("attribution_text") or entry.get("attribution") or ""),
+            "file_path": str(dest_file),
+            "original_url": str(entry.get("source_url") or entry.get("url") or ""),
+            "pack_id": pack_id,
+        }
+
+        if dry_run:
+            installed.append({**record, "dry_run": True})
+            continue
+
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.copy2(src_file, dest_file)
+            installed.append(record)
+        except Exception as exc:
+            skipped.append({"reason": f"copy_failed: {exc}", "path": local})
+
+    # Register installed assets in asset_library.json (additive).
+    if not dry_run and installed:
+        existing: list[dict] = []
+        if asset_lib_file.exists():
+            try:
+                existing = json.loads(asset_lib_file.read_text(encoding="utf-8")) or []
+            except Exception:
+                existing = []
+        if not isinstance(existing, list):
+            existing = []
+        existing.extend(installed)
+        asset_lib_file.parent.mkdir(parents=True, exist_ok=True)
+        asset_lib_file.write_text(
+            json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+
+    summary = {
+        "ok": True,
+        "manifest_path": str(manifest_path),
+        "source": source,
+        "pack_id": pack_id,
+        "library_root": str(library_root),
+        "dest_dir": str(dest_dir),
+        "asset_library_file": str(asset_lib_file),
+        "entries_total": len(entries),
+        "installed": len(installed),
+        "skipped": len(skipped),
+        "skipped_details": skipped,
+        "dry_run": dry_run,
+    }
+
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"library_install_r1a_pack_source={source}")
+        print(f"library_install_r1a_pack_pack_id={pack_id}")
+        print(f"library_install_r1a_pack_dest_dir={dest_dir}")
+        print(f"library_install_r1a_pack_entries_total={len(entries)}")
+        print(f"library_install_r1a_pack_installed={len(installed)}")
+        print(f"library_install_r1a_pack_skipped={len(skipped)}")
+        print(f"library_install_r1a_pack_dry_run={dry_run}")
+        if skipped:
+            print("Skipped:")
+            for s in skipped:
+                print(f"  - {s.get('reason', '?')}: {s.get('path', s.get('entry_id', '?'))}")
+
+
 if __name__ == "__main__":
     app()
