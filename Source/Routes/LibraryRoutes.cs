@@ -230,6 +230,68 @@ namespace FAW.Routes
             }
         }
 
+        /// <summary>
+        /// v1.13.s96 — scout-by-license via subprocess. Body shape:
+        ///   {"license": "cc0", "query": "stone wall", "count": 2, "dry_run": true}
+        /// </summary>
+        public static async Task<JObject> HandleScoutByLicenseAsync(HttpListenerContext ctx)
+        {
+            try
+            {
+                var body = await new StreamReader(ctx.Request.InputStream).ReadToEndAsync();
+                JObject req;
+                try { req = JObject.Parse(body ?? "{}"); }
+                catch (Exception jx) { return Error($"body_unparseable: {jx.Message}"); }
+
+                var license = req["license"]?.ToString() ?? "";
+                var query = req["query"]?.ToString() ?? "";
+                var count = req["count"]?.Value<int>() ?? 2;
+                var dryRun = req["dry_run"]?.Value<bool>() ?? true;
+
+                if (string.IsNullOrWhiteSpace(license))
+                    return Error("missing_required_field: license");
+                if (string.IsNullOrWhiteSpace(query))
+                    return Error("missing_required_field: query");
+
+                var args = $"-m assetboy.cli gen scout-by-license --license \"{license}\" --query \"{query}\" --count {count} --json";
+                if (dryRun) args += " --dry-run";
+
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "python",
+                    Arguments = args,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8,
+                };
+                var proc = new Process { StartInfo = psi };
+                proc.Start();
+                var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+                var stderrTask = proc.StandardError.ReadToEndAsync();
+                if (!proc.WaitForExit(30000))
+                {
+                    try { proc.Kill(); } catch { }
+                    return Error("timeout: scout-by-license took > 30s");
+                }
+                var stdout = await stdoutTask;
+                var stderr = await stderrTask;
+                if (proc.ExitCode != 0)
+                    return Error($"scout_by_license_failed: exit={proc.ExitCode} stderr={stderr}");
+                JObject parsed;
+                try { parsed = JObject.Parse(stdout); }
+                catch (Exception jx) { return Error($"scout_by_license_unparseable: {jx.Message}"); }
+                parsed["success"] = true;
+                return parsed;
+            }
+            catch (Exception exc)
+            {
+                return Error($"scout_by_license_crashed: {exc.Message}");
+            }
+        }
+
         private static JObject Error(string msg) => new JObject { ["success"] = false, ["error"] = msg };
     }
 }

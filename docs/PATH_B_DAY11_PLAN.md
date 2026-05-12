@@ -618,3 +618,37 @@ Five fresh slice ideas for the next round of the never-stop loop:
 
 Ship order: s90, s91, s92, s93, s94. Each per Rule 2 (max 2 edits
 per file). Maintain green tests + tag per slice.
+
+---
+
+## v1.14+ backlog (added 2026-05-12, s95)
+
+All v1.13+ slices (s90..s94) SHIPPED. Five fresh ideas for the next round:
+
+- **s96 — `gen scout-by-license` reuse in HTTP**: POST
+  `/api/v1/library/scout-by-license` accepting body
+  `{"license": "cc0", "query": "...", "count": 2}` so C# clients
+  can invoke license-filtered fan-out without subprocess from their
+  own process. Mirror v1.12.s73 (manifest/stats) pattern.
+
+- **s97 — provider-readiness HTML report**: `library r1a-status
+  --html <path>` writes a standalone HTML file with the bar chart
+  rendered as actual CSS bars + per-provider env_set / live_ok
+  status. Operator can open in browser instead of reading stdout.
+
+- **s98 — recipe `priority` view**: `pack list-recipes
+  --filter min-tier:0` lists recipes whose any pack has tier<=N.
+  Combined with v1.11.15 metadata filter for genre/tags etc.
+  Needs validator + list-recipes update (one slice).
+
+- **s99 — provider-aware retry budget**: extend
+  `_http_retry.with_429_retry` to honor a per-runtime budget
+  (env var `FAW_HTTP_RETRY_BUDGET=N`, default 10/min/provider).
+  Once exhausted, subsequent 429s pass through immediately to
+  avoid hammering rate-limited APIs.
+
+- **s100 — milestone tag v1.14-WAVE-COMPLETE**: capstone tag plus
+  HEARTBEAT/RELEASE_NOTES refresh once s96..s99 ship. Symbolic
+  150-commit milestone (we're at 149 as of v1.13.12).
+
+Ship order: s96, s97, s98, s99, s100.

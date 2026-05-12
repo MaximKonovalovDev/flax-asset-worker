@@ -131,6 +131,11 @@ namespace FAW.Core
                     // Body: {"check_live": true} adds live API probes.
                     result = await LibraryRoutes.HandleR1aStatusAsync(ctx);
                 }
+                else if (path == "/api/v1/library/scout-by-license" && method == "POST")
+                {
+                    // v1.13.s96 — fan out across license-filtered providers.
+                    result = await LibraryRoutes.HandleScoutByLicenseAsync(ctx);
+                }
                 else if (path.StartsWith("/api/v1/library/asset/") && method == "GET")
                 {
                     // v1.6.s2: single-asset metadata lookup
