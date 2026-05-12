@@ -420,6 +420,83 @@ class ManifestStatsJsonContractTests(JsonContractTests):
         self.assertEqual(parsed["manifests_scanned"], 0)
 
 
+class HealthJsonContractTests(JsonContractTests):
+    """v1.19.s136: shape consumed by C# /api/v1/library/health.
+
+    Mirror the v1.14.s106 HTTP endpoint's expected JSON shape, but exercised
+    via the same Python subprocess that the C# endpoint subprocesses.
+    """
+
+    def test_library_r1a_status_default_for_health_includes_required_keys(self) -> None:
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(PYTHON_PACKAGE_ROOT)
+        cmd = [
+            sys.executable, "-m", "assetboy.cli",
+            "library", "r1a-status", "--json",
+        ]
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=30,
+            cwd=str(PYTHON_PACKAGE_ROOT), env=env,
+        )
+        self.assertEqual(proc.returncode, 0)
+        parsed = json.loads(proc.stdout)
+        # These are the fields C# HandleHealthAsync surfaces via python_r1a.
+        for key in (
+            "providers_total", "providers_no_key",
+            "providers_key_set", "checked_live",
+            "total_downloaded_on_disk",
+        ):
+            self.assertIn(key, parsed)
+
+    def test_pack_manifest_stats_for_health_includes_required_keys(self) -> None:
+        import tempfile
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(PYTHON_PACKAGE_ROOT)
+        with tempfile.TemporaryDirectory() as tmp:
+            cmd = [
+                sys.executable, "-m", "assetboy.cli",
+                "pack", "manifest-stats", "--root", tmp, "--json",
+            ]
+            proc = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=30,
+                cwd=str(PYTHON_PACKAGE_ROOT), env=env,
+            )
+        self.assertEqual(proc.returncode, 0)
+        parsed = json.loads(proc.stdout)
+        for key in ("manifests_scanned", "total_downloaded", "by_source"):
+            self.assertIn(key, parsed)
+
+    def test_gen_list_providers_health_keys_consistent_with_r1a_status(self) -> None:
+        """v1.19.s136 — list-providers + r1a-status report compatible counts."""
+        import os as _os
+        env = _os.environ.copy()
+        env["PYTHONPATH"] = str(PYTHON_PACKAGE_ROOT)
+        for k in ("PEXELS_API_KEY", "PIXABAY_API_KEY",
+                  "UNSPLASH_ACCESS_KEY", "RAWG_API_KEY", "JAMENDO_CLIENT_ID"):
+            env.pop(k, None)
+        # gen list-providers
+        cmd1 = [sys.executable, "-m", "assetboy.cli",
+                "gen", "list-providers", "--json"]
+        p1 = subprocess.run(
+            cmd1, capture_output=True, text=True, timeout=30,
+            cwd=str(PYTHON_PACKAGE_ROOT), env=env,
+        )
+        # library r1a-status
+        cmd2 = [sys.executable, "-m", "assetboy.cli",
+                "library", "r1a-status", "--json"]
+        p2 = subprocess.run(
+            cmd2, capture_output=True, text=True, timeout=30,
+            cwd=str(PYTHON_PACKAGE_ROOT), env=env,
+        )
+        self.assertEqual(p1.returncode, 0)
+        self.assertEqual(p2.returncode, 0)
+        d1 = json.loads(p1.stdout)
+        d2 = json.loads(p2.stdout)
+        # Both have key_required_count; both report 5 (5 R1A keyed providers).
+        self.assertEqual(d1["key_required_count"], 5)
+        self.assertEqual(d2["providers_key_set"] + d2["providers_key_unset"], 5)
+
+
 class GenListProvidersJsonContractTests(JsonContractTests):
     """v1.17.s124: shape consumed by C# /api/v1/providers/list-gen."""
 
