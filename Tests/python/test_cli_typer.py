@@ -530,6 +530,39 @@ class TyperCliSmokeTests(unittest.TestCase):
     # gen wikimedia fetch (v1.10.s27)
     # ----------------------------------------------------------------- #
 
+    def test_wikimedia_fetch_category_mode_threads_through(self) -> None:
+        """v1.19.s134: --category flag flows into runner kwargs."""
+        from unittest.mock import patch
+        from assetboy.execution.wikimedia_runner import WikimediaResult
+        import tempfile
+        captured: dict = {}
+
+        def capture(**kwargs):
+            captured.update(kwargs)
+            return WikimediaResult(
+                pack_id="x", query="", output_dir=Path(tempfile.gettempdir()),
+                files_matched=0, ok=True, error="no_matches",
+            )
+
+        with patch(
+            "assetboy.execution.wikimedia_runner.run_wikimedia_batch",
+            side_effect=capture,
+        ):
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "wikimedia", "fetch",
+                 "--category", "Stone walls", "--dry-run"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(captured.get("category"), "Stone walls")
+
+    def test_wikimedia_fetch_missing_query_and_category_exits_1(self) -> None:
+        result = self.runner.invoke(
+            self.app, ["gen", "wikimedia", "fetch"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("missing_query_or_category", result.stdout)
+
     def test_wikimedia_fetch_help_renders(self) -> None:
         result = self.runner.invoke(
             self.app, ["gen", "wikimedia", "fetch", "--help"]

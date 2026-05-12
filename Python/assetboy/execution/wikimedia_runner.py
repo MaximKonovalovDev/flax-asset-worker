@@ -125,6 +125,37 @@ def search_wikimedia_files(
     return [str(r.get("title", "")) for r in results if r.get("title")]
 
 
+def list_wikimedia_category_files(
+    category: str,
+    *,
+    limit: int = 20,
+    timeout: float = 15.0,
+) -> list[str]:
+    """v1.19.s134 — list File: namespace members of a category.
+
+    Args:
+        category: e.g. 'Stone walls' (without 'Category:' prefix).
+        limit: max entries to return (cap 500 per Wikimedia API).
+    """
+    cat = category.strip()
+    if not cat:
+        return []
+    if not cat.lower().startswith("category:"):
+        cat = f"Category:{cat}"
+    params = {
+        "action": "query",
+        "format": "json",
+        "list": "categorymembers",
+        "cmtitle": cat,
+        "cmnamespace": "6",  # File: only
+        "cmlimit": str(max(1, min(limit, 500))),
+    }
+    url = f"{WIKIMEDIA_API}?{urllib.parse.urlencode(params)}"
+    payload = _get_json(url, timeout=timeout)
+    members = payload.get("query", {}).get("categorymembers", [])
+    return [str(m.get("title", "")) for m in members if m.get("title")]
+
+
 def fetch_wikimedia_imageinfo(file_title: str, *, timeout: float = 15.0) -> dict:
     """Fetch imageinfo for a File:<name>; returns the first imageinfo dict or {}."""
     params = {
@@ -152,6 +183,7 @@ def run_wikimedia_batch(
     query: str,
     pack_id: str | None = None,
     count: int = 6,
+    category: str | None = None,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.2,
     dry_run: bool = False,
@@ -162,6 +194,8 @@ def run_wikimedia_batch(
         query: free-text search (matches file name, description, metadata).
         pack_id: pack id for output dir; default derived from query.
         count: max files to download AFTER license filter.
+        category: v1.19.s134 — when set, uses category-member walk
+                  (list_wikimedia_category_files) instead of free-text search.
         output_dir: override; default <manual_drop>/wikimedia/<pack_id>/.
         polite_sleep_s: delay between per-file API calls (default 200ms).
         dry_run: when True, hit search + imageinfo but skip binary downloads.
@@ -169,7 +203,7 @@ def run_wikimedia_batch(
     Returns:
         WikimediaResult.
     """
-    resolved_pack_id = pack_id or f"WIKIMEDIA_{query.replace(' ', '_').upper()}"
+    resolved_pack_id = pack_id or f"WIKIMEDIA_{(category or query).replace(' ', '_').upper()}"
     out_dir = (
         Path(output_dir) if output_dir
         else manual_drop_dir() / "wikimedia" / resolved_pack_id
@@ -185,7 +219,12 @@ def run_wikimedia_batch(
 
     # Search; oversample 3x to absorb license-filter losses.
     try:
-        titles = search_wikimedia_files(query, limit=max(count * 3, 20))
+        if category and category.strip():
+            titles = list_wikimedia_category_files(
+                category, limit=max(count * 3, 20),
+            )
+        else:
+            titles = search_wikimedia_files(query, limit=max(count * 3, 20))
     except (urllib.error.URLError, ValueError, TimeoutError) as exc:
         result.ok = False
         result.error = f"search_failed: {exc}"
@@ -298,6 +337,7 @@ __all__ = [
     "WikimediaResult",
     "is_license_accepted",
     "search_wikimedia_files",
+    "list_wikimedia_category_files",
     "fetch_wikimedia_imageinfo",
     "run_wikimedia_batch",
 ]

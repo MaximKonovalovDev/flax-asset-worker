@@ -82,6 +82,31 @@ class WikimediaRunnerTests(unittest.TestCase):
         from assetboy.execution import wikimedia_runner
         self.mod = wikimedia_runner
 
+    def test_list_category_files_normalizes_prefix(self) -> None:
+        """v1.19.s134: passing 'Stone walls' adds 'Category:' prefix."""
+        captured_urls: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured_urls.append(str(req.full_url))
+            return _json_response({
+                "query": {"categorymembers": [
+                    {"title": "File:A.jpg"}, {"title": "File:B.jpg"},
+                ]},
+            })
+
+        with patch.object(self.mod.urllib.request, "urlopen", side_effect=capture):
+            titles = self.mod.list_wikimedia_category_files("Stone walls")
+        self.assertEqual(len(titles), 2)
+        self.assertIn("cmtitle=Category%3AStone+walls", captured_urls[0])
+
+    def test_list_category_files_passes_prefix_through(self) -> None:
+        with patch.object(
+            self.mod.urllib.request, "urlopen",
+            return_value=_json_response({"query": {"categorymembers": []}}),
+        ):
+            self.mod.list_wikimedia_category_files("Category:Already prefixed")
+        # No exception; empty list ok.
+
     def test_search_returns_titles(self) -> None:
         payload = {
             "query": {

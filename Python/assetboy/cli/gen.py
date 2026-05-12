@@ -906,7 +906,17 @@ def met_fetch_cmd(
 def wikimedia_fetch_cmd(
     query: Annotated[
         str, typer.Option("--query", "-q", help="Free-text search term."),
-    ],
+    ] = "",
+    category: Annotated[
+        str,
+        typer.Option(
+            "--category",
+            help=(
+                "v1.19.s134: walk a Wikimedia category instead of free-text"
+                " search. Pass without 'Category:' prefix (added automatically)."
+            ),
+        ),
+    ] = "",
     count: Annotated[
         int, typer.Option("--count", "-n", help="Max CC-licensed files to download."),
     ] = 6,
@@ -945,14 +955,25 @@ def wikimedia_fetch_cmd(
     """
     from assetboy.execution.wikimedia_runner import run_wikimedia_batch
 
+    if not query.strip() and not category.strip():
+        msg = "missing_query_or_category"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_wikimedia_error={msg}")
+        raise typer.Exit(code=1)
+
     out_dir_arg: Path | None = output_dir if str(output_dir) else None
     pack_id_arg: str | None = pack_id if pack_id else None
+    category_arg: str | None = category.strip() or None  # v1.19.s134
 
     try:
         result = run_wikimedia_batch(
             query=query,
             pack_id=pack_id_arg,
             count=count,
+            category=category_arg,
             output_dir=out_dir_arg,
             dry_run=dry_run,
         )
