@@ -72,9 +72,10 @@ def list_recipes_cmd(
         typer.Option(
             "--sort",
             help=(
-                "v1.14.s105: sort recipes by 'tier' (most-critical-first;"
-                " min pack tier across recipe; recipes with no tiered packs"
-                " sort last) or 'path' (default: directory order)."
+                "v1.14.s105 / v1.22.s151: sort recipes by 'tier'"
+                " (most-critical-first; min pack tier; untiered last),"
+                " 'name' (alphabetical by recipe_id), or 'path'"
+                " (default: directory order)."
             ),
         ),
     ] = "path",
@@ -213,9 +214,12 @@ def list_recipes_cmd(
     if sort_norm == "tier":
         # Recipes with no min_tier sort last (treat as +inf).
         entries.sort(key=lambda e: (e.get("min_tier") is None, e.get("min_tier", 999), e["path"]))
+    elif sort_norm == "name":
+        # v1.22.s151 — alphabetical by recipe_id (then by path tiebreak).
+        entries.sort(key=lambda e: (str(e.get("recipe_id", "")).lower(), e["path"]))
     elif sort_norm not in ("", "path"):
         # Unknown sort key -> error.
-        msg = f"unknown_sort_key: {sort_norm!r} (valid: 'path', 'tier')"
+        msg = f"unknown_sort_key: {sort_norm!r} (valid: 'path', 'tier', 'name')"
         if json_out:
             json.dump({"error": msg}, sys.stdout, indent=2)
             sys.stdout.write("\n")

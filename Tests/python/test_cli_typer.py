@@ -226,6 +226,18 @@ class TyperCliSmokeTests(unittest.TestCase):
         paths_b = [r["path"] for r in data_b["recipes"]]
         self.assertEqual(paths_a, list(reversed(paths_b)))
 
+    def test_pack_list_recipes_sort_name_alphabetical(self) -> None:
+        """v1.22.s151: --sort name orders by recipe_id alphabetically."""
+        result = self.runner.invoke(
+            self.app, ["pack", "list-recipes", "--sort", "name", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout)
+        self.assertEqual(data["sort"], "name")
+        ids = [r["recipe_id"] for r in data["recipes"]]
+        self.assertEqual(ids, sorted(ids, key=str.lower))
+
     def test_pack_list_recipes_sort_unknown_exits_1(self) -> None:
         result = self.runner.invoke(
             self.app, ["pack", "list-recipes", "--sort", "popularity"],

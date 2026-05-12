@@ -887,3 +887,31 @@ moved here). Five fresh ideas:
   see whether they've now met the threshold.
 
 Ship order: s144, s145, s146, s147, s148.
+
+---
+
+## v1.22+ backlog (added 2026-05-12, s149)
+
+All v1.21+ s144..s148 SHIPPED. Five fresh ideas:
+
+- **s150 — `gen all-no-key --history-tail <N>`**: read the last N
+  history snapshots and emit a stdout summary of trend per provider
+  (avg matched + downloaded + ok-rate). Quick "how's my scout doing
+  this week?" view without parsing JSON.
+
+- **s151 — `pack list-recipes --sort name`**: third sort key
+  (alphabetical by recipe_id). Already have path + tier.
+
+- **s152 — `library install-r1a-pack` dedup by file_path**: when
+  registering rows in asset_library.json, skip entries whose
+  file_path already appears. Currently each call appends, so
+  rerunning produces duplicate rows.
+
+- **s153 — Scryfall `--set <code>`**: scope to one MTG set (e.g.
+  `set:cmm` for Commander Masters). Scryfall API supports this
+  natively via query syntax 'set:<code>'.
+
+- **s154 — v1.20 wave milestone tag was renamed v1.20-WAVE-COMPLETE
+  (shipped); v1.21+ pending milestone after s149-s153**.
+
+Ship order: s150, s151, s152, s153, s154.
