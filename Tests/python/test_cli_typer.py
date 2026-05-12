@@ -816,6 +816,32 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["sets"][0]["prefix"], "ok")
         self.assertTrue(data["accepted_only_filter"])
 
+    def test_iconify_fetch_prefix_threads_through(self) -> None:
+        """v1.20.s138: --prefix flows into run_iconify_batch kwargs."""
+        from unittest.mock import patch
+        from assetboy.execution.iconify_runner import IconifyResult
+        import tempfile
+        captured: dict = {}
+
+        def capture(**kwargs):
+            captured.update(kwargs)
+            return IconifyResult(
+                pack_id="x", query="q", output_dir=Path(tempfile.gettempdir()),
+                icons_matched=0, ok=True, error="no_matches",
+            )
+
+        with patch(
+            "assetboy.execution.iconify_runner.run_iconify_batch",
+            side_effect=capture,
+        ):
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "iconify", "fetch", "--query", "sword",
+                 "--prefix", "game-icons", "--dry-run"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(captured.get("prefix"), "game-icons")
+
     def test_iconify_fetch_attribution_badge_in_stdout(self) -> None:
         """v1.16.s117: stdout includes per-license breakdown + attribution required count."""
         from unittest.mock import patch

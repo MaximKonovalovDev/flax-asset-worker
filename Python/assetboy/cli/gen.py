@@ -1373,6 +1373,16 @@ def iconify_fetch_cmd(
             help="Hex color override like '#FF6600' (default: original colors).",
         ),
     ] = "",
+    prefix: Annotated[
+        str,
+        typer.Option(
+            "--prefix",
+            help=(
+                "v1.20.s138: scope search to one or more icon sets by prefix"
+                " (comma-separated; e.g. 'game-icons' or 'mdi,game-icons')."
+            ),
+        ),
+    ] = "",
     pack_id: Annotated[
         str, typer.Option("--pack-id"),
     ] = "",
@@ -1412,6 +1422,7 @@ def iconify_fetch_cmd(
     out_dir_arg: Path | None = output_dir if str(output_dir) else None
     pack_id_arg: str | None = pack_id if pack_id else None
     color_arg: str | None = color if color.strip() else None
+    prefix_arg: str | None = prefix.strip() or None  # v1.20.s138
 
     try:
         result = run_iconify_batch(
@@ -1420,6 +1431,7 @@ def iconify_fetch_cmd(
             count=count,
             width=width,
             color=color_arg,
+            prefix=prefix_arg,
             output_dir=out_dir_arg,
             skip_collections_check=skip_collections_check,
             dry_run=dry_run,

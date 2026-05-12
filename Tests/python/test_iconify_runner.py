@@ -73,6 +73,29 @@ class IconifySearchTests(unittest.TestCase):
         self.assertEqual(len(icons), 3)
         self.assertEqual(icons[0], "mdi:sword")
 
+    def test_search_includes_prefix_param(self) -> None:
+        """v1.20.s138: prefix= maps to Iconify's prefixes= URL param."""
+        captured_urls: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured_urls.append(str(req.full_url))
+            return _json_response({"icons": []})
+
+        with patch.object(self.mod.urllib.request, "urlopen", side_effect=capture):
+            self.mod.search_iconify_icons("sword", prefix="game-icons")
+        self.assertIn("prefixes=game-icons", captured_urls[0])
+
+    def test_search_no_prefix_no_param(self) -> None:
+        captured_urls: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured_urls.append(str(req.full_url))
+            return _json_response({"icons": []})
+
+        with patch.object(self.mod.urllib.request, "urlopen", side_effect=capture):
+            self.mod.search_iconify_icons("sword")
+        self.assertNotIn("prefixes=", captured_urls[0])
+
     def test_search_clamps_limit(self) -> None:
         """limit=200 should clamp to 64 max per Iconify docs."""
         payload = {"icons": [], "total": 0}

@@ -114,10 +114,18 @@ def search_iconify_icons(
     query: str,
     *,
     limit: int = 32,
+    prefix: str | None = None,
     timeout: float = 15.0,
 ) -> list[str]:
-    """Run /search; return list of icon identifiers like 'mdi:sword'."""
+    """Run /search; return list of icon identifiers like 'mdi:sword'.
+
+    v1.20.s138: optional prefix= filter via Iconify's 'prefixes=' parameter
+    scopes search to one or more icon sets (e.g. 'game-icons' or
+    'mdi,game-icons').
+    """
     params = {"query": query, "limit": str(min(max(limit, 1), 64))}
+    if prefix and prefix.strip():
+        params["prefixes"] = prefix.strip()
     url = f"{ICONIFY_API}/search?{urllib.parse.urlencode(params)}"
     payload = _get_json(url, timeout=timeout)
     return list(payload.get("icons", []))
@@ -161,6 +169,7 @@ def run_iconify_batch(
     count: int = 16,
     width: int = 64,
     color: str | None = None,
+    prefix: str | None = None,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.05,
     skip_collections_check: bool = False,
@@ -197,7 +206,7 @@ def run_iconify_batch(
 
     # Step 1: search (oversample to absorb license filter losses).
     try:
-        icons = search_iconify_icons(query, limit=min(count * 2, 64))
+        icons = search_iconify_icons(query, limit=min(count * 2, 64), prefix=prefix)
     except (urllib.error.URLError, ValueError, TimeoutError) as exc:
         result.ok = False
         result.error = f"search_failed: {exc}"

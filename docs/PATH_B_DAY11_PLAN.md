@@ -828,3 +828,33 @@ All v1.18+ s126..s130 SHIPPED. Five fresh ideas:
   once s132..s135 ship. 19 more tests to reach 800.
 
 Ship order: s132, s133, s134, s135, s136.
+
+---
+
+## v1.20+ backlog (added 2026-05-12, s137)
+
+All v1.19+ s132..s136 SHIPPED. 800-test milestone hit. Five fresh ideas:
+
+- **s138 — Iconify `--prefix <set>` filter**: scope `gen iconify fetch`
+  to a specific icon set (e.g. only `game-icons:` results). Iconify
+  search API supports prefix filter via `query=prefix:term` syntax.
+
+- **s139 — pack from-recipe pipeline writes per-pack pipeline log**:
+  each pack ledger gains a `pipeline_log` field listing every stage
+  it traversed (acquire, validate, install, complete) with timestamps.
+  Useful for triage of "where did this pack get stuck?"
+
+- **s140 — `gen archive-org fetch --collection <id>`**: archive.org
+  advanced search supports collection: prefix. Surface as flag for
+  scoping to e.g. `prelinger`, `librivoxaudio`, `image_collection`.
+
+- **s141 — recipe schema `min_required_passes` integer**: like
+  `expected_min_assets` but counts how many packs must end in
+  `completed` status. Lets a recipe say "I need at least 3 of my
+  5 optional packs to succeed."
+
+- **s142 — milestone v1.19-WAVE-COMPLETE (already shipped) + DOC SWEEP**:
+  refresh RELEASE_NOTES_v1.10_v1.11.md with v1.18-v1.19 deltas, since
+  it's currently frozen at the R1A wave milestone.
+
+Ship order: s138, s139, s140, s141, s142.
