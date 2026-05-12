@@ -1441,6 +1441,30 @@ def iconify_fetch_cmd(
         print(f"gen_iconify_output_dir={result.output_dir}")
         if result.manifest_path:
             print(f"gen_iconify_manifest={result.manifest_path}")
+            # v1.16.s117 — attribution summary from manifest entries.
+            try:
+                mf_doc = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+                spdx_counts: dict[str, int] = {}
+                attr_required: list[str] = []
+                for entry in (mf_doc.get("entries") or []):
+                    if not isinstance(entry, dict):
+                        continue
+                    spdx = str(entry.get("license_spdx", "") or "?")
+                    spdx_counts[spdx] = spdx_counts.get(spdx, 0) + 1
+                    # Substring check on accepted-license tokens that require credit.
+                    lower = spdx.lower()
+                    if ("cc-by" in lower) or ("ofl" in lower) or ("gpl" in lower) or ("lgpl" in lower):
+                        attr_required.append(str(entry.get("icon_id", "?")))
+                if spdx_counts:
+                    parts = ", ".join(f"{k}={v}" for k, v in sorted(spdx_counts.items()))
+                    print(f"gen_iconify_attribution_breakdown={parts}")
+                if attr_required:
+                    print(
+                        f"gen_iconify_attribution_required_count={len(attr_required)} "
+                        "(see manifest 'license_spdx' + 'collection' per icon)"
+                    )
+            except Exception as exc:
+                _ = exc
         if result.error:
             print(f"gen_iconify_note={result.error}")
 

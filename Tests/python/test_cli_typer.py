@@ -725,6 +725,43 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["sets"][0]["prefix"], "ok")
         self.assertTrue(data["accepted_only_filter"])
 
+    def test_iconify_fetch_attribution_badge_in_stdout(self) -> None:
+        """v1.16.s117: stdout includes per-license breakdown + attribution required count."""
+        from unittest.mock import patch
+        from assetboy.execution.iconify_runner import IconifyResult
+        import tempfile, json as _json
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            mf_path = tmp_p / "iconify_manifest.json"
+            # Synthetic manifest: 2 Apache (no attribution required) + 1 CC-BY-4.0 (req).
+            mf_path.write_text(_json.dumps({
+                "source": "iconify", "entries": [
+                    {"icon_id": "mdi:home", "license_spdx": "Apache-2.0"},
+                    {"icon_id": "mdi:sword", "license_spdx": "Apache-2.0"},
+                    {"icon_id": "game-icons:dragon", "license_spdx": "CC-BY-4.0"},
+                ],
+            }), encoding="utf-8")
+            fake = IconifyResult(
+                pack_id="P", query="q", output_dir=tmp_p,
+                icons_matched=3, icons_downloaded=3, ok=True,
+                manifest_path=mf_path,
+            )
+            with patch(
+                "assetboy.execution.iconify_runner.run_iconify_batch",
+                return_value=fake,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "iconify", "fetch", "--query", "q"],
+                )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertIn("gen_iconify_attribution_breakdown=", result.stdout)
+            self.assertIn("Apache-2.0=2", result.stdout)
+            self.assertIn("CC-BY-4.0=1", result.stdout)
+            # 1 attribution-required entry (the CC-BY-4.0 game-icons one).
+            self.assertIn("gen_iconify_attribution_required_count=1", result.stdout)
+
     def test_iconify_fetch_help_renders(self) -> None:
         result = self.runner.invoke(
             self.app, ["gen", "iconify", "fetch", "--help"]
