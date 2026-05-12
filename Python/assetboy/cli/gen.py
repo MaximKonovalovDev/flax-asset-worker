@@ -2455,6 +2455,17 @@ def all_key_cmd(
             help="v1.17.s120: append run to state/r1a_history/<utc>.json (kind=all_key).",
         ),
     ] = False,
+    provider_filter: Annotated[
+        str,
+        typer.Option(
+            "--provider",
+            help=(
+                "v1.22.s155: comma-separated subset of keyed provider ids"
+                " (pexels_photos/pexels_videos/pixabay_photos/pixabay_videos/"
+                "unsplash/rawg/jamendo). If unset, all are dispatched."
+            ),
+        ),
+    ] = "",
     json_out: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Fan out one query across key-required R1A providers (Path B v1.11.s38).
@@ -2573,6 +2584,23 @@ def all_key_cmd(
         output_dir=(out_dir_arg / "jamendo") if out_dir_arg else None,
         dry_run=dry_run,
     )))
+
+    # v1.22.s155 — filter tasks by --provider.
+    if provider_filter.strip():
+        wanted = {p.strip().lower() for p in provider_filter.split(",") if p.strip()}
+        tasks = [t for t in tasks if t[0].lower() in wanted]
+        if not tasks:
+            msg = (
+                f"no_providers_matched_filter: {sorted(wanted)} "
+                "(valid: pexels_photos/pexels_videos/pixabay_photos/"
+                "pixabay_videos/unsplash/rawg/jamendo)"
+            )
+            if json_out:
+                json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"gen_all_key_error={msg}")
+            raise typer.Exit(code=1)
 
     providers_run: list[dict] = []
 

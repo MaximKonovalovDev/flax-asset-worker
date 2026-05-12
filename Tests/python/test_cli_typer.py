@@ -2550,6 +2550,38 @@ class TyperCliSmokeTests(unittest.TestCase):
             finally:
                 os.chdir(old_cwd)
 
+    def test_all_key_provider_filter_narrows_to_subset(self) -> None:
+        """v1.22.s155: --provider jamendo,unsplash runs only those two."""
+        import os
+        from unittest.mock import patch
+        # Both env keys unset -> both skipped; we just verify task filtering.
+        with patch.dict(os.environ, {}, clear=False):
+            for k in ("PEXELS_API_KEY", "PIXABAY_API_KEY",
+                      "UNSPLASH_ACCESS_KEY", "RAWG_API_KEY", "JAMENDO_CLIENT_ID"):
+                os.environ.pop(k, None)
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "all-key", "--query", "q",
+                 "--provider", "jamendo,unsplash", "--dry-run", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        # Only 2 providers (both skipped due to missing env).
+        self.assertEqual(data["providers_run"], 2)
+        names = {p["provider"] for p in data["providers"]}
+        self.assertEqual(names, {"unsplash", "jamendo"})
+
+    def test_all_key_provider_filter_no_match_exits_1(self) -> None:
+        """--provider unknown_keyed -> exit 1."""
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "all-key", "--query", "q",
+             "--provider", "bogus_keyed_xyz"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("no_providers_matched_filter", result.stdout)
+
     def test_all_key_parallel_preserves_order_and_skips(self) -> None:
         """v1.12.s65: --parallel preserves task order; missing keys still SKIP."""
         import os
