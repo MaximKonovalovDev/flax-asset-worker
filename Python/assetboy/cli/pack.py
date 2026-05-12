@@ -1482,6 +1482,17 @@ def manifest_stats_cmd(
             ),
         ),
     ] = "",
+    since: Annotated[
+        str,
+        typer.Option(
+            "--since",
+            help=(
+                "v1.13.s92: include only manifests with mtime newer than this"
+                " ISO 8601 timestamp (e.g. '2026-05-01' or '2026-05-12T00:00:00')."
+                " Useful to scope stats to 'this week' or 'today'."
+            ),
+        ),
+    ] = "",
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -1524,7 +1535,30 @@ def manifest_stats_cmd(
 
     norm_filter = source_filter.strip().lower() if source_filter else ""
 
+    # v1.13.s92 — parse --since ISO 8601 into POSIX timestamp.
+    since_epoch: float | None = None
+    if since.strip():
+        from datetime import datetime
+        try:
+            dt = datetime.fromisoformat(since.strip())
+            since_epoch = dt.timestamp()
+        except ValueError as exc:
+            msg = f"invalid_since_timestamp: {since!r} ({exc})"
+            if json_out:
+                json.dump({"error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"pack_manifest_stats_error={msg}")
+            raise typer.Exit(code=1)
+
     for mf in manifests:
+        # v1.13.s92 — mtime filter.
+        if since_epoch is not None:
+            try:
+                if mf.stat().st_mtime < since_epoch:
+                    continue
+            except OSError:
+                continue
         try:
             doc = json.loads(mf.read_text(encoding="utf-8"))
         except Exception:
@@ -1578,6 +1612,7 @@ def manifest_stats_cmd(
         "manifests_scanned": len(manifests),
         "manifests_after_filter": sum(b["manifests"] for b in per_source.values()),
         "source_filter": norm_filter or None,
+        "since_filter": since.strip() or None,  # v1.13.s92
         "sources_seen": len(per_source),
         "total_downloaded": total_downloaded,
         "total_skipped": total_skipped,

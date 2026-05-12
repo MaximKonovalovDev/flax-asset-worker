@@ -1313,6 +1313,59 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertNotIn("wikimedia_commons", data["by_source"])
         self.assertEqual(data["source_filter"], "met_museum")
 
+    def test_pack_manifest_stats_since_filter_scopes_by_mtime(self) -> None:
+        """v1.13.s92: --since <ISO> filters out manifests older than the timestamp."""
+        import tempfile, json as _json, os, time
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "old").mkdir()
+            (tmp_p / "new").mkdir()
+            old_mf = tmp_p / "old" / "old_manifest.json"
+            new_mf = tmp_p / "new" / "new_manifest.json"
+            old_mf.write_text(_json.dumps({
+                "source": "old_source",
+                "objects_downloaded": 99,
+                "entries": [],
+            }), encoding="utf-8")
+            new_mf.write_text(_json.dumps({
+                "source": "new_source",
+                "objects_downloaded": 7,
+                "entries": [],
+            }), encoding="utf-8")
+            # Set old mtime to 1 year ago.
+            old_time = time.time() - 365 * 86400
+            os.utime(old_mf, (old_time, old_time))
+            # New manifest keeps current mtime.
+            # Filter: --since one day ago.
+            from datetime import datetime, timedelta
+            since_iso = (datetime.now() - timedelta(hours=1)).isoformat(timespec="seconds")
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "manifest-stats",
+                 "--root", str(tmp_p),
+                 "--since", since_iso,
+                 "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["manifests_scanned"], 2)
+        # Only new_source survives the --since filter.
+        self.assertEqual(data["manifests_after_filter"], 1)
+        self.assertEqual(data["sources_seen"], 1)
+        self.assertIn("new_source", data["by_source"])
+        self.assertNotIn("old_source", data["by_source"])
+        self.assertEqual(data["since_filter"], since_iso)
+        self.assertEqual(data["total_downloaded"], 7)
+
+    def test_pack_manifest_stats_invalid_since_exits_1(self) -> None:
+        """Malformed --since string -> clean exit 1."""
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "manifest-stats", "--since", "not-a-date"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("invalid_since_timestamp", result.stdout)
+
     def test_pack_manifest_stats_missing_root_exits_1(self) -> None:
         result = self.runner.invoke(
             self.app, ["pack", "manifest-stats", "--root", "C:/nonexistent/path/xyz"],
