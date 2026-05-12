@@ -103,8 +103,30 @@ def list_recipes_cmd(
         field_name, _, value = f.partition(":")
         parsed_filters.append((field_name.strip(), value.strip()))
 
-    def _matches_filter(recipe: dict, field_name: str, value: str) -> bool:
-        """True if recipe[field] matches value (string equals OR contains list entry)."""
+    def _matches_filter(doc: dict, field_name: str, value: str) -> bool:
+        """True if filter matches.
+
+        Recipe-level fields: string equals or list-entry equals.
+        v1.13.s98 — special pack-level filter: 'min-tier:N' matches recipes
+        whose any pack has tier <= N (e.g. min-tier:0 finds recipes with
+        critical packs).
+        """
+        # Pack-level: min-tier:N -> any pack has tier <= N.
+        if field_name in ("min-tier", "min_tier"):
+            try:
+                threshold = int(value)
+            except ValueError:
+                return False
+            packs = doc.get("packs") or []
+            for pack in packs:
+                if not isinstance(pack, dict):
+                    continue
+                t = pack.get("tier")
+                if isinstance(t, int) and not isinstance(t, bool) and t <= threshold:
+                    return True
+            return False
+        # Recipe-level fields.
+        recipe = doc.get("recipe") or {}
         field_val = recipe.get(field_name)
         if field_val is None:
             return False
@@ -129,7 +151,7 @@ def list_recipes_cmd(
                 # Apply --filter (AND across all filters).
                 if parsed_filters:
                     if not all(
-                        _matches_filter(recipe, fn, fv)
+                        _matches_filter(doc, fn, fv)
                         for fn, fv in parsed_filters
                     ):
                         continue
