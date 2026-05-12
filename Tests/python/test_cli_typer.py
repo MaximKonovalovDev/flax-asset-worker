@@ -807,6 +807,32 @@ class TyperCliSmokeTests(unittest.TestCase):
     # gen scryfall fetch (v1.10.s29)
     # ----------------------------------------------------------------- #
 
+    def test_scryfall_fetch_set_threads_through(self) -> None:
+        """v1.22.s153: --set flag flows into run_scryfall_batch kwargs."""
+        from unittest.mock import patch
+        from assetboy.execution.scryfall_runner import ScryfallResult
+        import tempfile
+        captured: dict = {}
+
+        def capture(**kwargs):
+            captured.update(kwargs)
+            return ScryfallResult(
+                pack_id="x", query="q", output_dir=Path(tempfile.gettempdir()),
+                variant="art_crop", cards_matched=0, ok=True, error="no_matches",
+            )
+
+        with patch(
+            "assetboy.execution.scryfall_runner.run_scryfall_batch",
+            side_effect=capture,
+        ):
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "scryfall", "fetch", "--query", "type:dragon",
+                 "--set", "cmm", "--dry-run"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(captured.get("set_code"), "cmm")
+
     def test_scryfall_fetch_help_renders(self) -> None:
         result = self.runner.invoke(
             self.app, ["gen", "scryfall", "fetch", "--help"]

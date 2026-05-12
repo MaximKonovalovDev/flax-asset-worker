@@ -76,6 +76,27 @@ class ScryfallRunnerTests(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertIn("invalid_variant", result.error or "")
 
+    def test_batch_appends_set_code_to_query(self) -> None:
+        """v1.22.s153: --set <code> appends 'set:<code>' to query before search."""
+        captured_urls: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured_urls.append(str(req.full_url))
+            return _json_response({"data": []})
+
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(
+                self.mod.urllib.request, "urlopen", side_effect=capture
+            ):
+                with patch.object(self.mod.time, "sleep"):
+                    self.mod.run_scryfall_batch(
+                        query="type:dragon", pack_id="SC",
+                        count=1, set_code="cmm", output_dir=Path(tmp),
+                    )
+        # First call is the /cards/search; URL should contain 'set:cmm'.
+        self.assertTrue(any("set%3Acmm" in u for u in captured_urls))
+
     def test_batch_downloads_art_crop(self) -> None:
         search = _json_response({
             "data": [
