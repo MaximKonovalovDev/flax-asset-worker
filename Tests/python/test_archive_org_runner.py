@@ -96,6 +96,18 @@ class ArchiveOrgRunnerTests(unittest.TestCase):
         from assetboy.execution import archive_org_runner
         self.mod = archive_org_runner
 
+    def test_search_includes_collection_clause(self) -> None:
+        """v1.20.s140: --collection adds 'AND collection:<id>' clause to q."""
+        captured_urls: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured_urls.append(str(req.full_url))
+            return _json_response({"response": {"docs": []}})
+
+        with patch.object(self.mod.urllib.request, "urlopen", side_effect=capture):
+            self.mod.search_archive_items("subject:roman", collection="prelinger")
+        self.assertIn("collection%3Aprelinger", captured_urls[0])
+
     def test_search_returns_docs(self) -> None:
         payload = {
             "response": {

@@ -1042,6 +1042,16 @@ def archive_fetch_cmd(
             help="Restrict to one mediatype: image | audio | movies | texts.",
         ),
     ] = "",
+    collection: Annotated[
+        str,
+        typer.Option(
+            "--collection",
+            help=(
+                "v1.20.s140: scope to an archive.org collection id"
+                " (e.g. 'prelinger', 'librivoxaudio', 'image_collection')."
+            ),
+        ),
+    ] = "",
     count: Annotated[
         int, typer.Option("--count", "-n", help="Max CC/PD items to download."),
     ] = 4,
@@ -1083,11 +1093,13 @@ def archive_fetch_cmd(
     out_dir_arg: Path | None = output_dir if str(output_dir) else None
     pack_id_arg: str | None = pack_id if pack_id else None
     mediatype_arg: str | None = mediatype.strip().lower() if mediatype.strip() else None
+    collection_arg: str | None = collection.strip() or None  # v1.20.s140
 
     try:
         result = run_archive_org_batch(
             query=query,
             mediatype=mediatype_arg,
+            collection=collection_arg,
             pack_id=pack_id_arg,
             count=count,
             output_dir=out_dir_arg,

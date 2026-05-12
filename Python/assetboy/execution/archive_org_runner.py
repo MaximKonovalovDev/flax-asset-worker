@@ -118,13 +118,21 @@ def search_archive_items(
     query: str,
     *,
     mediatype: str | None = None,
+    collection: str | None = None,
     rows: int = 20,
     timeout: float = 20.0,
 ) -> list[dict]:
-    """Run advancedsearch; return docs list with {identifier, title, licenseurl, mediatype}."""
+    """Run advancedsearch; return docs list.
+
+    v1.20.s140: optional collection= filter (e.g. 'prelinger',
+    'librivoxaudio', 'image_collection'). Appended as
+    'AND collection:<id>' clause.
+    """
     q = query
     if mediatype:
-        q = f"({query}) AND mediatype:{mediatype}"
+        q = f"({q}) AND mediatype:{mediatype}"
+    if collection and collection.strip():
+        q = f"({q}) AND collection:{collection.strip()}"
     params = [
         ("q", q),
         ("fl[]", "identifier"),
@@ -172,6 +180,7 @@ def run_archive_org_batch(
     *,
     query: str,
     mediatype: str | None = None,
+    collection: str | None = None,
     pack_id: str | None = None,
     count: int = 4,
     output_dir: str | Path | None = None,
@@ -205,7 +214,8 @@ def run_archive_org_batch(
 
     try:
         docs = search_archive_items(
-            query, mediatype=mediatype, rows=max(count * 4, 20),
+            query, mediatype=mediatype, collection=collection,
+            rows=max(count * 4, 20),
         )
     except (urllib.error.URLError, ValueError, TimeoutError) as exc:
         result.ok = False

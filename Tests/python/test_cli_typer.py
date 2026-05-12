@@ -623,6 +623,32 @@ class TyperCliSmokeTests(unittest.TestCase):
     # gen archive-org fetch (v1.10.s28)
     # ----------------------------------------------------------------- #
 
+    def test_archive_org_fetch_collection_threads_through(self) -> None:
+        """v1.20.s140: --collection flag flows to runner kwargs."""
+        from unittest.mock import patch
+        from assetboy.execution.archive_org_runner import ArchiveOrgResult
+        import tempfile
+        captured: dict = {}
+
+        def capture(**kwargs):
+            captured.update(kwargs)
+            return ArchiveOrgResult(
+                pack_id="x", query="q", output_dir=Path(tempfile.gettempdir()),
+                items_matched=0, ok=True, error="no_matches",
+            )
+
+        with patch(
+            "assetboy.execution.archive_org_runner.run_archive_org_batch",
+            side_effect=capture,
+        ):
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "archive-org", "fetch", "--query", "q",
+                 "--collection", "prelinger", "--dry-run"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(captured.get("collection"), "prelinger")
+
     def test_archive_org_fetch_help_renders(self) -> None:
         result = self.runner.invoke(
             self.app, ["gen", "archive-org", "fetch", "--help"]
