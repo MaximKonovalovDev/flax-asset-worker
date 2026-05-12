@@ -565,6 +565,40 @@ class TyperCliSmokeTests(unittest.TestCase):
     # gen met-museum fetch (v1.10.s26)
     # ----------------------------------------------------------------- #
 
+    def test_met_museum_departments_json_shape(self) -> None:
+        """v1.23.s158: gen met-museum departments --json hits /departments."""
+        from unittest.mock import patch
+        fake_payload = [
+            {"departmentId": 11, "displayName": "European Paintings"},
+            {"departmentId": 13, "displayName": "Greek and Roman Art"},
+        ]
+        with patch(
+            "assetboy.execution.met_museum_runner.list_met_departments",
+            return_value=fake_payload,
+        ):
+            result = self.runner.invoke(
+                self.app, ["gen", "met-museum", "departments", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["count"], 2)
+        self.assertEqual(data["departments"][0]["departmentId"], 11)
+
+    def test_met_museum_departments_text_renders(self) -> None:
+        from unittest.mock import patch
+        fake_payload = [{"departmentId": 6, "displayName": "Asian Art"}]
+        with patch(
+            "assetboy.execution.met_museum_runner.list_met_departments",
+            return_value=fake_payload,
+        ):
+            result = self.runner.invoke(
+                self.app, ["gen", "met-museum", "departments"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("gen_met_museum_departments_count=1", result.stdout)
+        self.assertIn("Asian Art", result.stdout)
+
     def test_met_museum_fetch_help_renders(self) -> None:
         result = self.runner.invoke(
             self.app, ["gen", "met-museum", "fetch", "--help"]

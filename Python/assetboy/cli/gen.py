@@ -784,6 +784,40 @@ def comfy_submit_workflow_cmd(
 # gen met-museum fetch  (v1.10.s26)
 # --------------------------------------------------------------------------- #
 
+@met_app.command("departments")
+def met_departments_cmd(
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """List all Met Museum departments (v1.23.s158).
+
+    Helpful for picking a --department id for fetch.
+    Common: 11=European Paintings, 13=Greek/Roman, 6=Asian, 9=Drawings/Prints.
+    """
+    from assetboy.execution.met_museum_runner import list_met_departments
+
+    try:
+        depts = list_met_departments()
+    except Exception as exc:
+        msg = f"met_departments_failed: {exc}"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_met_museum_departments_error={msg}")
+        raise typer.Exit(code=1)
+
+    if json_out:
+        json.dump({"departments": depts, "count": len(depts)},
+                  sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"gen_met_museum_departments_count={len(depts)}")
+        for d in depts:
+            did = d.get("departmentId")
+            name = d.get("displayName", "")
+            print(f"  {did:>3}  {name}")
+
+
 @met_app.command("fetch")
 def met_fetch_cmd(
     query: Annotated[

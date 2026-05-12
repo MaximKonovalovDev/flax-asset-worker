@@ -915,3 +915,32 @@ All v1.21+ s144..s148 SHIPPED. Five fresh ideas:
   (shipped); v1.21+ pending milestone after s149-s153**.
 
 Ship order: s150, s151, s152, s153, s154.
+
+---
+
+## v1.23+ backlog (added 2026-05-12, s156)
+
+All v1.22+ s151..s153 SHIPPED (s150 history-tail and s154 milestone moved
+in/out). Five fresh ideas:
+
+- **s157 — `gen all-no-key --history-tail <N>`**: read last N
+  history snapshots from state/r1a_history/all_no_key_*.json and
+  emit per-provider rolling stats (avg matched, avg downloaded, ok-rate).
+  Single CLI command for "what's my scout trend looking like?"
+
+- **s158 — Met Museum `--department-list` discovery command**: hit
+  `/departments` to list all 17 Met departments with their IDs.
+  Operator can browse before passing --department to fetch.
+
+- **s159 — `pack manifest-stats --top <N>`**: when many providers
+  are present, sort by total_bytes desc and show only top N rows.
+  Useful for "what's hogging my disk?".
+
+- **s160 — recipe schema `created_utc` / `updated_utc` metadata**:
+  optional ISO 8601 timestamps. Validator accepts; pack list-recipes
+  shows them as extras when present.
+
+- **s161 — milestone v1.22-WAVE-COMPLETE already shipped (s154
+  combined); v1.23-WAVE-COMPLETE after s157-s160 ship**.
+
+Ship order: s157, s158, s159, s160, s161.

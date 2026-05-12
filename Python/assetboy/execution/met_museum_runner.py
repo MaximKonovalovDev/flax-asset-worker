@@ -117,6 +117,16 @@ def fetch_met_object(object_id: int, *, timeout: float = 15.0) -> dict:
     return _get_json(url, timeout=timeout)
 
 
+def list_met_departments(*, timeout: float = 15.0) -> list[dict]:
+    """v1.23.s158 — list Met departments via /departments.
+
+    Returns: list of {departmentId, displayName} dicts (Met's native shape).
+    """
+    url = f"{MET_API_BASE}/departments"
+    payload = _get_json(url, timeout=timeout)
+    return list(payload.get("departments", []))
+
+
 def run_met_museum_batch(
     *,
     query: str,
@@ -278,5 +288,6 @@ __all__ = [
     "MetMuseumResult",
     "search_met_object_ids",
     "fetch_met_object",
+    "list_met_departments",
     "run_met_museum_batch",
 ]
