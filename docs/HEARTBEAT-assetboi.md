@@ -1,6 +1,6 @@
 # HEARTBEAT — assetboi (operator hibernation read-back)
 
-> **Last update:** 2026-05-12 (continuous loop, **219 commits + 161 tags shipped this run**, origin verified; **817 tests**; latest tag v1.21.2-jamendo-instrument)
+> **Last update:** 2026-05-12 (continuous loop, **203 commits + 171 tags shipped this run** (origin), **823 tests**; latest tag v1.22.2-scryfall-set)
 > **Repo:** `flax-asset-worker` (this repo; assetboi commits freely here)
 > **Loop status:** **NEVER-STOP ACTIVE** per BOSS Rule 3
 
