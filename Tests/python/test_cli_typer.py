@@ -3208,6 +3208,44 @@ class TyperCliSmokeTests(unittest.TestCase):
             self.assertFalse((lib / "iconify" / "DRY" / "x.jpg").exists())
             self.assertFalse((lib / "asset_library.json").exists())
 
+    def test_library_install_r1a_pack_dedups_on_second_run(self) -> None:
+        """v1.22.s152: re-running install on same manifest dedups by file_path."""
+        import tempfile, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            src = tmp_p / "asset.png"
+            src.write_bytes(b"data")
+            mf = tmp_p / "manifest.json"
+            mf.write_text(_json.dumps({
+                "source": "iconify", "pack_id": "DEDUP",
+                "entries": [{"icon_id": "x", "local_path": str(src),
+                             "downloaded": True}],
+            }), encoding="utf-8")
+            lib = tmp_p / "Library"
+            # First install — writes 1 row.
+            r1 = self.runner.invoke(
+                self.app,
+                ["library", "install-r1a-pack", str(mf),
+                 "--library-root", str(lib), "--json"],
+            )
+            self.assertEqual(r1.exit_code, 0)
+            d1 = _json.loads(r1.stdout.strip())
+            self.assertEqual(d1["installed"], 1)
+            self.assertEqual(d1.get("deduplicated", 0), 0)
+            # Second install — dedups (file_path already in asset_library).
+            r2 = self.runner.invoke(
+                self.app,
+                ["library", "install-r1a-pack", str(mf),
+                 "--library-root", str(lib), "--json"],
+            )
+            self.assertEqual(r2.exit_code, 0)
+            d2 = _json.loads(r2.stdout.strip())
+            self.assertEqual(d2["installed"], 1)
+            self.assertEqual(d2.get("deduplicated", 0), 1)
+            # asset_library.json should have exactly 1 row, not 2.
+            rows = _json.loads((lib / "asset_library.json").read_text(encoding="utf-8"))
+            self.assertEqual(len(rows), 1)
+
     def test_library_install_r1a_pack_persists_to_library(self) -> None:
         """Verify file actually copied + asset_library.json updated."""
         import tempfile, json as _json

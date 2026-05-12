@@ -1165,6 +1165,7 @@ def _install_one_manifest(
         except Exception as exc:
             skipped.append({"reason": f"copy_failed: {exc}", "path": local})
 
+    deduplicated = 0  # v1.22.s152
     if not dry_run and installed:
         existing: list[dict] = []
         if asset_lib_file.exists():
@@ -1174,7 +1175,21 @@ def _install_one_manifest(
                 existing = []
         if not isinstance(existing, list):
             existing = []
-        existing.extend(installed)
+        # v1.22.s152 — dedup by file_path. Skip any installed row whose
+        # file_path already appears in existing.
+        seen_paths = {
+            str(r.get("file_path", "")) for r in existing
+            if isinstance(r, dict)
+        }
+        new_rows = []
+        for r in installed:
+            fp = str(r.get("file_path", ""))
+            if fp and fp in seen_paths:
+                deduplicated += 1
+                continue
+            new_rows.append(r)
+            seen_paths.add(fp)
+        existing.extend(new_rows)
         asset_lib_file.parent.mkdir(parents=True, exist_ok=True)
         asset_lib_file.write_text(
             json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -1182,6 +1197,7 @@ def _install_one_manifest(
 
     return {
         "ok": True,
+        "deduplicated": deduplicated,
         "manifest_path": str(manifest_path),
         "source": source,
         "pack_id": pack_id,
@@ -1457,7 +1473,8 @@ def install_r1a_pack_cmd(
         except Exception as exc:
             skipped.append({"reason": f"copy_failed: {exc}", "path": local})
 
-    # Register installed assets in asset_library.json (additive).
+    # Register installed assets in asset_library.json (additive + dedup).
+    dedup_legacy = 0  # v1.22.s152
     if not dry_run and installed:
         existing: list[dict] = []
         if asset_lib_file.exists():
@@ -1467,7 +1484,19 @@ def install_r1a_pack_cmd(
                 existing = []
         if not isinstance(existing, list):
             existing = []
-        existing.extend(installed)
+        seen_paths = {
+            str(r.get("file_path", "")) for r in existing
+            if isinstance(r, dict)
+        }
+        new_rows = []
+        for r in installed:
+            fp = str(r.get("file_path", ""))
+            if fp and fp in seen_paths:
+                dedup_legacy += 1
+                continue
+            new_rows.append(r)
+            seen_paths.add(fp)
+        existing.extend(new_rows)
         asset_lib_file.parent.mkdir(parents=True, exist_ok=True)
         asset_lib_file.write_text(
             json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -1475,6 +1504,7 @@ def install_r1a_pack_cmd(
 
     summary = {
         "ok": True,
+        "deduplicated": dedup_legacy,
         "manifest_path": str(manifest_path),
         "source": source,
         "pack_id": pack_id,
