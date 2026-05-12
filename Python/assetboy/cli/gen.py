@@ -1242,6 +1242,98 @@ def scryfall_fetch_cmd(
 # gen iconify fetch  (v1.10.s30)
 # --------------------------------------------------------------------------- #
 
+@iconify_app.command("list-sets")
+def iconify_list_sets_cmd(
+    accepted_only: Annotated[
+        bool,
+        typer.Option(
+            "--accepted-only",
+            help="Show only sets whose SPDX license is in our open-source allowlist.",
+        ),
+    ] = False,
+    limit: Annotated[
+        int,
+        typer.Option("--limit", help="Max sets to show in plain output (default 50)."),
+    ] = 50,
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Browse Iconify icon sets with license info (Path B v1.15.s111).
+
+    Hits /collections and shows prefix, name, SPDX license, sample category.
+
+    Examples:
+      assetboy gen iconify list-sets
+      assetboy gen iconify list-sets --accepted-only --limit 20
+      assetboy gen iconify list-sets --json
+    """
+    from assetboy.execution.iconify_runner import (
+        fetch_iconify_collections, is_license_accepted,
+    )
+
+    try:
+        collections = fetch_iconify_collections()
+    except Exception as exc:
+        msg = f"iconify_collections_fetch_failed: {exc}"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_iconify_list_sets_error={msg}")
+        raise typer.Exit(code=1)
+
+    if not isinstance(collections, dict):
+        msg = "iconify_collections_unexpected_shape"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_iconify_list_sets_error={msg}")
+        raise typer.Exit(code=1)
+
+    rows: list[dict] = []
+    for prefix, meta in collections.items():
+        if not isinstance(meta, dict):
+            continue
+        license_meta = meta.get("license") or {}
+        spdx = str(license_meta.get("spdx", "") or "")
+        title = str(license_meta.get("title", "") or "")
+        accepted = is_license_accepted(spdx) if spdx else False
+        if accepted_only and not accepted:
+            continue
+        rows.append({
+            "prefix": prefix,
+            "name": str(meta.get("name", "") or ""),
+            "category": str(meta.get("category", "") or ""),
+            "total": int(meta.get("total", 0) or 0),
+            "license_spdx": spdx,
+            "license_title": title,
+            "license_accepted": accepted,
+        })
+
+    rows.sort(key=lambda r: r["prefix"])
+
+    summary = {
+        "total_sets": len(rows),
+        "accepted_only_filter": accepted_only,
+        "sets": rows,
+    }
+
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"gen_iconify_list_sets_total={len(rows)}")
+        print(f"gen_iconify_list_sets_accepted_only={accepted_only}")
+        for r in rows[:limit]:
+            mark = "+" if r["license_accepted"] else "-"
+            print(
+                f"  [{mark}] {r['prefix']:24s} {r['name']:50s} "
+                f"icons={r['total']:>5d}  spdx={r['license_spdx']}"
+            )
+        if len(rows) > limit:
+            print(f"  ... and {len(rows) - limit} more (use --limit or --json)")
+
+
 @iconify_app.command("fetch")
 def iconify_fetch_cmd(
     query: Annotated[

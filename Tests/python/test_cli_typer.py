@@ -652,6 +652,79 @@ class TyperCliSmokeTests(unittest.TestCase):
     # gen iconify fetch (v1.10.s30)
     # ----------------------------------------------------------------- #
 
+    def test_iconify_list_sets_help_renders(self) -> None:
+        result = self.runner.invoke(self.app, ["gen", "iconify", "list-sets", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Iconify", result.stdout)
+        self.assertIn("Browse", result.stdout)
+
+    def test_iconify_list_sets_with_mocked_collections(self) -> None:
+        """Mock fetch_iconify_collections; verify accepted-only filter + JSON shape."""
+        from unittest.mock import patch
+        fake_collections = {
+            "mdi": {
+                "name": "Material Design Icons",
+                "category": "General",
+                "total": 7000,
+                "license": {"spdx": "Apache-2.0", "title": "Apache 2.0", "url": ""},
+            },
+            "proprietary-set": {
+                "name": "Proprietary",
+                "category": "Brands",
+                "total": 100,
+                "license": {"spdx": "Proprietary", "title": "Restricted", "url": ""},
+            },
+            "game-icons": {
+                "name": "Game Icons",
+                "category": "Games",
+                "total": 4000,
+                "license": {"spdx": "CC-BY-4.0", "title": "CC BY 4.0", "url": ""},
+            },
+        }
+        with patch(
+            "assetboy.execution.iconify_runner.fetch_iconify_collections",
+            return_value=fake_collections,
+        ):
+            result = self.runner.invoke(
+                self.app, ["gen", "iconify", "list-sets", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["total_sets"], 3)
+        # Verify per-row shape.
+        prefixes = {r["prefix"] for r in data["sets"]}
+        self.assertEqual(prefixes, {"mdi", "proprietary-set", "game-icons"})
+        # mdi (Apache) accepted, proprietary not, game-icons (CC-BY) accepted.
+        by_prefix = {r["prefix"]: r["license_accepted"] for r in data["sets"]}
+        self.assertTrue(by_prefix["mdi"])
+        self.assertFalse(by_prefix["proprietary-set"])
+        self.assertTrue(by_prefix["game-icons"])
+
+    def test_iconify_list_sets_accepted_only_filters(self) -> None:
+        """--accepted-only excludes proprietary entries."""
+        from unittest.mock import patch
+        fake = {
+            "ok": {"name": "OK", "total": 10,
+                   "license": {"spdx": "MIT"}},
+            "bad": {"name": "Bad", "total": 5,
+                    "license": {"spdx": "Proprietary"}},
+        }
+        with patch(
+            "assetboy.execution.iconify_runner.fetch_iconify_collections",
+            return_value=fake,
+        ):
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "iconify", "list-sets", "--accepted-only", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["total_sets"], 1)
+        self.assertEqual(data["sets"][0]["prefix"], "ok")
+        self.assertTrue(data["accepted_only_filter"])
+
     def test_iconify_fetch_help_renders(self) -> None:
         result = self.runner.invoke(
             self.app, ["gen", "iconify", "fetch", "--help"]
