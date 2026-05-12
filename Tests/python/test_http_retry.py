@@ -247,5 +247,55 @@ class PoliteSleepOverrideTests(unittest.TestCase):
             self.assertEqual(self.fn(0.3), 0.3)
 
 
+class PoliteSleepIntegrationTests(unittest.TestCase):
+    """v1.16.s114: verify FAW_POLITE_SLEEP_S env override flows into runners."""
+
+    def test_met_museum_uses_polite_sleep_override(self) -> None:
+        """When env set to 0.0, met_museum runner should not actually sleep."""
+        import os, tempfile, json
+        from pathlib import Path
+        from unittest.mock import patch
+        from assetboy.execution import met_museum_runner as m
+
+        class FakeResp:
+            def __init__(self, p): self._p = p
+            def __enter__(self): return self
+            def __exit__(self, *a): return None
+            def read(self): return self._p
+
+        search = FakeResp(json.dumps({
+            "total": 2, "objectIDs": [1, 2],
+        }).encode())
+        obj_pd = FakeResp(json.dumps({
+            "objectID": 1, "isPublicDomain": True,
+            "primaryImage": "https://x/1.jpg",
+            "title": "T", "artistDisplayName": "",
+            "objectDate": "", "medium": "", "classification": "",
+            "department": "", "objectURL": "",
+        }).encode())
+        img = FakeResp(b"png-bytes")
+        responses = iter([search, obj_pd, img, obj_pd, img])
+
+        sleep_calls: list[float] = []
+        def fake_sleep(s):
+            sleep_calls.append(s)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(os.environ, {"FAW_POLITE_SLEEP_S": "0.0"}):
+                with patch.object(
+                    m.urllib.request, "urlopen",
+                    side_effect=lambda *a, **kw: next(responses),
+                ):
+                    with patch.object(m.time, "sleep", side_effect=fake_sleep):
+                        m.run_met_museum_batch(
+                            query="x", pack_id="P", count=2,
+                            output_dir=Path(tmp),
+                            polite_sleep_s=0.5,  # default would sleep 0.5s
+                        )
+        # All sleep calls (if any) should have value 0.0 (override).
+        for s in sleep_calls:
+            self.assertEqual(s, 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()

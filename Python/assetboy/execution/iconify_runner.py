@@ -282,7 +282,8 @@ def run_iconify_batch(
             result.icons_failed += 1
 
         if polite_sleep_s > 0:
-            time.sleep(polite_sleep_s)
+            from assetboy.execution._http_retry import get_polite_sleep_s
+            time.sleep(get_polite_sleep_s(polite_sleep_s))
 
     manifest = {
         "source": "iconify",

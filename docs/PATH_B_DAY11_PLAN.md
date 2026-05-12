@@ -714,3 +714,35 @@ All v1.14+ s102..s106 SHIPPED. Five fresh ideas:
   notes refresh once s108..s111 ship.
 
 Ship order: s108, s109, s110, s111, s112.
+
+---
+
+## v1.16+ backlog (added 2026-05-12, s113)
+
+All v1.15+ s108..s111 + s112 milestone SHIPPED. Five fresh ideas:
+
+- **s114 — apply FAW_POLITE_SLEEP_S sweep to all 12 R1A runners**:
+  v1.15.s110 shipped the helper; now wire `get_polite_sleep_s(...)`
+  into each runner's existing `time.sleep(polite_sleep_s)` call.
+  Touches 12 files lightly; one slice with peer-opus delegation if
+  it grows.
+
+- **s115 — `gen all-no-key --write-history` enriched manifest**:
+  include parallel flag, wall time, and command line that produced
+  each snapshot. Useful for reproducibility.
+
+- **s116 — `pack manifest-stats --history`**: a dual mode that
+  reads `state/r1a_history/*.json` snapshots instead of disk
+  manifests. Operator sees "what scouts ran across providers
+  over time" rather than "what files are on disk now".
+
+- **s117 — Iconify icon-set badge in fetch output**: when an icon
+  is downloaded, the manifest entry already has its SPDX. Surface
+  `attribution_required` per icon in stdout output of `gen iconify
+  fetch` (currently only manifest captures it).
+
+- **s118 — `library r1a-status --html --open`**: convenience flag
+  that calls `os.startfile()` on Windows / `open` on macOS to
+  auto-open the generated HTML in the system browser.
+
+Ship order: s114, s115, s116, s117, s118.
