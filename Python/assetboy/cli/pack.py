@@ -67,6 +67,17 @@ def list_recipes_cmd(
             ),
         ),
     ] = None,
+    sort: Annotated[
+        str,
+        typer.Option(
+            "--sort",
+            help=(
+                "v1.14.s105: sort recipes by 'tier' (most-critical-first;"
+                " min pack tier across recipe; recipes with no tiered packs"
+                " sort last) or 'path' (default: directory order)."
+            ),
+        ),
+    ] = "path",
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -162,6 +173,15 @@ def list_recipes_cmd(
                     "recipe_id": rid,
                     "pack_count": pack_count,
                 }
+                # v1.14.s105 — compute min_tier across packs for --sort tier.
+                tier_values = []
+                for pp in (doc.get("packs") or []):
+                    if isinstance(pp, dict):
+                        t = pp.get("tier")
+                        if isinstance(t, int) and not isinstance(t, bool):
+                            tier_values.append(t)
+                if tier_values:
+                    entry_data["min_tier"] = min(tier_values)
                 for meta_key in ("genre", "theme", "style", "tags"):
                     if meta_key in recipe:
                         entry_data[meta_key] = recipe[meta_key]
@@ -178,11 +198,27 @@ def list_recipes_cmd(
                     "pack_count": -1,
                 })
 
+    # v1.14.s105 — apply --sort.
+    sort_norm = sort.strip().lower()
+    if sort_norm == "tier":
+        # Recipes with no min_tier sort last (treat as +inf).
+        entries.sort(key=lambda e: (e.get("min_tier") is None, e.get("min_tier", 999), e["path"]))
+    elif sort_norm not in ("", "path"):
+        # Unknown sort key -> error.
+        msg = f"unknown_sort_key: {sort_norm!r} (valid: 'path', 'tier')"
+        if json_out:
+            json.dump({"error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_list_recipes_error={msg}")
+        raise typer.Exit(code=1)
+
     if json_out:
         out = {
             "recipes": entries,
             "count": len(entries),
             "filters_applied": [f"{fn}:{fv}" for fn, fv in parsed_filters],
+            "sort": sort_norm or "path",
         }
         json.dump(out, sys.stdout, indent=2)
         sys.stdout.write("\n")
@@ -190,6 +226,8 @@ def list_recipes_cmd(
         print(f"pack_list_recipes_count={len(entries)}")
         if parsed_filters:
             print(f"pack_list_recipes_filters={','.join(f'{fn}:{fv}' for fn, fv in parsed_filters)}")
+        if sort_norm and sort_norm != "path":
+            print(f"pack_list_recipes_sort={sort_norm}")
         for idx, e in enumerate(entries, start=1):
             extras: list[str] = []
             for k in ("genre", "theme", "style", "tags"):

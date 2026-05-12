@@ -187,6 +187,32 @@ class TyperCliSmokeTests(unittest.TestCase):
         # No recipe matches a non-int threshold.
         self.assertEqual(data["count"], 0)
 
+    def test_pack_list_recipes_sort_tier_default_path(self) -> None:
+        """v1.14.s105: --sort tier reorders entries; default is path."""
+        result = self.runner.invoke(
+            self.app, ["pack", "list-recipes", "--sort", "tier", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout)
+        self.assertEqual(data["sort"], "tier")
+
+    def test_pack_list_recipes_sort_default_is_path(self) -> None:
+        result = self.runner.invoke(
+            self.app, ["pack", "list-recipes", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout)
+        self.assertEqual(data["sort"], "path")
+
+    def test_pack_list_recipes_sort_unknown_exits_1(self) -> None:
+        result = self.runner.invoke(
+            self.app, ["pack", "list-recipes", "--sort", "popularity"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("unknown_sort_key", result.stdout)
+
     def test_pack_list_recipes_json_with_filter_round_trip(self) -> None:
         """v1.11.s57: --json + --filter combo emits filtered list + filters_applied."""
         result = self.runner.invoke(
