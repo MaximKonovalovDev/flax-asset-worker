@@ -858,3 +858,32 @@ All v1.19+ s132..s136 SHIPPED. 800-test milestone hit. Five fresh ideas:
   it's currently frozen at the R1A wave milestone.
 
 Ship order: s138, s139, s140, s141, s142.
+
+---
+
+## v1.21+ backlog (added 2026-05-12, s143)
+
+All v1.20+ s138, s140, s141, s142 SHIPPED (s139 per-pack pipeline_log
+moved here). Five fresh ideas:
+
+- **s144 — per-pack `pipeline_log` field**: each pack ledger gains
+  a `pipeline_log` list of {stage, status, ts_utc} entries traversed
+  during from-recipe. Surfaces in `pack status` + `pack audit`.
+
+- **s145 — `gen all-no-key --provider <id>,<id>` filter**: narrow
+  fan-out to a subset of providers (e.g. `--provider met_museum,iconify`
+  hits only those two instead of all 6).
+
+- **s146 — Jamendo `--instrument <name>`**: Jamendo API has tags.instruments
+  filter natively; exposes guitar-only, piano-only etc. searches.
+
+- **s147 — pack from-recipe `--provider-only <id>`**: like the
+  manifest-level `--only <pack>` but at provider scope. Run only
+  the iconify packs in a recipe; skip the rest.
+
+- **s148 — `pack rerun-failed --recipe <yaml>` honors expected_min
+  + min_required_passes too**: bring the v1.18/v1.20 fields into the
+  rerun pipeline so an operator can rerun after partial success and
+  see whether they've now met the threshold.
+
+Ship order: s144, s145, s146, s147, s148.

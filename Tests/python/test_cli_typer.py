@@ -338,6 +338,37 @@ class TyperCliSmokeTests(unittest.TestCase):
         "      - asset_id: test_asset\n"
     )
 
+    def test_pack_from_recipe_includes_pipeline_log(self) -> None:
+        """v1.21.s144: each ledger has pipeline_log with stage/status/ts_utc entries."""
+        inline = (
+            "recipe:\n"
+            "  id: pl_test\n"
+            "  game: sandbox\n"
+            "packs:\n"
+            "  - id: P_PL\n"
+            "    provider: unknown_provider\n"
+            "    acquisition_method: direct_url\n"
+            "    assets:\n"
+            "      - asset_id: x\n"
+        )
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "from-recipe", "--inline-yaml", inline,
+             "--dry-run", "--json"],
+        )
+        import json as _json
+        data = _json.loads(result.stdout)
+        self.assertEqual(data["total_packs"], 1)
+        ledger = data["results"][0]
+        self.assertIn("pipeline_log", ledger)
+        log = ledger["pipeline_log"]
+        self.assertIsInstance(log, list)
+        self.assertGreater(len(log), 0)
+        # Each entry has stage/status/ts_utc keys.
+        for entry in log:
+            for k in ("stage", "status", "ts_utc"):
+                self.assertIn(k, entry)
+
     def test_pack_from_recipe_min_required_passes_emits_check(self) -> None:
         """v1.20.s141: when recipe has min_required_passes, output includes check."""
         inline = (

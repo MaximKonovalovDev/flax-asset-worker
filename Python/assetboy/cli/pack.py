@@ -298,9 +298,22 @@ def _acquire_and_run_one_pack(
     recipe_meta = recipe_doc.get("recipe") or {}
     game_scope = recipe_meta.get("game", "unknown")
 
+    # v1.21.s144 — pipeline_log records the stages this pack traversed.
+    from datetime import datetime, timezone
+    pipeline_log: list[dict] = []
+
+    def _log(stage: str, status: str) -> None:
+        pipeline_log.append({
+            "stage": stage,
+            "status": status,
+            "ts_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        })
+
+    _log("acquire_start", "running")
     acq = acquire_source_dir(pack, recipe_doc, dry_run=dry_run)
 
     if not acq.ok and not acq.awaiting_manual:
+        _log("acquire", "failed")
         return {
             "status": "failed",
             "current_state": "acquisition_failed",
@@ -308,8 +321,10 @@ def _acquire_and_run_one_pack(
             "error": acq.error,
             "method": acq.method,
             "provider": acq.provider,
+            "pipeline_log": pipeline_log,
         }
     if acq.awaiting_manual:
+        _log("acquire", "awaiting_manual_drop")
         return {
             "status": "pending_manual_drop",
             "current_state": "awaiting_manual_browser_drop",
@@ -317,7 +332,9 @@ def _acquire_and_run_one_pack(
             "method": acq.method,
             "provider": acq.provider,
             "drop_dir": str(acq.source_dir) if acq.source_dir else "",
+            "pipeline_log": pipeline_log,
         }
+    _log("acquire", "ok")
 
     # Acquisition green — hand source_dir to pack_pipeline
     ctx = PipelineContext(
@@ -331,10 +348,24 @@ def _acquire_and_run_one_pack(
         dry_run=dry_run,
         resume=resume,
     )
+    _log("pipeline_dispatch", "running")
     try:
-        return execute_prepare_pack_dispatched(ctx)
+        ledger = execute_prepare_pack_dispatched(ctx)
+        _log("pipeline_dispatch", str(ledger.get("status", "unknown")))
+        # Merge pipeline_log into returned ledger (don't clobber if pipeline
+        # added its own).
+        existing_log = ledger.get("pipeline_log") or []
+        if isinstance(existing_log, list):
+            ledger["pipeline_log"] = pipeline_log + existing_log
+        else:
+            ledger["pipeline_log"] = pipeline_log
+        return ledger
     except Exception as exc:
-        return {"status": "failed", "current_state": "failed", "error": str(exc)}
+        _log("pipeline_dispatch", f"crashed: {exc}")
+        return {
+            "status": "failed", "current_state": "failed",
+            "error": str(exc), "pipeline_log": pipeline_log,
+        }
 
 
 # --------------------------------------------------------------------------- #
@@ -563,6 +594,8 @@ def from_recipe_cmd(
                 "error": ledger.get("error"),
                 "method": ledger.get("method", ""),  # populated by acquisition router
                 "provider": ledger.get("provider", ""),
+                # v1.21.s144 — propagate pipeline_log for triage.
+                "pipeline_log": ledger.get("pipeline_log", []),
             }
         )
 
