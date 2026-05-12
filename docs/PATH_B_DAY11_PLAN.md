@@ -583,3 +583,38 @@ Future assetboi turns reading this doc:
    for a single batched fix-plan first.
 
 (End of document — 2026-05-10.)
+
+---
+
+## v1.13+ backlog (added 2026-05-12, s89)
+
+Five fresh slice ideas for the next round of the never-stop loop:
+
+- **s90 — `library r1a-status` ASCII bar chart**: when run with `--bars`,
+  render a per-provider downloaded-bytes ASCII bar so operator sees
+  proportional disk usage across providers in one glance.
+
+- **s91 — Open Library API integration**: openlibrary.org has a public
+  JSON API for ~30M books with cover images (CC0-licensed metadata,
+  cover images mostly fair-use thumbnails). Useful for bookshelf
+  reference plates / RPG library scenes. No API key. Mirror the
+  inaturalist pattern.
+
+- **s92 — `pack manifest-stats --since <iso8601>`** filter: limit
+  aggregation to manifests with mtime newer than the supplied
+  timestamp. Operator can ask "how much did I scout this week?".
+
+- **s93 — recipe pack `tier` field**: optional pack-level int in
+  {0, 1, 2, 3} mapping to P0/P1/P2/P3 priority. Validator accepts
+  it; `pack list-recipes --filter tier:0` finds critical-only packs.
+  Auto-fix tags packs without tier as `tier: 2` default.
+
+- **s94 — `gen scout-by-license <license>`**: query all configured
+  providers but only those whose license string contains the requested
+  token (e.g. `cc0` returns Met + Pixabay + Iconify-CC0-sets +
+  iNaturalist-CC0-subset). Wraps gen list-providers + per-provider
+  fetch with a license filter on the result. Single-line operator
+  command for "I need strictly CC0 images for shipping art."
+
+Ship order: s90, s91, s92, s93, s94. Each per Rule 2 (max 2 edits
+per file). Maintain green tests + tag per slice.
