@@ -731,3 +731,59 @@ def test_probe_result_serializes_cleanly(canary):
     assert d == {"ok": True, "ms": 42, "notes": "hello", "error": None}
     # Round-trips through JSON
     assert json.loads(json.dumps(d)) == d
+
+
+# --------------------------------------------------------------------------- #
+# v1.14.s104 — R1A rotation probe
+# --------------------------------------------------------------------------- #
+
+def test_r1a_rotation_index_is_in_range(canary):
+    """Rotation index always in [0, 6)."""
+    idx = canary._r1a_index_for_today()
+    assert 0 <= idx < len(canary._R1A_ROTATION)
+
+
+def test_r1a_rotation_probe_returns_ok_with_mocked_results(canary, monkeypatch):
+    """Mock the rotation target's search fn -> ok=True with results count in notes."""
+    from unittest.mock import patch
+    # Force idx=0 (met_museum).
+    monkeypatch.setattr(canary, "_r1a_index_for_today", lambda: 0)
+    with patch(
+        "assetboy.execution.met_museum_runner.search_met_object_ids",
+        return_value=[1, 2, 3, 4, 5],
+    ):
+        r = canary.probe_r1a_rotation()
+    assert r.ok
+    assert "met_museum" in r.notes
+    assert "5 results" in r.notes
+
+
+def test_r1a_rotation_probe_handles_exception(canary, monkeypatch):
+    """When the rotation target raises, probe returns ok=False with error."""
+    from unittest.mock import patch
+    monkeypatch.setattr(canary, "_r1a_index_for_today", lambda: 4)  # iconify
+    with patch(
+        "assetboy.execution.iconify_runner.search_iconify_icons",
+        side_effect=RuntimeError("boom"),
+    ):
+        r = canary.probe_r1a_rotation()
+    assert not r.ok
+    assert "iconify" in (r.error or "")
+
+
+def test_r1a_rotation_probe_empty_result_still_ok(canary, monkeypatch):
+    """Zero results == API up but query empty == ok=True with note."""
+    from unittest.mock import patch
+    monkeypatch.setattr(canary, "_r1a_index_for_today", lambda: 1)  # wikimedia
+    with patch(
+        "assetboy.execution.wikimedia_runner.search_wikimedia_files",
+        return_value=[],
+    ):
+        r = canary.probe_r1a_rotation()
+    assert r.ok
+    assert "0 results" in r.notes
+
+
+def test_r1a_rotation_registered_in_probes(canary):
+    """PROBES dict includes r1a_rotation key."""
+    assert "r1a_rotation" in canary.PROBES

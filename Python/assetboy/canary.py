@@ -315,6 +315,59 @@ def probe_comfyui() -> ProbeResult:
     )
 
 
+# v1.14.s104 — R1A no-key provider rotation. One provider sampled per
+# canary run, cycling through the 6 no-key R1A providers by day-of-year
+# mod 6. Keeps R1A health visible without 6 simultaneous probes.
+_R1A_ROTATION = [
+    ("met_museum", "vermeer", "met_museum_runner", "search_met_object_ids", {"has_images": True}),
+    ("wikimedia", "stone wall", "wikimedia_runner", "search_wikimedia_files", {"limit": 2}),
+    ("archive_org", "subject:roman", "archive_org_runner", "search_archive_items", {"rows": 2}),
+    ("scryfall", "type:dragon", "scryfall_runner", "search_scryfall_cards", {}),
+    ("iconify", "sword", "iconify_runner", "search_iconify_icons", {"limit": 2}),
+    ("inaturalist", "oak tree", "inaturalist_runner", "search_inaturalist_observations", {"per_page": 2}),
+]
+
+
+def _r1a_index_for_today() -> int:
+    """Pick rotation index based on date.today().toordinal() mod 6."""
+    import datetime
+    return datetime.date.today().toordinal() % len(_R1A_ROTATION)
+
+
+def probe_r1a_rotation() -> ProbeResult:
+    """Sample one R1A no-key provider per run (rotates daily).
+
+    v1.14.s104 — keeps R1A health visible in the canary report without
+    burning 6 probes per run. Provider picked from day-of-year mod 6.
+    """
+    idx = _r1a_index_for_today()
+    pid, query, runner_mod, search_fn, extra = _R1A_ROTATION[idx]
+    try:
+        mod = __import__(
+            f"assetboy.execution.{runner_mod}",
+            fromlist=[search_fn],
+        )
+        fn = getattr(mod, search_fn)
+    except (ImportError, AttributeError) as exc:
+        return ProbeResult(
+            ok=False, error=f"r1a_rotation_import_failed:{pid}: {exc}",
+        )
+    try:
+        results = fn(query, **extra)
+    except Exception as exc:
+        return ProbeResult(
+            ok=False, error=f"r1a_rotation_{pid}_failed: {exc}",
+        )
+    count = len(results) if isinstance(results, list) else 0
+    if count == 0:
+        return ProbeResult(
+            ok=True, notes=f"{pid}: 0 results (API up but query empty)",
+        )
+    return ProbeResult(
+        ok=True, notes=f"{pid}: {count} results for {query!r}",
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Probe registry + runner
 # --------------------------------------------------------------------------- #
@@ -325,6 +378,8 @@ PROBES: dict[str, Callable[[], ProbeResult]] = {
     "epic": probe_epic,
     "unity_hub": probe_unity_hub,
     "comfyui": probe_comfyui,
+    # v1.14.s104 — R1A no-key rotation (1 provider/day; rotates through 6).
+    "r1a_rotation": probe_r1a_rotation,
 }
 
 
