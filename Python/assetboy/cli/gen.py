@@ -2998,7 +2998,14 @@ def inaturalist_fetch_cmd(
 
 @openlibrary_app.command("fetch")
 def openlibrary_fetch_cmd(
-    query: Annotated[str, typer.Option("--query", "-q")],
+    query: Annotated[str, typer.Option("--query", "-q")] = "",
+    author: Annotated[
+        str,
+        typer.Option(
+            "--author",
+            help="v1.18.s128: filter by author name (uses native author= param).",
+        ),
+    ] = "",
     count: Annotated[int, typer.Option("--count", "-n")] = 6,
     size: Annotated[
         str,
@@ -3016,16 +3023,28 @@ def openlibrary_fetch_cmd(
 
     No API key. Examples:
       assetboy gen openlibrary fetch -q "alchemy" -n 6
+      assetboy gen openlibrary fetch --author "ursula k le guin" -n 10
       assetboy gen openlibrary fetch -q "subject:dragons" --size M -n 10
     """
     from assetboy.execution.openlibrary_runner import run_openlibrary_batch
 
+    if not query.strip() and not author.strip():
+        msg = "missing_query_or_author"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_openlibrary_error={msg}")
+        raise typer.Exit(code=1)
+
     out_dir_arg: Path | None = output_dir if str(output_dir) else None
     pack_id_arg: str | None = pack_id if pack_id else None
+    author_arg: str | None = author.strip() or None
 
     try:
         result = run_openlibrary_batch(
             query=query, pack_id=pack_id_arg, count=count, size=size,
+            author=author_arg,
             output_dir=out_dir_arg, dry_run=dry_run,
         )
     except Exception as exc:

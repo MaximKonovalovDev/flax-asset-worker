@@ -82,9 +82,26 @@ def _download_binary(url: str, dest: Path, *, timeout: float = 30.0) -> int:
     return len(data)
 
 
-def search_openlibrary(query: str, *, limit: int = 10, timeout: float = 20.0) -> list[dict]:
-    """Hit /search.json; return list of doc dicts."""
-    params = {"q": query, "limit": str(max(1, min(limit, 100)))}
+def search_openlibrary(
+    query: str,
+    *,
+    limit: int = 10,
+    author: str | None = None,
+    timeout: float = 20.0,
+) -> list[dict]:
+    """Hit /search.json; return list of doc dicts.
+
+    v1.18.s128: optional `author` filter uses Open Library's native
+    author= parameter instead of generic q= search.
+    """
+    params: dict[str, str] = {"limit": str(max(1, min(limit, 100)))}
+    if author and author.strip():
+        params["author"] = author.strip()
+        # q is still required by some queries; pass it through anyway.
+        if query and query.strip():
+            params["q"] = query
+    else:
+        params["q"] = query
     url = f"{OPENLIBRARY_API}/search.json?{urllib.parse.urlencode(params)}"
     payload = _get_json(url, timeout=timeout)
     return list(payload.get("docs", []))
@@ -96,6 +113,7 @@ def run_openlibrary_batch(
     pack_id: str | None = None,
     count: int = 6,
     size: str = "L",
+    author: str | None = None,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.2,
     dry_run: bool = False,
@@ -104,6 +122,7 @@ def run_openlibrary_batch(
 
     Args:
         query: free-text (title/author/subject).
+        author: v1.18.s128 — optional author filter (uses native author=).
         size: 'S' (~75px) | 'M' (~180px) | 'L' (~500px, default).
         count: max covers to download.
     """
@@ -128,7 +147,7 @@ def run_openlibrary_batch(
     )
 
     try:
-        docs = search_openlibrary(query, limit=min(count * 3, 100))
+        docs = search_openlibrary(query, limit=min(count * 3, 100), author=author)
     except urllib.error.HTTPError as exc:
         result.ok = False
         result.error = f"search_failed: HTTP {exc.code}"

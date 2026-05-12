@@ -45,6 +45,31 @@ class OpenLibrarySearchTests(unittest.TestCase):
             docs = self.mod.search_openlibrary("alchemy")
         self.assertEqual(len(docs), 2)
 
+    def test_search_with_author_uses_author_param(self) -> None:
+        """v1.18.s128: author= param appears in URL when author supplied."""
+        captured_urls: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured_urls.append(str(req.full_url))
+            return _json_response({"docs": []})
+
+        with patch.object(self.mod.urllib.request, "urlopen", side_effect=capture):
+            self.mod.search_openlibrary("", author="ursula k le guin")
+        self.assertEqual(len(captured_urls), 1)
+        self.assertIn("author=ursula", captured_urls[0])
+
+    def test_search_without_author_uses_q_param(self) -> None:
+        captured_urls: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured_urls.append(str(req.full_url))
+            return _json_response({"docs": []})
+
+        with patch.object(self.mod.urllib.request, "urlopen", side_effect=capture):
+            self.mod.search_openlibrary("alchemy")
+        self.assertIn("q=alchemy", captured_urls[0])
+        self.assertNotIn("author=", captured_urls[0])
+
 
 class OpenLibraryRunnerTests(unittest.TestCase):
     def setUp(self) -> None:

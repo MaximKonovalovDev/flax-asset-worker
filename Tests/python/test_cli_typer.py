@@ -1292,6 +1292,39 @@ class TyperCliSmokeTests(unittest.TestCase):
     # gen openlibrary fetch (v1.13.s91)
     # ----------------------------------------------------------------- #
 
+    def test_openlibrary_fetch_author_filter_threads_through(self) -> None:
+        """v1.18.s128: --author flag flows into run_openlibrary_batch kwargs."""
+        from unittest.mock import patch
+        from assetboy.execution.openlibrary_runner import OpenLibraryResult
+        import tempfile
+        captured: dict = {}
+
+        def capture(**kwargs):
+            captured.update(kwargs)
+            return OpenLibraryResult(
+                pack_id="x", query="", output_dir=Path(tempfile.gettempdir()),
+                docs_matched=0, ok=True, error="no_matches",
+            )
+
+        with patch(
+            "assetboy.execution.openlibrary_runner.run_openlibrary_batch",
+            side_effect=capture,
+        ):
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "openlibrary", "fetch",
+                 "--author", "tolkien", "--dry-run"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(captured.get("author"), "tolkien")
+
+    def test_openlibrary_fetch_missing_both_query_and_author_exits_1(self) -> None:
+        result = self.runner.invoke(
+            self.app, ["gen", "openlibrary", "fetch"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("missing_query_or_author", result.stdout)
+
     def test_openlibrary_fetch_help_renders(self) -> None:
         result = self.runner.invoke(self.app, ["gen", "openlibrary", "fetch", "--help"])
         self.assertEqual(result.exit_code, 0)
