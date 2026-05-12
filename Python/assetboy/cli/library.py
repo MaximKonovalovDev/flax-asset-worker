@@ -722,6 +722,16 @@ def r1a_status_cmd(
             ),
         ),
     ] = False,
+    csv_out: Annotated[
+        Path,
+        typer.Option(
+            "--csv",
+            help=(
+                "v1.19.s135: write per-provider rows as CSV to this path."
+                " Mutually exclusive with --html and --json."
+            ),
+        ),
+    ] = Path(""),
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -919,6 +929,42 @@ def r1a_status_cmd(
     # v1.13.s97 — HTML report (preempts both JSON and plain).
     # Note: Typer default Path("") str()-renders as ".", so check
     # for non-empty original string explicitly.
+    # v1.19.s135 — CSV export (preempts html/json/plain).
+    csv_out_str = str(csv_out)
+    if csv_out_str and csv_out_str != ".":
+        csv_path = Path(csv_out)
+        try:
+            csv_path.parent.mkdir(parents=True, exist_ok=True)
+            import csv as _csv
+            with csv_path.open("w", newline="", encoding="utf-8") as fh:
+                writer = _csv.writer(fh)
+                writer.writerow([
+                    "provider_id", "env_var", "env_set", "license",
+                    "asset_class", "manifest_source",
+                    "manifests_on_disk", "downloaded_on_disk", "bytes_on_disk",
+                    "live_ok", "live_error",
+                ])
+                for p in providers_state:
+                    writer.writerow([
+                        p.get("id", ""),
+                        p.get("env_var") or "",
+                        "" if p.get("env_set") is None else str(p["env_set"]),
+                        p.get("license", ""),
+                        p.get("asset_class", ""),
+                        p.get("manifest_source", ""),
+                        p.get("manifests_on_disk", 0),
+                        p.get("downloaded_on_disk", 0),
+                        p.get("bytes_on_disk", 0),
+                        "" if p.get("live_ok") is None else str(p["live_ok"]),
+                        p.get("live_error") or "",
+                    ])
+        except Exception as exc:
+            msg = f"csv_write_failed: {exc}"
+            print(f"library_r1a_status_error={msg}")
+            raise typer.Exit(code=1)
+        print(f"library_r1a_status_csv_path={csv_path}")
+        return
+
     html_out_str = str(html_out)
     if html_out_str and html_out_str != ".":
         html_path = Path(html_out)

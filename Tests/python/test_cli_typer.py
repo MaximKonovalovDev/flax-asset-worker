@@ -3026,6 +3026,25 @@ class TyperCliSmokeTests(unittest.TestCase):
             self.assertEqual(rows[0]["source"], "wikimedia_commons")
             self.assertIn("CC-BY-SA", rows[0]["attribution"])
 
+    def test_library_r1a_status_csv_writes_file(self) -> None:
+        """v1.19.s135: --csv writes per-provider rows as CSV; stdout shows path."""
+        import tempfile, csv as _csv
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "r1a_status.csv"
+            result = self.runner.invoke(
+                self.app, ["library", "r1a-status", "--csv", str(out)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertIn("library_r1a_status_csv_path=", result.stdout)
+            self.assertTrue(out.exists())
+            with out.open(encoding="utf-8") as fh:
+                rows = list(_csv.reader(fh))
+            # Header + 11 providers = 12 rows.
+            self.assertEqual(len(rows), 12)
+            self.assertEqual(rows[0][0], "provider_id")
+            # Check first data row has expected columns.
+            self.assertEqual(len(rows[1]), 11)
+
     def test_library_r1a_status_html_writes_file(self) -> None:
         """v1.13.s97: --html <path> writes a standalone HTML report; stdout shows path."""
         import tempfile
