@@ -840,5 +840,83 @@ class RealRecipeIntegrationTests(unittest.TestCase):
         self.assertTrue(r.ok, f"errors: {r.errors}")
 
 
+class CreatedUpdatedUtcMetadataTests(unittest.TestCase):
+    """v1.23.s160 — optional created_utc / updated_utc ISO 8601 metadata."""
+
+    def _recipe_with(self, **meta: object) -> dict:
+        doc = _ok_recipe()
+        doc["recipe"].update(meta)
+        return doc
+
+    def test_valid_iso8601_created_utc_passes(self) -> None:
+        r = validate_recipe_doc(
+            self._recipe_with(created_utc="2026-05-12T12:34:56"),
+            "ts.yaml",
+        )
+        self.assertTrue(r.ok)
+        self.assertEqual(r.errors, [])
+        # No warning for valid ISO 8601.
+        self.assertFalse(
+            any("created_utc" in w for w in r.warnings),
+            f"unexpected warnings: {r.warnings}",
+        )
+
+    def test_valid_iso8601_updated_utc_passes(self) -> None:
+        r = validate_recipe_doc(
+            self._recipe_with(updated_utc="2026-05-12"),
+            "ts.yaml",
+        )
+        self.assertTrue(r.ok)
+        self.assertFalse(any("updated_utc" in w for w in r.warnings))
+
+    def test_both_fields_valid_passes(self) -> None:
+        r = validate_recipe_doc(
+            self._recipe_with(
+                created_utc="2026-05-01T00:00:00",
+                updated_utc="2026-05-12T12:00:00",
+            ),
+            "ts.yaml",
+        )
+        self.assertTrue(r.ok)
+
+    def test_non_string_created_utc_warns_not_errors(self) -> None:
+        r = validate_recipe_doc(
+            self._recipe_with(created_utc=20260512),
+            "ts.yaml",
+        )
+        # ok remains true (warning, not error).
+        self.assertTrue(r.ok)
+        self.assertTrue(
+            any("created_utc" in w and "ISO 8601" in w for w in r.warnings),
+            f"missing warning; got: {r.warnings}",
+        )
+
+    def test_unparseable_string_warns(self) -> None:
+        r = validate_recipe_doc(
+            self._recipe_with(updated_utc="not-a-date"),
+            "ts.yaml",
+        )
+        self.assertTrue(r.ok)
+        self.assertTrue(
+            any("updated_utc" in w and "ISO 8601" in w for w in r.warnings),
+            f"missing warning; got: {r.warnings}",
+        )
+
+    def test_missing_fields_silent(self) -> None:
+        # No created/updated keys -> no warnings about them.
+        r = validate_recipe_doc(_ok_recipe(), "ts.yaml")
+        self.assertTrue(r.ok)
+        self.assertFalse(any("created_utc" in w for w in r.warnings))
+        self.assertFalse(any("updated_utc" in w for w in r.warnings))
+
+    def test_null_fields_silent(self) -> None:
+        r = validate_recipe_doc(
+            self._recipe_with(created_utc=None, updated_utc=None),
+            "ts.yaml",
+        )
+        self.assertTrue(r.ok)
+        self.assertFalse(any("created_utc" in w for w in r.warnings))
+
+
 if __name__ == "__main__":
     unittest.main()

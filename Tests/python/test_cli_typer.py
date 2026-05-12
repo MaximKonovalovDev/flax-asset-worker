@@ -276,6 +276,37 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("historical", entry["theme"])
         self.assertIn("smoke-test", entry["tags"])
 
+    def test_pack_list_recipes_surfaces_created_updated_utc(self) -> None:
+        """v1.23.s160: list-recipes JSON propagates created_utc / updated_utc."""
+        import tempfile, json as _json, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            game_dir = tmp_p / "synthetic_game"
+            game_dir.mkdir()
+            recipe_doc = {
+                "recipe": {
+                    "id": "ts_demo",
+                    "game": "synthetic_game",
+                    "created_utc": "2026-05-01T00:00:00",
+                    "updated_utc": "2026-05-12T12:00:00",
+                },
+                "packs": [],
+            }
+            (game_dir / "ts_demo.yaml").write_text(
+                _yaml.safe_dump(recipe_doc), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root",
+                 str(tmp_p), "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ts = [r for r in data["recipes"] if r["recipe_id"] == "ts_demo"]
+        self.assertEqual(len(ts), 1)
+        self.assertEqual(ts[0]["created_utc"], "2026-05-01T00:00:00")
+        self.assertEqual(ts[0]["updated_utc"], "2026-05-12T12:00:00")
+
     # ----------------------------------------------------------------- #
     # Sample real call: fab auth-status (no network; reads disk only)
     # ----------------------------------------------------------------- #

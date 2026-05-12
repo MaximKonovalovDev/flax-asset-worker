@@ -145,6 +145,24 @@ def validate_recipe_doc(doc: Any, source_label: str = "<recipe>") -> ValidationR
         )
         # v1.17.s123 — output_folder soft validation.
         _validate_output_folder(recipe, source_label, result)
+        # v1.23.s160 — optional created_utc / updated_utc ISO 8601 metadata.
+        for ts_key in ("created_utc", "updated_utc"):
+            if ts_key in recipe and recipe[ts_key] is not None:
+                ts_val = recipe[ts_key]
+                if not isinstance(ts_val, str):
+                    result.warnings.append(
+                        f"{source_label}: recipe.{ts_key} should be an"
+                        f" ISO 8601 string; got {type(ts_val).__name__}"
+                    )
+                else:
+                    from datetime import datetime
+                    try:
+                        datetime.fromisoformat(ts_val.strip())
+                    except (ValueError, TypeError):
+                        result.warnings.append(
+                            f"{source_label}: recipe.{ts_key}={ts_val!r}"
+                            f" is not parseable as ISO 8601"
+                        )
         # v1.18.s130 — optional integer expected_min_assets field.
         if "expected_min_assets" in recipe and recipe["expected_min_assets"] is not None:
             ema = recipe["expected_min_assets"]

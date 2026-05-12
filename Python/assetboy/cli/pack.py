@@ -89,6 +89,17 @@ def list_recipes_cmd(
             ),
         ),
     ] = False,
+    recipes_root_override: Annotated[
+        str,
+        typer.Option(
+            "--recipes-root",
+            help=(
+                "v1.23.s160: override the recipes/ scan root (default:"
+                " auto-detect repo recipes/). Useful for tests + custom"
+                " catalogs."
+            ),
+        ),
+    ] = "",
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -101,7 +112,10 @@ def list_recipes_cmd(
       pack list-recipes --filter theme:fantasy --filter style:lowpoly
       pack list-recipes --filter tags:smoke-test --json
     """
-    recipes_root = _recipes_dir()
+    recipes_root = (
+        Path(recipes_root_override) if recipes_root_override.strip()
+        else _recipes_dir()
+    )
     if not recipes_root.exists():
         msg = f"recipes_dir_not_found: {recipes_root}"
         if json_out:
@@ -193,7 +207,9 @@ def list_recipes_cmd(
                             tier_values.append(t)
                 if tier_values:
                     entry_data["min_tier"] = min(tier_values)
-                for meta_key in ("genre", "theme", "style", "tags"):
+                # v1.23.s160: include created_utc / updated_utc when present.
+                for meta_key in ("genre", "theme", "style", "tags",
+                                  "created_utc", "updated_utc"):
                     if meta_key in recipe:
                         entry_data[meta_key] = recipe[meta_key]
                 entries.append(entry_data)
