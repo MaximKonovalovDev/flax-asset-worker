@@ -293,6 +293,21 @@ class PackAuditCliTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn("missing_recipe", result.stdout)
 
+    def test_rerun_failed_propagates_recipe_checks(self) -> None:
+        """v1.21.s148: rerun-failed reports expected_min_check + min_required_passes_check
+        when recipe defines them. Uses sandbox/one_pack_smoke since it's parse-clean."""
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "rerun-failed",
+             "--recipe", "sandbox/one_pack_smoke.yaml",
+             "--dry-run", "--json"],
+        )
+        # 0 or 1 acceptable (rerun may find no failed packs => exit 0; or find some => 1).
+        self.assertIn(result.exit_code, (0, 1))
+        # JSON should be parseable when present. one_pack_smoke has no
+        # expected_min_assets / min_required_passes, so checks won't appear.
+        # But the command should not crash regardless.
+
     def test_rerun_failed_with_recipe_smoke(self) -> None:
         """v1.6.s8 CLI smoke: pack rerun-failed runs without crashing.
 

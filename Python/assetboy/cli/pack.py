@@ -1457,6 +1457,34 @@ def rerun_failed_cmd(
             )
             print(f"  [{marker}] {pid:60} state={ledger.get('current_state', '?')}")
 
+    # v1.21.s148 — honor recipe.expected_min_assets + min_required_passes
+    # post-rerun. Same logic as from_recipe_cmd.
+    recipe_meta = recipe_doc.get("recipe") or {}
+    expected_status_r: dict | None = None
+    min_passes_status_r: dict | None = None
+    ema = recipe_meta.get("expected_min_assets")
+    if isinstance(ema, int) and not isinstance(ema, bool) and ema >= 0:
+        import re as _re
+        _dlp = _re.compile(r"downloaded=(\d+)")
+        td = 0
+        for r in results:
+            notes = str(r.get("notes", "") or r.get("source_dir", "")
+                        or r.get("current_state", ""))
+            for m in _dlp.finditer(notes):
+                td += int(m.group(1))
+        expected_status_r = {
+            "expected_min_assets": ema,
+            "total_downloaded_seen": td,
+            "meets_expected_min": td >= ema,
+        }
+    mrp = recipe_meta.get("min_required_passes")
+    if isinstance(mrp, int) and not isinstance(mrp, bool) and mrp >= 0:
+        min_passes_status_r = {
+            "min_required_passes": mrp,
+            "completed_seen": re_success,
+            "meets_min_passes": re_success >= mrp,
+        }
+
     summary = {
         "ok": re_fail == 0,
         "recipe": str(resolved),
@@ -1468,6 +1496,11 @@ def rerun_failed_cmd(
         "rerun_failed": re_fail,
         "results": results,
     }
+    if expected_status_r is not None:
+        summary["expected_min_check"] = expected_status_r
+    if min_passes_status_r is not None:
+        summary["min_required_passes_check"] = min_passes_status_r
+
     if json_out:
         json.dump(summary, sys.stdout, indent=2)
         sys.stdout.write("\n")
@@ -1477,6 +1510,20 @@ def rerun_failed_cmd(
         print(f"pack_rerun_failed_failed={re_fail}")
         if skipped_not_in_recipe:
             print(f"pack_rerun_failed_skipped_count={len(skipped_not_in_recipe)}")
+        if expected_status_r is not None:
+            lbl = "OK" if expected_status_r["meets_expected_min"] else "WARN"
+            print(
+                f"pack_rerun_failed_expected_min_check=[{lbl}] "
+                f"downloaded={expected_status_r['total_downloaded_seen']} "
+                f"expected_min={expected_status_r['expected_min_assets']}"
+            )
+        if min_passes_status_r is not None:
+            lbl = "OK" if min_passes_status_r["meets_min_passes"] else "WARN"
+            print(
+                f"pack_rerun_failed_min_passes_check=[{lbl}] "
+                f"completed={min_passes_status_r['completed_seen']} "
+                f"min_required={min_passes_status_r['min_required_passes']}"
+            )
 
     if re_fail > 0:
         raise typer.Exit(code=1)
