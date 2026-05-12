@@ -61,6 +61,19 @@ class RawgSearchTests(unittest.TestCase):
             results = self.mod.search_rawg_games("rogue", api_key="k")
         self.assertEqual(len(results), 2)
 
+    def test_search_includes_platforms_param(self) -> None:
+        """v1.18.s129: platforms= appears in URL when supplied."""
+        captured_urls: list[str] = []
+
+        def capture(req: object, *a: object, **kw: object) -> FakeHttpResponse:
+            captured_urls.append(str(req.full_url))
+            return _json_response({"results": []})
+
+        with patch.object(self.mod.urllib.request, "urlopen", side_effect=capture):
+            self.mod.search_rawg_games("x", api_key="k", platforms="4,7")
+        self.assertEqual(len(captured_urls), 1)
+        self.assertIn("platforms=4%2C7", captured_urls[0])
+
     def test_search_includes_genres_param(self) -> None:
         captured_urls: list[str] = []
 

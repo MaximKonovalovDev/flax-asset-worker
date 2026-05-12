@@ -114,9 +114,15 @@ def search_rawg_games(
     page_size: int = 10,
     page: int = 1,
     genres: str | None = None,
+    platforms: str | None = None,
     timeout: float = 20.0,
 ) -> list[dict]:
-    """Hit /games?search=...; return results list."""
+    """Hit /games?search=...; return results list.
+
+    v1.18.s129: optional platforms= filter (comma-separated platform IDs).
+    Common platform IDs: 4=PC, 187=PlayStation 5, 18=PlayStation 4,
+    1=Xbox One, 186=Xbox Series, 7=Nintendo Switch, 3=iOS, 21=Android.
+    """
     params: dict[str, str] = {
         "key": api_key,
         "search": query,
@@ -125,6 +131,8 @@ def search_rawg_games(
     }
     if genres:
         params["genres"] = genres
+    if platforms:
+        params["platforms"] = platforms
     url = f"{RAWG_API}/games?{urllib.parse.urlencode(params)}"
     payload = _get_json(url, timeout=timeout)
     return list(payload.get("results", []))
@@ -139,6 +147,7 @@ def run_rawg_games_batch(
     include_screenshots: bool = True,
     max_screenshots_per_game: int = 3,
     genres: str | None = None,
+    platforms: str | None = None,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.15,
     dry_run: bool = False,
@@ -173,7 +182,8 @@ def run_rawg_games_batch(
 
     try:
         games = search_rawg_games(
-            query, api_key=key, page_size=min(count, 40), genres=genres,
+            query, api_key=key, page_size=min(count, 40),
+            genres=genres, platforms=platforms,
         )
     except urllib.error.HTTPError as exc:
         result.ok = False

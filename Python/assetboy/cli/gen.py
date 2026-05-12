@@ -1796,6 +1796,16 @@ def rawg_games_cmd(
             help="Comma-separated genre slugs (e.g. 'roguelike,strategy').",
         ),
     ] = "",
+    platforms: Annotated[
+        str,
+        typer.Option(
+            "--platforms",
+            help=(
+                "v1.18.s129: comma-separated RAWG platform IDs. Common:"
+                " 4=PC, 187=PS5, 18=PS4, 1=XB1, 186=XBS, 7=Switch, 3=iOS, 21=Android."
+            ),
+        ),
+    ] = "",
     max_screenshots: Annotated[
         int,
         typer.Option(
@@ -1827,6 +1837,7 @@ def rawg_games_cmd(
     out_dir_arg: Path | None = output_dir if str(output_dir) else None
     pack_id_arg: str | None = pack_id if pack_id else None
     genres_arg: str | None = genres if genres.strip() else None
+    platforms_arg: str | None = platforms.strip() or None  # v1.18.s129
     include_shots = max_screenshots > 0
 
     try:
@@ -1835,6 +1846,7 @@ def rawg_games_cmd(
             include_screenshots=include_shots,
             max_screenshots_per_game=max_screenshots,
             genres=genres_arg,
+            platforms=platforms_arg,
             output_dir=out_dir_arg, dry_run=dry_run,
         )
     except Exception as exc:

@@ -941,6 +941,33 @@ class TyperCliSmokeTests(unittest.TestCase):
     # gen rawg games (v1.10.s33)
     # ----------------------------------------------------------------- #
 
+    def test_rawg_games_platform_filter_threads_through(self) -> None:
+        """v1.18.s129: --platforms threads into run_rawg_games_batch kwargs."""
+        from unittest.mock import patch
+        from assetboy.execution.rawg_runner import RawgResult
+        import os, tempfile
+        captured: dict = {}
+
+        def capture(**kwargs):
+            captured.update(kwargs)
+            return RawgResult(
+                pack_id="x", query="q", output_dir=Path(tempfile.gettempdir()),
+                games_matched=0, ok=True, error="no_matches",
+            )
+
+        with patch.dict(os.environ, {"RAWG_API_KEY": "test"}):
+            with patch(
+                "assetboy.execution.rawg_runner.run_rawg_games_batch",
+                side_effect=capture,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "rawg", "games", "--query", "q",
+                     "--platforms", "4,7", "--dry-run"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(captured.get("platforms"), "4,7")
+
     def test_rawg_games_help_renders(self) -> None:
         result = self.runner.invoke(self.app, ["gen", "rawg", "games", "--help"])
         self.assertEqual(result.exit_code, 0)
