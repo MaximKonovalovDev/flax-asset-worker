@@ -1,6 +1,6 @@
 # HEARTBEAT — assetboi (operator hibernation read-back)
 
-> **Last update:** 2026-05-11 (mid-turn, **137 commits + 83 tags shipped this turn**, origin verified)
+> **Last update:** 2026-05-12 (continuous loop, **153 commits + 96 tags shipped this run**, origin verified)
 > **Repo:** `flax-asset-worker` (this repo; assetboi commits freely here)
 > **Loop status:** **NEVER-STOP ACTIVE** per BOSS Rule 3
 
@@ -39,11 +39,25 @@ R1A asset-mining stack now has full resilience + observability + live-probe:
   benchmarking  -> gen bench-fanout for tuning
   live-probe    -> library r1a-status --check-live (CLI + HTTP body flag)
 
-v1.13 wave (live + autofix) on top of v1.12 milestone:
+v1.13 wave (live + autofix + new providers + scout/budget) on top of v1.12:
   - v1.13.0 — keyed-provider live-API smoke tests (env-gated)
   - v1.13.1 — library r1a-status --check-live (concurrent probes)
   - v1.13.2 — auto_fix_warnings recipe.tags auto-fill
   - v1.13.3 — HTTP /api/v1/library/r1a-status accepts check_live body flag
+  - v1.13.4-6 — iNaturalist 11th R1A provider (runner + 3-path wiring + catalogs)
+  - v1.13.7 — iNaturalist in gen all-no-key + bench-fanout (6 no-key now)
+  - v1.13.8 — library r1a-status --bars ASCII chart
+  - v1.13.9 — Open Library 12th provider (book covers, reference-only)
+  - v1.13.10 — pack manifest-stats --since <ISO> mtime filter
+  - v1.13.11 — pack tier field (P0..P3 priority) + auto_fix default=2
+  - v1.13.12 — gen scout-by-license fan-out filtered by license token
+  - v1.13.13 — HTTP /api/v1/library/scout-by-license (16th endpoint)
+  - v1.13.14 — library r1a-status --html standalone CSS report
+  - v1.13.15 — pack list-recipes --filter min-tier:N
+  - v1.13.16 — FAW_HTTP_RETRY_BUDGET env-capped retry sleeps
+
+R1A asset-mining stack grew from 11 -> 13 providers
+(10 R1A + iNaturalist + Open Library + comfyui + sd; 12 in gen catalog).
 
 The v1.11 milestone reference (R1A wave complete) was:
 
