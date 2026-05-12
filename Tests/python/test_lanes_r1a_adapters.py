@@ -28,18 +28,20 @@ class R1aLaneAdapterRegistrationTests(unittest.TestCase):
             "unsplash_api",
             "rawg_api",
             "jamendo_api",
+            # v1.13.s85 — iNaturalist (11th R1A-class provider)
+            "inaturalist_api",
         ]
 
-    def test_all_ten_adapters_present(self) -> None:
+    def test_all_r1a_adapters_present(self) -> None:
         missing = [aid for aid in self._expected() if aid not in self.adapters]
         self.assertEqual(missing, [], msg=f"missing adapters: {missing}")
 
-    def test_all_ten_use_direct_url_lane(self) -> None:
+    def test_all_r1a_use_direct_url_lane(self) -> None:
         for aid in self._expected():
             with self.subTest(adapter=aid):
                 self.assertEqual(self.adapters[aid].lane, self.DIRECT_URL)
 
-    def test_all_ten_have_display_name_and_strategy(self) -> None:
+    def test_all_r1a_have_display_name_and_strategy(self) -> None:
         for aid in self._expected():
             with self.subTest(adapter=aid):
                 a = self.adapters[aid]
@@ -65,6 +67,8 @@ class R1aLaneAdapterRegistrationTests(unittest.TestCase):
         no_key = [
             "met_museum_api", "wikimedia_commons_api", "archive_org_api",
             "scryfall_api", "iconify_api",
+            # v1.13.s85
+            "inaturalist_api",
         ]
         for aid in no_key:
             with self.subTest(adapter=aid):

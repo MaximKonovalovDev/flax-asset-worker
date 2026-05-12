@@ -187,6 +187,9 @@ def _acquire_direct_url(
         return _drive_rawg(pack, pack_id=pack_id, out_dir=out_dir)
     if provider == "jamendo":
         return _drive_jamendo(pack, pack_id=pack_id, out_dir=out_dir)
+    # v1.13.s85: iNaturalist
+    if provider in ("inaturalist", "inat"):
+        return _drive_inaturalist(pack, pack_id=pack_id, out_dir=out_dir)
 
     return AcquisitionResult(
         ok=False,
@@ -197,8 +200,8 @@ def _acquire_direct_url(
             "direct_url lane supports: polyhaven, kenney, ambientcg, freesound, "
             "quaternius, met_museum, wikimedia, archive_org, scryfall, iconify, "
             "pexels[_photos|_videos], pixabay[_photos|_videos], unsplash, "
-            "rawg, jamendo. For others, set acquisition_method: manual_browser "
-            "or generator."
+            "rawg, jamendo, inaturalist. For others, set acquisition_method: "
+            "manual_browser or generator."
         ),
     )
 
@@ -387,6 +390,40 @@ def _drive_jamendo(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> Acqu
             f"jamendo: matched={result.tracks_matched} "
             f"downloaded={result.tracks_downloaded} "
             f"skipped_restricted={result.tracks_skipped_restricted}"
+        ),
+        error=result.error if not result.ok else None,
+    )
+
+
+def _drive_inaturalist(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
+    """v1.13.s85 — iNaturalist driver. No env key required."""
+    try:
+        from assetboy.execution.inaturalist_runner import run_inaturalist_batch
+    except ImportError as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider="inaturalist",
+            error=f"import_failed: {exc}",
+        )
+    query = _pack_search_query(pack)
+    count = _pack_count(pack, default=4)
+    try:
+        result = run_inaturalist_batch(
+            query=query, pack_id=pack_id, count=count,
+            allow_restrictive=bool(pack.get("inaturalist_allow_restrictive", False)),
+            output_dir=out_dir,
+        )
+    except Exception as exc:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider="inaturalist",
+            error=f"runner_crashed: {exc}",
+        )
+    return AcquisitionResult(
+        ok=result.ok, method="direct_url", provider="inaturalist",
+        source_dir=out_dir,
+        notes=(
+            f"inaturalist: matched={result.observations_matched} "
+            f"downloaded={result.photos_downloaded} "
+            f"skipped_restricted={result.photos_skipped_restricted}"
         ),
         error=result.error if not result.ok else None,
     )

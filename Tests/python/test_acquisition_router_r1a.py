@@ -458,6 +458,64 @@ class JamendoRouterTests(_BaseRouterR1aTest):
         self.assertTrue(captured["allow_restrictive"])
 
 
+class INaturalistRouterTests(_BaseRouterR1aTest):
+    def test_inaturalist_routes_with_allow_restrictive(self) -> None:
+        from assetboy.execution.inaturalist_runner import INaturalistResult
+        pack = {
+            "id": "IN", "provider": "inaturalist",
+            "acquisition_method": "direct_url",
+            "search_terms": ["oak tree"],
+            "count": 3,
+            "inaturalist_allow_restrictive": True,
+        }
+        captured: dict = {}
+
+        def capture(*a: object, **kwargs: object):  # type: ignore[no-untyped-def]
+            captured.update(kwargs)
+            return INaturalistResult(
+                pack_id="IN", query="oak tree", output_dir=Path("."),
+                observations_matched=3, observations_with_photo=3,
+                photos_downloaded=3, ok=True,
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            with self._patch_workspace_dir(out):
+                with patch(
+                    "assetboy.execution.inaturalist_runner.run_inaturalist_batch",
+                    side_effect=capture,
+                ):
+                    result = self.mod._acquire_direct_url(
+                        pack=pack, recipe=self._recipe(),
+                        pack_id="IN", provider="inaturalist", dry_run=False,
+                    )
+        self.assertTrue(result.ok)
+        self.assertTrue(captured["allow_restrictive"])
+
+    def test_inaturalist_alias_inat(self) -> None:
+        from assetboy.execution.inaturalist_runner import INaturalistResult
+        pack = {
+            "id": "I", "provider": "inat",
+            "acquisition_method": "direct_url",
+            "search_terms": ["wolf"],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            with self._patch_workspace_dir(out):
+                with patch(
+                    "assetboy.execution.inaturalist_runner.run_inaturalist_batch",
+                    return_value=INaturalistResult(
+                        pack_id="I", query="wolf", output_dir=out, ok=True,
+                    ),
+                ):
+                    result = self.mod._acquire_direct_url(
+                        pack=pack, recipe=self._recipe(),
+                        pack_id="I", provider="inat", dry_run=False,
+                    )
+        self.assertTrue(result.ok)
+        self.assertEqual(result.provider, "inaturalist")
+
+
 class UnsupportedProviderTests(_BaseRouterR1aTest):
     def test_unknown_provider_lists_all_supported_in_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -472,6 +530,7 @@ class UnsupportedProviderTests(_BaseRouterR1aTest):
         for p in (
             "polyhaven", "met_museum", "wikimedia", "iconify",
             "pexels", "pixabay", "unsplash", "rawg", "jamendo",
+            "inaturalist",
         ):
             self.assertIn(p, result.error)
 

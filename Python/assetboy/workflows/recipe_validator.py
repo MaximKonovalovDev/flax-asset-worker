@@ -55,6 +55,8 @@ DIRECT_URL_PROVIDERS = {
     "unsplash",
     "rawg",
     "jamendo",
+    # v1.13.s85: iNaturalist
+    "inaturalist", "inat",
 }
 MANUAL_BROWSER_PROVIDERS = {
     "fab", "mixamo", "unity", "epic",
@@ -496,6 +498,22 @@ _DEFAULT_LICENSE_BY_PROVIDER = {
     "sd.cpp": {"kind": "sd_model_dependent"},
     "stable_audio_open_small": {"kind": "stability_community", "commercial_ok": True, "training_data_clean": True},
     "stable_audio": {"kind": "stability_community", "commercial_ok": True, "training_data_clean": True},
+    # v1.13.s85 — R1A no-key providers
+    "met_museum": {"kind": "cc0", "commercial_ok": True, "attribution_required": False},
+    "wikimedia": {"kind": "cc_by_sa_mixed", "commercial_ok": True, "attribution_required": "per-file"},
+    "wikimedia_commons": {"kind": "cc_by_sa_mixed", "commercial_ok": True, "attribution_required": "per-file"},
+    "archive_org": {"kind": "cc_pd_mixed", "commercial_ok": True, "attribution_required": "per-item"},
+    "scryfall": {"kind": "cc_by_sa_4_0", "commercial_ok": True, "attribution_required": True, "attribution_note": "Wizards of the Coast + per-card artist"},
+    "iconify": {"kind": "open_source_spdx_mixed", "commercial_ok": True, "attribution_required": "per-set"},
+    # R1A key-required providers
+    "pexels": {"kind": "pexels_license", "commercial_ok": True, "attribution_required": False},
+    "pixabay": {"kind": "pixabay_content_license", "commercial_ok": True, "attribution_required": False},
+    "unsplash": {"kind": "unsplash_license", "commercial_ok": True, "attribution_required": False},
+    "rawg": {"kind": "reference_only_publisher_copyright", "commercial_ok": False, "attribution_required": "not for redistribution"},
+    "jamendo": {"kind": "cc_by_or_cc_by_sa", "commercial_ok": True, "attribution_required": True},
+    # v1.13.s84 — iNaturalist
+    "inaturalist": {"kind": "cc_mixed_default_commercial_safe", "commercial_ok": True, "attribution_required": "per-photo"},
+    "inat": {"kind": "cc_mixed_default_commercial_safe", "commercial_ok": True, "attribution_required": "per-photo"},
 }
 
 

@@ -581,6 +581,21 @@ SOURCE_ADAPTERS: dict[str, SourceAdapter] = {
             "operator can broaden with --allow-restrictive. Use `gen jamendo tracks`."
         ),
     ),
+    # v1.13.s85 — iNaturalist
+    "inaturalist_api": SourceAdapter(
+        adapter_id="inaturalist_api",
+        lane=ProviderLane.DIRECT_URL,
+        display_name="iNaturalist CC Nature Photos",
+        source_strategy=(
+            "GET /v1/observations?q=...&photos=true&photo_license=cc0,cc-by,cc-by-sa; "
+            "first photo per observation; replace /square. with /medium. in URL."
+        ),
+        notes=(
+            "No API key. Default CC0/CC-BY/CC-BY-SA only (commercial-safe). "
+            "Operator can --allow-restrictive for CC-NC variants. "
+            "Use `gen inaturalist fetch`."
+        ),
+    ),
 }
 
 GENERATOR_OBJECTIVE_MATRIX: dict[str, tuple[str, ...]] = {
