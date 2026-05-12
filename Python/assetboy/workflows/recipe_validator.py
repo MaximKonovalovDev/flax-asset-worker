@@ -281,6 +281,23 @@ def _validate_pack(
     _validate_refs_field(pack, "icon_refs", pack_label, pack_id, result)
     _validate_refs_field(pack, "reference_image_urls", pack_label, pack_id, result)
 
+    # v1.13.s93 — optional `tier` field: int in {0, 1, 2, 3} mapping to
+    # P0/P1/P2/P3 priority. None/absent is fine. Any other value -> ERROR.
+    if "tier" in pack and pack["tier"] is not None:
+        tier_val = pack["tier"]
+        if not isinstance(tier_val, int) or isinstance(tier_val, bool):
+            result.ok = False
+            result.errors.append(
+                f"{pack_label} ({pack_id}): 'tier' must be an integer 0..3; "
+                f"got {type(tier_val).__name__}"
+            )
+        elif tier_val not in (0, 1, 2, 3):
+            result.ok = False
+            result.errors.append(
+                f"{pack_label} ({pack_id}): 'tier' must be 0, 1, 2, or 3 "
+                f"(P0..P3 priority); got {tier_val!r}"
+            )
+
 
 def _validate_recipe_metadata_field(
     recipe: dict[str, Any],
@@ -583,6 +600,14 @@ def auto_fix_warnings(doc: dict) -> tuple[dict, list[str]]:
             patched["asset_kind"] = "prop"
             fixes.append(
                 f"{pack_id}: added default asset_kind='prop' (operator can refine)"
+            )
+
+        # v1.13.s93 — missing `tier` defaults to 2 (P2 = nice-to-have).
+        if "tier" not in patched or patched.get("tier") is None:
+            patched["tier"] = 2
+            fixes.append(
+                f"{pack_id}: added default tier=2 (P2/nice-to-have; "
+                "operator can set 0/1/3 for required/critical/optional)"
             )
 
         new_packs.append(patched)

@@ -253,6 +253,85 @@ class WarningsTests(unittest.TestCase):
         self.assertTrue(any("no 'license' block" in w for w in r.warnings))
 
 
+class PackTierFieldTests(unittest.TestCase):
+    """v1.13.s93: pack.tier int in {0,1,2,3}."""
+
+    def setUp(self) -> None:
+        from assetboy.workflows.recipe_validator import validate_recipe_doc, auto_fix_warnings
+        self.validate = validate_recipe_doc
+        self.auto_fix = auto_fix_warnings
+
+    def _pack(self, **extra):
+        return {
+            "id": "P", "provider": "polyhaven",
+            "acquisition_method": "direct_url",
+            "license": {"kind": "cc0"},
+            "asset_kind": "texture",
+            "assets": [{"asset_id": "x"}],
+            **extra,
+        }
+
+    def _doc(self, **pack_extra):
+        return {
+            "recipe": {"id": "r", "game": "test", "tags": ["t"]},
+            "packs": [self._pack(**pack_extra)],
+        }
+
+    def test_tier_0_accepted(self) -> None:
+        r = self.validate(self._doc(tier=0))
+        self.assertTrue(r.ok, msg=str(r.errors))
+
+    def test_tier_3_accepted(self) -> None:
+        r = self.validate(self._doc(tier=3))
+        self.assertTrue(r.ok)
+
+    def test_tier_4_rejected(self) -> None:
+        r = self.validate(self._doc(tier=4))
+        self.assertFalse(r.ok)
+        self.assertTrue(any("tier" in e for e in r.errors))
+
+    def test_tier_negative_rejected(self) -> None:
+        r = self.validate(self._doc(tier=-1))
+        self.assertFalse(r.ok)
+
+    def test_tier_string_rejected(self) -> None:
+        r = self.validate(self._doc(tier="0"))
+        self.assertFalse(r.ok)
+        self.assertTrue(any("integer" in e for e in r.errors))
+
+    def test_tier_bool_rejected(self) -> None:
+        """bool is not a valid tier (even though Python treats True as 1)."""
+        r = self.validate(self._doc(tier=True))
+        self.assertFalse(r.ok)
+
+    def test_tier_absent_no_complaint(self) -> None:
+        r = self.validate(self._doc())
+        self.assertTrue(r.ok)
+
+    def test_tier_none_no_complaint(self) -> None:
+        r = self.validate(self._doc(tier=None))
+        self.assertTrue(r.ok)
+
+    def test_auto_fix_fills_default_tier(self) -> None:
+        """auto_fix on a pack without tier should fill tier=2."""
+        doc = {
+            "recipe": {"id": "r", "game": "test", "tags": ["t"]},
+            "packs": [self._pack()],  # no tier
+        }
+        fixed, fixes = self.auto_fix(doc)
+        self.assertEqual(fixed["packs"][0]["tier"], 2)
+        self.assertTrue(any("tier=2" in f for f in fixes))
+
+    def test_auto_fix_preserves_existing_tier(self) -> None:
+        doc = {
+            "recipe": {"id": "r", "game": "test", "tags": ["t"]},
+            "packs": [self._pack(tier=0)],
+        }
+        fixed, fixes = self.auto_fix(doc)
+        self.assertEqual(fixed["packs"][0]["tier"], 0)  # preserved
+        self.assertFalse(any("tier" in f for f in fixes))
+
+
 class RecipeMetadataFieldTests(unittest.TestCase):
     """v1.11.s51: recipe.genre/theme/style/tags optional metadata fields."""
 
@@ -476,7 +555,7 @@ class AutoFixWarningsTests(unittest.TestCase):
         self.assertEqual(fixed["packs"][0]["asset_kind"], "prop")
 
     def test_already_valid_pack_unchanged_minus_minor(self) -> None:
-        """If pack has all three fields, no per-pack fix; only recipe tag auto-fill (v1.13.s81)."""
+        """Pack with all fields including tier (v1.13.s93) -> no fix; recipe tags set -> no fill."""
         doc = {
             "recipe": {"id": "x", "game": "test", "tags": ["preset"]},  # tags set -> no auto-fill
             "packs": [{
@@ -486,12 +565,14 @@ class AutoFixWarningsTests(unittest.TestCase):
                 "asset_kind": "model",
                 "license": {"kind": "fab_standard"},
                 "source_url": "https://www.fab.com/listings/abc",
+                "tier": 1,  # v1.13.s93: set tier to prevent auto-fill
             }],
         }
         fixed, fixes = self.auto_fix(doc)
         # Source_url preserved exactly
         self.assertEqual(fixed["packs"][0]["source_url"], "https://www.fab.com/listings/abc")
         self.assertEqual(fixed["packs"][0]["license"]["kind"], "fab_standard")
+        self.assertEqual(fixed["packs"][0]["tier"], 1)
         self.assertEqual(fixed["recipe"]["tags"], ["preset"])
         self.assertEqual(fixes, [])
 
