@@ -1553,6 +1553,17 @@ def manifest_stats_cmd(
             ),
         ),
     ] = "",
+    history: Annotated[
+        bool,
+        typer.Option(
+            "--history",
+            help=(
+                "v1.16.s116: instead of scanning disk manifests, aggregate"
+                " state/r1a_history/*.json fan-out snapshots. Useful for"
+                " 'how many scout runs across what providers over time'."
+            ),
+        ),
+    ] = False,
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -1573,6 +1584,73 @@ def manifest_stats_cmd(
       assetboy pack manifest-stats --json
     """
     from assetboy.execution.comfyui_runner import manual_drop_dir
+
+    # v1.16.s116 — --history mode: aggregate state/r1a_history snapshots.
+    if history:
+        history_root = Path("state") / "r1a_history"
+        if not history_root.exists():
+            msg = f"history_root_not_found: {history_root}"
+            if json_out:
+                json.dump({"error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"pack_manifest_stats_error={msg}")
+            raise typer.Exit(code=1)
+
+        hist_files = sorted(history_root.glob("*.json"))
+        runs = 0
+        kinds_count: dict[str, int] = {}
+        per_provider: dict[str, dict] = {}
+        total_wall_s = 0.0
+        for hf in hist_files:
+            try:
+                doc = json.loads(hf.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            runs += 1
+            kind = str(doc.get("kind", "unknown"))
+            kinds_count[kind] = kinds_count.get(kind, 0) + 1
+            ws = doc.get("wall_time_s")
+            if isinstance(ws, (int, float)):
+                total_wall_s += float(ws)
+            for p in (doc.get("providers") or []):
+                if not isinstance(p, dict):
+                    continue
+                pid = str(p.get("provider", "unknown"))
+                bucket = per_provider.setdefault(pid, {
+                    "runs": 0, "ok_runs": 0,
+                    "total_matched": 0, "total_downloaded": 0,
+                })
+                bucket["runs"] += 1
+                if p.get("ok"):
+                    bucket["ok_runs"] += 1
+                bucket["total_matched"] += int(p.get("matched", 0) or 0)
+                bucket["total_downloaded"] += int(p.get("downloaded", 0) or 0)
+
+        summary = {
+            "mode": "history",
+            "history_root": str(history_root),
+            "snapshots_scanned": len(hist_files),
+            "runs_total": runs,
+            "kinds": kinds_count,
+            "total_wall_time_s": round(total_wall_s, 3),
+            "by_provider": per_provider,
+        }
+        if json_out:
+            json.dump(summary, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_manifest_stats_mode=history")
+            print(f"pack_manifest_stats_snapshots_scanned={len(hist_files)}")
+            print(f"pack_manifest_stats_runs_total={runs}")
+            print(f"pack_manifest_stats_total_wall_time_s={total_wall_s:.2f}")
+            print("Per-provider (across all snapshots):")
+            for pid, b in sorted(per_provider.items()):
+                print(
+                    f"  {pid:14s} runs={b['runs']:3d} ok={b['ok_runs']:3d} "
+                    f"matched={b['total_matched']:5d} dl={b['total_downloaded']:5d}"
+                )
+        return
 
     scan_root = root_dir if str(root_dir) else manual_drop_dir()
     if not scan_root.exists():

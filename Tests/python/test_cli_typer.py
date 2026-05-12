@@ -1723,6 +1723,68 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn("invalid_since_timestamp", result.stdout)
 
+    def test_pack_manifest_stats_history_mode_aggregates_snapshots(self) -> None:
+        """v1.16.s116: --history reads state/r1a_history/*.json instead of disk manifests."""
+        import tempfile, json as _json, os
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(tmp_p)
+                hist_dir = tmp_p / "state" / "r1a_history"
+                hist_dir.mkdir(parents=True)
+                # Snapshot 1: 2 providers OK.
+                (hist_dir / "snap1.json").write_text(_json.dumps({
+                    "kind": "all_no_key", "wall_time_s": 1.5,
+                    "providers": [
+                        {"provider": "met_museum", "ok": True,
+                         "matched": 10, "downloaded": 3},
+                        {"provider": "iconify", "ok": True,
+                         "matched": 50, "downloaded": 5},
+                    ],
+                }), encoding="utf-8")
+                # Snapshot 2: 1 provider OK, 1 failed.
+                (hist_dir / "snap2.json").write_text(_json.dumps({
+                    "kind": "all_no_key", "wall_time_s": 2.0,
+                    "providers": [
+                        {"provider": "met_museum", "ok": False,
+                         "matched": 0, "downloaded": 0},
+                        {"provider": "wikimedia", "ok": True,
+                         "matched": 20, "downloaded": 2},
+                    ],
+                }), encoding="utf-8")
+                result = self.runner.invoke(
+                    self.app,
+                    ["pack", "manifest-stats", "--history", "--json"],
+                )
+                self.assertEqual(result.exit_code, 0, msg=result.stdout)
+                data = _json.loads(result.stdout.strip())
+                self.assertEqual(data["mode"], "history")
+                self.assertEqual(data["snapshots_scanned"], 2)
+                self.assertEqual(data["runs_total"], 2)
+                self.assertEqual(data["total_wall_time_s"], 3.5)
+                # met_museum appears in both; iconify + wikimedia each once.
+                self.assertEqual(data["by_provider"]["met_museum"]["runs"], 2)
+                self.assertEqual(data["by_provider"]["met_museum"]["ok_runs"], 1)
+                self.assertEqual(data["by_provider"]["iconify"]["runs"], 1)
+                self.assertEqual(data["by_provider"]["iconify"]["total_matched"], 50)
+            finally:
+                os.chdir(old_cwd)
+
+    def test_pack_manifest_stats_history_mode_no_dir_exits_1(self) -> None:
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmp:
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                result = self.runner.invoke(
+                    self.app, ["pack", "manifest-stats", "--history"],
+                )
+                self.assertEqual(result.exit_code, 1)
+                self.assertIn("history_root_not_found", result.stdout)
+            finally:
+                os.chdir(old_cwd)
+
     def test_pack_manifest_stats_missing_root_exits_1(self) -> None:
         result = self.runner.invoke(
             self.app, ["pack", "manifest-stats", "--root", "C:/nonexistent/path/xyz"],
