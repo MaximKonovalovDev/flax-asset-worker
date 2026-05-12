@@ -2475,6 +2475,14 @@ def list_providers_cmd(
             "what": "Jamendo CC music tracks (~500K)",
         },
         {
+            "id": "inaturalist",
+            "cli": "gen inaturalist fetch",
+            "env_var": None,
+            "license": "CC0 | CC-BY | CC-BY-SA (commercial-OK)",
+            "asset_class": "image:nature_reference",
+            "what": "iNaturalist nature observation photos (~200M+ records)",
+        },
+        {
             "id": "comfyui",
             "cli": "gen comfyui run|submit-workflow",
             "env_var": None,

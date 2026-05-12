@@ -722,6 +722,8 @@ def r1a_status_cmd(
         ("unsplash", "UNSPLASH_ACCESS_KEY", "Unsplash License", "image:photo"),
         ("rawg", "RAWG_API_KEY", "REFERENCE-ONLY", "image:game_screenshot"),
         ("jamendo", "JAMENDO_CLIENT_ID", "CC-BY/SA", "audio:music_track"),
+        # v1.13.s86 — iNaturalist
+        ("inaturalist", None, "CC0/CC-BY/CC-BY-SA", "image:nature_reference"),
     ]
     providers_state: list[dict] = []
     for pid, env_var, lic, asset_class in providers_catalog:
@@ -748,6 +750,7 @@ def r1a_status_cmd(
                 "unsplash": "unsplash",
                 "rawg": "rawg.io",
                 "jamendo": "jamendo",
+                "inaturalist": "inaturalist",
             }.get(pid, pid),
         })
 
@@ -840,6 +843,10 @@ def r1a_status_cmd(
                     from assetboy.execution.jamendo_runner import search_jamendo_tracks, get_client_id
                     tracks = search_jamendo_tracks("ambient", client_id=get_client_id(), limit=2)
                     return pid, True, None if tracks else "no_results_but_call_succeeded"
+                if pid == "inaturalist":
+                    from assetboy.execution.inaturalist_runner import search_inaturalist_observations
+                    obs = search_inaturalist_observations("oak tree", per_page=2)
+                    return pid, len(obs) > 0, None if obs else "no_results"
                 return pid, False, "unknown_provider"
             except Exception as exc:
                 return pid, False, f"probe_failed: {exc}"

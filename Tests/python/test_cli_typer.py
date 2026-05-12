@@ -1507,16 +1507,16 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("Catalog", result.stdout)
 
     def test_list_providers_default_lists_all(self) -> None:
-        """Stdout should list all 12 providers in catalog with header."""
+        """Stdout should list all 13 providers in catalog with header (v1.13.s86)."""
         result = self.runner.invoke(self.app, ["gen", "list-providers"])
         self.assertEqual(result.exit_code, 0)
-        # Header counts.
-        self.assertIn("gen_list_providers_total=12", result.stdout)
+        # Header counts (12 -> 13 after iNaturalist added).
+        self.assertIn("gen_list_providers_total=13", result.stdout)
         # Each provider id appears.
         for provider_id in (
             "met-museum", "wikimedia", "archive-org", "scryfall", "iconify",
             "pexels", "pixabay", "unsplash", "rawg", "jamendo",
-            "comfyui", "sd",
+            "inaturalist", "comfyui", "sd",
         ):
             self.assertIn(provider_id, result.stdout)
 
@@ -1532,8 +1532,10 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         import json as _json
         data = _json.loads(result.stdout.strip())
-        self.assertEqual(data["total"], 12)
-        self.assertEqual(data["no_key_count"], 7)  # 5 R1A no-key + comfyui + sd
+        # v1.13.s86 catalog: 13 providers (5 R1A no-key + 5 R1A keyed +
+        # iNaturalist + comfyui + sd).
+        self.assertEqual(data["total"], 13)
+        self.assertEqual(data["no_key_count"], 8)  # 5 R1A no-key + iNat + comfyui + sd
         self.assertEqual(data["key_required_count"], 5)
         self.assertEqual(data["key_set_count"], 0)  # all cleared
         self.assertEqual(data["key_unset_count"], 5)
@@ -1572,8 +1574,8 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         import json as _json
         data = _json.loads(result.stdout.strip())
-        # 5 R1A no-key + comfyui + sd = 7
-        self.assertEqual(data["total"], 7)
+        # v1.13.s86: 5 R1A no-key + iNaturalist + comfyui + sd = 8
+        self.assertEqual(data["total"], 8)
         for p in data["providers"]:
             self.assertIsNone(p["env_var"])
 
@@ -1828,9 +1830,10 @@ class TyperCliSmokeTests(unittest.TestCase):
                 os.environ.pop(k, None)
             result = self.runner.invoke(self.app, ["library", "r1a-status"])
         self.assertEqual(result.exit_code, 0, msg=result.stdout)
-        self.assertIn("library_r1a_status_providers_total=10", result.stdout)
-        self.assertIn("library_r1a_status_providers_no_key=5", result.stdout)
-        # 0/5 keys set.
+        # v1.13.s86: catalog grew to 11 (added iNaturalist as 6th no-key).
+        self.assertIn("library_r1a_status_providers_total=11", result.stdout)
+        self.assertIn("library_r1a_status_providers_no_key=6", result.stdout)
+        # 0/5 keys set (key-required count unchanged at 5).
         self.assertIn("library_r1a_status_providers_key_set=0/5", result.stdout)
 
     def test_library_r1a_status_check_live_with_mocked_probes(self) -> None:
@@ -1856,6 +1859,9 @@ class TyperCliSmokeTests(unittest.TestCase):
             ), patch(
                 "assetboy.execution.iconify_runner.search_iconify_icons",
                 return_value=["mdi:sword"],
+            ), patch(
+                "assetboy.execution.inaturalist_runner.search_inaturalist_observations",
+                return_value=[{"id": 1}],
             ):
                 result = self.runner.invoke(
                     self.app,
@@ -1865,9 +1871,8 @@ class TyperCliSmokeTests(unittest.TestCase):
         import json as _json
         data = _json.loads(result.stdout.strip())
         self.assertTrue(data["checked_live"])
-        # 5 no-key providers probed OK; 5 keyed return live_ok=False
-        # because env keys unset.
-        self.assertEqual(data["live_ok_count"], 5)
+        # v1.13.s86: 6 no-key providers probed OK; 5 keyed return live_ok=False.
+        self.assertEqual(data["live_ok_count"], 6)
         self.assertEqual(data["live_failed_count"], 5)
         # Each provider has live_ok and live_error keys.
         for p in data["providers"]:
@@ -1906,8 +1911,9 @@ class TyperCliSmokeTests(unittest.TestCase):
             "total_downloaded_on_disk", "total_bytes_on_disk", "providers",
         ):
             self.assertIn(key, data)
-        self.assertEqual(data["providers_total"], 10)
-        self.assertEqual(data["providers_no_key"], 5)
+        # v1.13.s86: catalog grew to 11 (added iNaturalist).
+        self.assertEqual(data["providers_total"], 11)
+        self.assertEqual(data["providers_no_key"], 6)
         # Each provider has merged env + disk data.
         for p in data["providers"]:
             for k in ("id", "env_var", "env_set", "license", "asset_class",
