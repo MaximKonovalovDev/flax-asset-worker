@@ -711,6 +711,17 @@ def r1a_status_cmd(
             ),
         ),
     ] = Path(""),
+    open_html: Annotated[
+        bool,
+        typer.Option(
+            "--open",
+            help=(
+                "v1.16.s118: when used with --html, auto-open the written"
+                " file in the system browser (os.startfile on Windows,"
+                " 'open' on macOS, 'xdg-open' on Linux). No-op without --html."
+            ),
+        ),
+    ] = False,
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -976,6 +987,23 @@ def r1a_status_cmd(
             print(f"library_r1a_status_error={msg}")
             raise typer.Exit(code=1)
         print(f"library_r1a_status_html_path={html_path}")
+        # v1.16.s118 — --open auto-launch.
+        if open_html:
+            import platform
+            import subprocess
+            sys_name = platform.system().lower()
+            try:
+                if sys_name == "windows":
+                    import os
+                    os.startfile(str(html_path.resolve()))  # type: ignore[attr-defined]
+                elif sys_name == "darwin":
+                    subprocess.run(["open", str(html_path.resolve())], check=False)
+                else:
+                    subprocess.run(["xdg-open", str(html_path.resolve())], check=False)
+                print("library_r1a_status_html_opened=true")
+            except Exception as exc:
+                # Don't fail the command if open fails — file is still on disk.
+                print(f"library_r1a_status_html_open_failed={exc}")
         return
 
     if json_out:

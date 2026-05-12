@@ -2706,6 +2706,40 @@ class TyperCliSmokeTests(unittest.TestCase):
         # File should exist + be a non-trivial HTML doc.
         # (Tempdir is gone after the with; rebuild in single block.)
 
+    def test_library_r1a_status_html_open_calls_platform_opener(self) -> None:
+        """v1.16.s118: --html --open invokes startfile/open/xdg-open."""
+        import tempfile, platform
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "r1a.html"
+            sys_name = platform.system().lower()
+            if sys_name == "windows":
+                with patch("os.startfile", create=True) as mock_open:
+                    result = self.runner.invoke(
+                        self.app,
+                        ["library", "r1a-status", "--html", str(out), "--open"],
+                    )
+                self.assertEqual(result.exit_code, 0)
+                mock_open.assert_called_once()
+            else:
+                with patch("subprocess.run") as mock_open:
+                    result = self.runner.invoke(
+                        self.app,
+                        ["library", "r1a-status", "--html", str(out), "--open"],
+                    )
+                self.assertEqual(result.exit_code, 0)
+                mock_open.assert_called_once()
+            self.assertIn("library_r1a_status_html_opened=true", result.stdout)
+
+    def test_library_r1a_status_html_open_without_html_is_noop(self) -> None:
+        """--open without --html: no auto-launch (and no error)."""
+        result = self.runner.invoke(
+            self.app, ["library", "r1a-status", "--open"],
+        )
+        # Plain output, no html-opened line.
+        self.assertEqual(result.exit_code, 0)
+        self.assertNotIn("library_r1a_status_html_opened", result.stdout)
+
     def test_library_r1a_status_html_content_includes_providers(self) -> None:
         """HTML body contains every provider id + summary stats."""
         import tempfile
