@@ -1856,6 +1856,49 @@ class TyperCliSmokeTests(unittest.TestCase):
             finally:
                 os.chdir(old_cwd)
 
+    def test_pack_manifest_stats_history_since_filter(self) -> None:
+        """v1.18.s127: --history --since filters out old snapshots by mtime."""
+        import tempfile, json as _json, os, time
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(tmp_p)
+                hist_dir = tmp_p / "state" / "r1a_history"
+                hist_dir.mkdir(parents=True)
+                old_snap = hist_dir / "old.json"
+                new_snap = hist_dir / "new.json"
+                old_snap.write_text(_json.dumps({
+                    "kind": "all_no_key", "wall_time_s": 1.0,
+                    "providers": [{"provider": "old_p", "ok": True,
+                                   "matched": 1, "downloaded": 1}],
+                }), encoding="utf-8")
+                new_snap.write_text(_json.dumps({
+                    "kind": "all_no_key", "wall_time_s": 2.0,
+                    "providers": [{"provider": "new_p", "ok": True,
+                                   "matched": 1, "downloaded": 1}],
+                }), encoding="utf-8")
+                # Backdate old by 1 year.
+                old_t = time.time() - 365 * 86400
+                os.utime(old_snap, (old_t, old_t))
+                from datetime import datetime, timedelta
+                since = (datetime.now() - timedelta(hours=1)).isoformat(timespec="seconds")
+                result = self.runner.invoke(
+                    self.app,
+                    ["pack", "manifest-stats", "--history",
+                     "--since", since, "--json"],
+                )
+                self.assertEqual(result.exit_code, 0, msg=result.stdout)
+                data = _json.loads(result.stdout.strip())
+                self.assertEqual(data["snapshots_scanned"], 2)
+                self.assertEqual(data["snapshots_filtered_out"], 1)
+                self.assertEqual(data["runs_total"], 1)
+                self.assertIn("new_p", data["by_provider"])
+                self.assertNotIn("old_p", data["by_provider"])
+                self.assertEqual(data["since_filter"], since)
+            finally:
+                os.chdir(old_cwd)
+
     def test_pack_manifest_stats_history_mode_no_dir_exits_1(self) -> None:
         import tempfile, os
         with tempfile.TemporaryDirectory() as tmp:

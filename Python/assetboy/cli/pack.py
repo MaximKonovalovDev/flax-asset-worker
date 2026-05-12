@@ -1612,12 +1612,38 @@ def manifest_stats_cmd(
                 print(f"pack_manifest_stats_error={msg}")
             raise typer.Exit(code=1)
 
+        # v1.18.s127 — parse --since for history mode too.
+        since_epoch_h: float | None = None
+        if since.strip():
+            from datetime import datetime
+            try:
+                dt = datetime.fromisoformat(since.strip())
+                since_epoch_h = dt.timestamp()
+            except ValueError as exc:
+                msg = f"invalid_since_timestamp: {since!r} ({exc})"
+                if json_out:
+                    json.dump({"error": msg}, sys.stdout, indent=2)
+                    sys.stdout.write("\n")
+                else:
+                    print(f"pack_manifest_stats_error={msg}")
+                raise typer.Exit(code=1)
+
         hist_files = sorted(history_root.glob("*.json"))
         runs = 0
         kinds_count: dict[str, int] = {}
         per_provider: dict[str, dict] = {}
         total_wall_s = 0.0
+        filtered_out = 0
         for hf in hist_files:
+            # v1.18.s127 — mtime filter in history mode.
+            if since_epoch_h is not None:
+                try:
+                    if hf.stat().st_mtime < since_epoch_h:
+                        filtered_out += 1
+                        continue
+                except OSError:
+                    filtered_out += 1
+                    continue
             try:
                 doc = json.loads(hf.read_text(encoding="utf-8"))
             except Exception:
@@ -1646,6 +1672,8 @@ def manifest_stats_cmd(
             "mode": "history",
             "history_root": str(history_root),
             "snapshots_scanned": len(hist_files),
+            "snapshots_filtered_out": filtered_out,  # v1.18.s127
+            "since_filter": since.strip() or None,   # v1.18.s127
             "runs_total": runs,
             "kinds": kinds_count,
             "total_wall_time_s": round(total_wall_s, 3),
