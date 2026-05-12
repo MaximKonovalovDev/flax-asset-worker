@@ -2186,6 +2186,17 @@ def all_no_key_cmd(
             ),
         ),
     ] = False,
+    provider_filter: Annotated[
+        str,
+        typer.Option(
+            "--provider",
+            help=(
+                "v1.21.s145: comma-separated subset of provider ids"
+                " (met_museum/wikimedia/archive_org/scryfall/iconify/inaturalist)."
+                " If unset, all 6 are dispatched."
+            ),
+        ),
+    ] = "",
     json_out: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Fan out one query across all 6 no-key R1A providers (Path B v1.11.s37+).
@@ -2276,6 +2287,19 @@ def all_no_key_cmd(
             dry_run=dry_run,
         )),
     ]
+
+    # v1.21.s145 — filter tasks by --provider.
+    if provider_filter.strip():
+        wanted = {p.strip().lower() for p in provider_filter.split(",") if p.strip()}
+        tasks = [t for t in tasks if t[0].lower() in wanted]
+        if not tasks:
+            msg = f"no_providers_matched_filter: {sorted(wanted)} (valid: met_museum/wikimedia/archive_org/scryfall/iconify/inaturalist)"
+            if json_out:
+                json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"gen_all_no_key_error={msg}")
+            raise typer.Exit(code=1)
 
     providers_run: list[dict] = []
 

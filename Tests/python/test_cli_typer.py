@@ -1803,6 +1803,49 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["total_matched"], 10 + 20 + 5 + 30 + 50 + 7)
         self.assertEqual(data["total_downloaded"], 12)  # 2*6 providers
 
+    def test_all_no_key_provider_filter_narrows_dispatch(self) -> None:
+        """v1.21.s145: --provider met_museum,iconify dispatches only those 2."""
+        from unittest.mock import patch
+        from assetboy.execution.met_museum_runner import MetMuseumResult
+        from assetboy.execution.iconify_runner import IconifyResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch(
+                "assetboy.execution.met_museum_runner.run_met_museum_batch",
+                return_value=MetMuseumResult(
+                    pack_id="x", query="q", output_dir=Path(tmp),
+                    objects_matched=1, ok=True,
+                ),
+            ), patch(
+                "assetboy.execution.iconify_runner.run_iconify_batch",
+                return_value=IconifyResult(
+                    pack_id="x", query="q", output_dir=Path(tmp),
+                    icons_matched=2, ok=True,
+                ),
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "all-no-key", "--query", "q",
+                     "--provider", "met_museum,iconify", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["providers_run"], 2)
+        names = {p["provider"] for p in data["providers"]}
+        self.assertEqual(names, {"met_museum", "iconify"})
+
+    def test_all_no_key_provider_filter_no_match_exits_1(self) -> None:
+        """--provider unknown -> exit 1 with explanation."""
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "all-no-key", "--query", "q",
+             "--provider", "bogus_provider_xyz"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("no_providers_matched_filter", result.stdout)
+
     def test_all_no_key_parallel_dispatch_preserves_order(self) -> None:
         """v1.12.s64: --parallel returns same shape + preserves task order."""
         from unittest.mock import patch
