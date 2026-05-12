@@ -2582,6 +2582,58 @@ class TyperCliSmokeTests(unittest.TestCase):
     # library install-r1a-pack (v1.14.s103)
     # ----------------------------------------------------------------- #
 
+    def test_library_install_r1a_pack_recipe_mode_actually_installs(self) -> None:
+        """v1.18.s126: --recipe mode now actually copies files (not just enumerate)."""
+        import tempfile, json as _json
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            drop_root = tmp_p / "manual_drop"
+            pack_dir = drop_root / "iconify" / "RECIPE_ICON"
+            pack_dir.mkdir(parents=True)
+            # Synthetic source file.
+            src = pack_dir / "icon.svg"
+            src.write_text("<svg/>", encoding="utf-8")
+            # Synthetic manifest.
+            (pack_dir / "iconify_manifest.json").write_text(_json.dumps({
+                "source": "iconify", "pack_id": "RECIPE_ICON",
+                "entries": [{"icon_id": "x", "local_path": str(src),
+                             "downloaded": True}],
+            }), encoding="utf-8")
+            # Recipe with one iconify pack.
+            import yaml as _yaml
+            recipe_path = tmp_p / "rec.yaml"
+            recipe_path.write_text(_yaml.dump({
+                "recipe": {"id": "r", "game": "x", "tags": ["t"]},
+                "packs": [{"id": "RECIPE_ICON", "provider": "iconify",
+                           "acquisition_method": "direct_url",
+                           "license": {"kind": "mit"},
+                           "asset_kind": "icon",
+                           "search_terms": ["x"]}],
+            }), encoding="utf-8")
+            lib = tmp_p / "Library"
+            with patch(
+                "assetboy.execution.comfyui_runner.manual_drop_dir",
+                return_value=drop_root,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["library", "install-r1a-pack",
+                     "--recipe", str(recipe_path),
+                     "--library-root", str(lib),
+                     "--json"],
+                )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            data = _json.loads(result.stdout.strip())
+            self.assertEqual(data["packs_total"], 1)
+            self.assertEqual(data["manifests_resolved"], 1)
+            # v1.18.s126: total_installed > 0 (was total_entries_seen-only).
+            self.assertEqual(data["total_installed"], 1)
+            # File actually present in library.
+            self.assertTrue((lib / "iconify" / "RECIPE_ICON" / "icon.svg").exists())
+            # asset_library.json registered.
+            self.assertTrue((lib / "asset_library.json").exists())
+
     def test_library_install_r1a_pack_recipe_mode_resolves_manifests(self) -> None:
         """v1.15.s109: --recipe enumerates R1A manifests for matching packs."""
         import tempfile, json as _json

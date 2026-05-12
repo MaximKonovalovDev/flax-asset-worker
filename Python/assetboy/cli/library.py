@@ -1053,6 +1053,102 @@ def r1a_status_cmd(
 # library install-r1a-pack  (v1.14.s103)
 # --------------------------------------------------------------------------- #
 
+def _install_one_manifest(
+    manifest_path: Path,
+    library_root: Path,
+    *,
+    dry_run: bool,
+) -> dict:
+    """v1.18.s126 — pure helper extracting per-manifest install logic.
+
+    Returns a summary dict (no I/O on stdout). Errors surface as
+    ok=False with 'error' field.
+    """
+    import shutil
+    if not manifest_path.exists():
+        return {"ok": False, "error": "manifest_not_found",
+                "manifest_path": str(manifest_path)}
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {"ok": False, "error": f"manifest_unparseable: {exc}",
+                "manifest_path": str(manifest_path)}
+    source = str(manifest.get("source", "unknown"))
+    pack_id = str(manifest.get("pack_id", "unknown"))
+    entries = manifest.get("entries") or []
+    license_str = str(manifest.get("license", "")
+                      or manifest.get("license_policy", "")
+                      or manifest.get("use_policy_notice", ""))
+    dest_dir = library_root / source / pack_id
+    asset_lib_file = library_root / "asset_library.json"
+
+    installed: list[dict] = []
+    skipped: list[dict] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        local = entry.get("local_path")
+        if not local:
+            skipped.append({"reason": "no_local_path"})
+            continue
+        src_file = Path(local)
+        if not src_file.exists():
+            skipped.append({"reason": "source_file_missing", "path": local})
+            continue
+        if entry.get("downloaded") is False and not dry_run:
+            skipped.append({"reason": "not_downloaded", "path": local})
+            continue
+        dest_file = dest_dir / src_file.name
+        record = {
+            "name": entry.get("title") or entry.get("name") or src_file.stem,
+            "category": str(manifest.get("kind", source)),
+            "source": source,
+            "license": license_str,
+            "attribution": str(entry.get("attribution_text") or entry.get("attribution") or ""),
+            "file_path": str(dest_file),
+            "original_url": str(entry.get("source_url") or entry.get("url") or ""),
+            "pack_id": pack_id,
+        }
+        if dry_run:
+            installed.append({**record, "dry_run": True})
+            continue
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.copy2(src_file, dest_file)
+            installed.append(record)
+        except Exception as exc:
+            skipped.append({"reason": f"copy_failed: {exc}", "path": local})
+
+    if not dry_run and installed:
+        existing: list[dict] = []
+        if asset_lib_file.exists():
+            try:
+                existing = json.loads(asset_lib_file.read_text(encoding="utf-8")) or []
+            except Exception:
+                existing = []
+        if not isinstance(existing, list):
+            existing = []
+        existing.extend(installed)
+        asset_lib_file.parent.mkdir(parents=True, exist_ok=True)
+        asset_lib_file.write_text(
+            json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+
+    return {
+        "ok": True,
+        "manifest_path": str(manifest_path),
+        "source": source,
+        "pack_id": pack_id,
+        "dest_dir": str(dest_dir),
+        "asset_library_file": str(asset_lib_file),
+        "entries_total": len(entries),
+        "installed": len(installed),
+        "skipped": len(skipped),
+        "skipped_details": skipped,
+        "dry_run": dry_run,
+    }
+
+
 @app.command("install-r1a-pack")
 def install_r1a_pack_cmd(
     manifest_path: Annotated[
@@ -1201,30 +1297,24 @@ def install_r1a_pack_cmd(
                 })
                 continue
             # Recursive call with single manifest path. Bypass --json so
-            # the inner stdout doesn't pollute; we'll aggregate ourselves.
-            try:
-                inner_doc = json.loads(mf.read_text(encoding="utf-8"))
-                entries_count = len(inner_doc.get("entries") or [])
-            except Exception as exc:
+            # v1.18.s126 — actually invoke the per-manifest install helper.
+            inner_result = _install_one_manifest(
+                mf, library_root, dry_run=dry_run,
+            )
+            if not inner_result.get("ok"):
                 per_pack_results.append({
                     "pack_id": pack_id, "provider": provider,
-                    "skipped": f"manifest_unparseable: {exc}",
+                    "skipped": inner_result.get("error", "install_failed"),
                 })
                 continue
             per_pack_results.append({
                 "pack_id": pack_id, "provider": provider,
                 "manifest_path": str(mf),
-                "entries": entries_count,
-                "would_install" if dry_run else "installed": entries_count,
+                "entries": inner_result["entries_total"],
+                "installed": inner_result["installed"],
+                "skipped_count": inner_result["skipped"],
             })
-            if not dry_run:
-                # Reuse the per-manifest logic by re-invoking ourselves
-                # with manifest path. To keep it simple here, just count.
-                # NOTE: actual file copying happens via separate invocation;
-                # for now in this recipe-mode we delegate by recording the
-                # manifest path and letting the operator pipe.
-                pass
-            total_installed += entries_count
+            total_installed += inner_result["installed"]
 
         recipe_summary = {
             "ok": True,
@@ -1234,14 +1324,9 @@ def install_r1a_pack_cmd(
             "manifests_resolved": len([p for p in per_pack_results
                                        if p.get("manifest_path")]),
             "packs_total": len(doc.get("packs") or []),
-            "total_entries_seen": total_installed,
+            "total_installed": total_installed,
             "dry_run": dry_run,
             "per_pack": per_pack_results,
-            "note": (
-                "In --recipe mode v1.15.s109 enumerates and validates manifests "
-                "but does NOT actually copy. Operator should run install-r1a-pack "
-                "with each listed manifest_path to perform the copy."
-            ),
         }
         if json_out:
             json.dump(recipe_summary, sys.stdout, indent=2)

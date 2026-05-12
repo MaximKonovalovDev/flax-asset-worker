@@ -774,3 +774,31 @@ All v1.16+ s114..s118 SHIPPED. Five fresh ideas:
   capstone tag once s120..s123 ship. Approach 750 tests.
 
 Ship order: s120, s121, s122, s123, s124.
+
+---
+
+## v1.18+ backlog (added 2026-05-12, s125)
+
+All v1.17+ s120..s124 SHIPPED. Five fresh ideas:
+
+- **s126 — `library install-r1a-pack --recipe` actually copies**:
+  s109 enumerates+validates only. Extend to actually invoke the
+  per-manifest install path for each resolved manifest.
+
+- **s127 — `pack manifest-stats --history --since <iso>`**: extend
+  --history mode with mtime filter (which it doesn't currently
+  honor; --since only filters disk-manifest mode).
+
+- **s128 — Open Library author search**: `gen openlibrary fetch
+  --author <name>` filters by author at the API level instead of
+  generic text search.
+
+- **s129 — `gen rawg games --platform <slug>`**: RAWG search
+  supports platform filter natively. Surface as flag (e.g. only
+  PC games, only Switch games).
+
+- **s130 — recipe `expected_min_assets` field**: optional int
+  on recipe root. After `pack from-recipe` completes, compare
+  total_downloaded against this; emit ledger warning if below.
+
+Ship order: s126, s127, s128, s129, s130.
