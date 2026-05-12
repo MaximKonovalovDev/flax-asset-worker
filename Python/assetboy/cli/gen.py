@@ -106,6 +106,12 @@ inaturalist_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
 )
+openlibrary_app = typer.Typer(
+    name="openlibrary",
+    help="Open Library book cover images (reference-only; no key).",
+    add_completion=False,
+    no_args_is_help=True,
+)
 
 app.add_typer(comfy_app, name="comfyui")
 app.add_typer(sd_app, name="sd")
@@ -120,6 +126,7 @@ app.add_typer(rawg_app, name="rawg")
 app.add_typer(jamendo_app, name="jamendo")
 app.add_typer(unsplash_app, name="unsplash")
 app.add_typer(inaturalist_app, name="inaturalist")
+app.add_typer(openlibrary_app, name="openlibrary")
 
 
 # --------------------------------------------------------------------------- #
@@ -2783,6 +2790,84 @@ def inaturalist_fetch_cmd(
         if result.error:
             print(f"gen_inaturalist_note={result.error}")
 
+    if not result.ok:
+        raise typer.Exit(code=1)
+
+
+# --------------------------------------------------------------------------- #
+# gen openlibrary fetch  (v1.13.s91)
+# --------------------------------------------------------------------------- #
+
+@openlibrary_app.command("fetch")
+def openlibrary_fetch_cmd(
+    query: Annotated[str, typer.Option("--query", "-q")],
+    count: Annotated[int, typer.Option("--count", "-n")] = 6,
+    size: Annotated[
+        str,
+        typer.Option("--size", help="S | M | L (default L, ~500px)."),
+    ] = "L",
+    pack_id: Annotated[str, typer.Option("--pack-id")] = "",
+    output_dir: Annotated[Path, typer.Option("--output-dir")] = Path(""),
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Fetch book cover images from Open Library (Path B v1.13.s91).
+
+    REFERENCE-ONLY. Cover images are user-uploaded thumbnails; treat as
+    mood-board / img2img-seed material. NOT for redistribution in shipped games.
+
+    No API key. Examples:
+      assetboy gen openlibrary fetch -q "alchemy" -n 6
+      assetboy gen openlibrary fetch -q "subject:dragons" --size M -n 10
+    """
+    from assetboy.execution.openlibrary_runner import run_openlibrary_batch
+
+    out_dir_arg: Path | None = output_dir if str(output_dir) else None
+    pack_id_arg: str | None = pack_id if pack_id else None
+
+    try:
+        result = run_openlibrary_batch(
+            query=query, pack_id=pack_id_arg, count=count, size=size,
+            output_dir=out_dir_arg, dry_run=dry_run,
+        )
+    except Exception as exc:
+        msg = f"openlibrary_runner_crashed: {exc}"
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_openlibrary_error={msg}")
+        raise typer.Exit(code=1)
+
+    summary = {
+        "ok": result.ok,
+        "pack_id": result.pack_id,
+        "query": result.query,
+        "output_dir": str(result.output_dir),
+        "docs_matched": result.docs_matched,
+        "covers_with_id": result.covers_with_id,
+        "covers_downloaded": result.covers_downloaded,
+        "covers_failed": result.covers_failed,
+        "downloaded_paths": [str(p) for p in result.downloaded_paths],
+        "manifest_path": str(result.manifest_path) if result.manifest_path else None,
+        "dry_run": result.dry_run,
+        "error": result.error,
+    }
+    if json_out:
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        print(f"gen_openlibrary_pack_id={result.pack_id}")
+        print(f"gen_openlibrary_query={result.query!r}")
+        print(f"gen_openlibrary_matched={result.docs_matched}")
+        print(f"gen_openlibrary_downloaded={result.covers_downloaded}")
+        print(f"gen_openlibrary_failed={result.covers_failed}")
+        print(f"gen_openlibrary_output_dir={result.output_dir}")
+        print("gen_openlibrary_USE_POLICY=reference-only_not_for_redistribution")
+        if result.manifest_path:
+            print(f"gen_openlibrary_manifest={result.manifest_path}")
+        if result.error:
+            print(f"gen_openlibrary_note={result.error}")
     if not result.ok:
         raise typer.Exit(code=1)
 

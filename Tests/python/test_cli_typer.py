@@ -967,6 +967,59 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertTrue(data["ok"])
 
     # ----------------------------------------------------------------- #
+    # gen openlibrary fetch (v1.13.s91)
+    # ----------------------------------------------------------------- #
+
+    def test_openlibrary_fetch_help_renders(self) -> None:
+        result = self.runner.invoke(self.app, ["gen", "openlibrary", "fetch", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Open Library", result.stdout)
+        self.assertIn("REFERENCE-ONLY", result.stdout)
+
+    def test_openlibrary_fetch_dry_run_no_matches_exits_zero(self) -> None:
+        from unittest.mock import patch
+        from assetboy.execution.openlibrary_runner import OpenLibraryResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = OpenLibraryResult(
+                pack_id="T", query="zzz", output_dir=Path(tmp),
+                docs_matched=0, ok=True, error="no_matches",
+            )
+            with patch(
+                "assetboy.execution.openlibrary_runner.run_openlibrary_batch",
+                return_value=fake,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "openlibrary", "fetch", "--query", "zzz", "--dry-run"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("gen_openlibrary_matched=0", result.stdout)
+        self.assertIn("no_matches", result.stdout)
+
+    def test_openlibrary_fetch_use_policy_in_stdout(self) -> None:
+        from unittest.mock import patch
+        from assetboy.execution.openlibrary_runner import OpenLibraryResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = OpenLibraryResult(
+                pack_id="P", query="q", output_dir=Path(tmp),
+                docs_matched=3, covers_with_id=3, covers_downloaded=3, ok=True,
+            )
+            with patch(
+                "assetboy.execution.openlibrary_runner.run_openlibrary_batch",
+                return_value=fake,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "openlibrary", "fetch", "--query", "q"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("USE_POLICY", result.stdout)
+
+    # ----------------------------------------------------------------- #
     # gen all-no-key (v1.11.s37)
     # ----------------------------------------------------------------- #
 
