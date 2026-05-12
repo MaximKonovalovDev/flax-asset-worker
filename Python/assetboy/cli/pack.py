@@ -432,6 +432,17 @@ def from_recipe_cmd(
             help="Run only packs in gates.required_pack_ids.",
         ),
     ] = False,
+    provider_only: Annotated[
+        list[str],
+        typer.Option(
+            "--provider-only",
+            help=(
+                "v1.21.s147: run ONLY packs whose provider matches one of"
+                " these ids (repeatable). E.g. --provider-only iconify"
+                " --provider-only met_museum."
+            ),
+        ),
+    ] = None,
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -564,6 +575,13 @@ def from_recipe_cmd(
         packs = [p for p in packs if p.get("id") in only_set]
     if only_required:
         packs = [p for p in packs if p.get("id") in required_ids]
+    # v1.21.s147 — --provider-only filter (case-insensitive).
+    if provider_only:
+        po_set = {p.strip().lower() for p in provider_only if p.strip()}
+        packs = [
+            p for p in packs
+            if str(p.get("provider", "")).strip().lower() in po_set
+        ]
     if skip:
         skip_set = set(skip)
         packs = [p for p in packs if p.get("id") not in skip_set]
