@@ -253,6 +253,74 @@ class WarningsTests(unittest.TestCase):
         self.assertTrue(any("no 'license' block" in w for w in r.warnings))
 
 
+class OutputFolderValidationTests(unittest.TestCase):
+    """v1.17.s123: recipe.output_folder soft validation."""
+
+    def setUp(self) -> None:
+        from assetboy.workflows.recipe_validator import validate_recipe_doc
+        self.validate = validate_recipe_doc
+
+    def _doc(self, **recipe_extra):
+        return {
+            "recipe": {"id": "r", "game": "test", "tags": ["t"], **recipe_extra},
+            "packs": [{
+                "id": "P", "provider": "polyhaven",
+                "acquisition_method": "direct_url",
+                "license": {"kind": "cc0"},
+                "asset_kind": "texture",
+                "assets": [{"asset_id": "x"}],
+                "tier": 2,
+            }],
+        }
+
+    def test_relative_output_folder_clean(self) -> None:
+        r = self.validate(self._doc(output_folder="Content/MyGame/Recipe1"))
+        self.assertTrue(r.ok, msg=str(r.errors))
+        for w in r.warnings:
+            self.assertNotIn("output_folder", w)
+
+    def test_non_string_output_folder_is_error(self) -> None:
+        r = self.validate(self._doc(output_folder=42))
+        self.assertFalse(r.ok)
+        self.assertTrue(any("output_folder" in e and "must be a string" in e for e in r.errors))
+
+    def test_empty_output_folder_is_warning(self) -> None:
+        r = self.validate(self._doc(output_folder="   "))
+        self.assertTrue(r.ok)
+        self.assertTrue(any("output_folder" in w and "empty" in w for w in r.warnings))
+
+    def test_absolute_path_unix_is_warning(self) -> None:
+        r = self.validate(self._doc(output_folder="/var/assets/recipe1"))
+        self.assertTrue(r.ok)
+        self.assertTrue(any("absolute" in w for w in r.warnings))
+
+    def test_absolute_path_windows_drive_is_warning(self) -> None:
+        r = self.validate(self._doc(output_folder="C:/proj/assets"))
+        self.assertTrue(r.ok)
+        self.assertTrue(any("absolute" in w for w in r.warnings))
+
+    def test_backslash_is_warning(self) -> None:
+        r = self.validate(self._doc(output_folder="Content\\MyGame\\Recipe"))
+        self.assertTrue(r.ok)
+        self.assertTrue(any("backslash" in w.lower() for w in r.warnings))
+
+    def test_illegal_chars_is_error(self) -> None:
+        r = self.validate(self._doc(output_folder="Content/<bad>"))
+        self.assertFalse(r.ok)
+        self.assertTrue(any("illegal" in e for e in r.errors))
+
+    def test_output_folder_absent_no_complaint(self) -> None:
+        doc = {"recipe": {"id": "r", "game": "t", "tags": ["t"]},
+               "packs": [{"id": "P", "provider": "polyhaven",
+                          "acquisition_method": "direct_url",
+                          "license": {"kind": "cc0"}, "asset_kind": "x",
+                          "assets": [{"asset_id": "x"}], "tier": 2}]}
+        r = self.validate(doc)
+        self.assertTrue(r.ok)
+        for w in r.warnings:
+            self.assertNotIn("output_folder", w)
+
+
 class PackTierFieldTests(unittest.TestCase):
     """v1.13.s93: pack.tier int in {0,1,2,3}."""
 

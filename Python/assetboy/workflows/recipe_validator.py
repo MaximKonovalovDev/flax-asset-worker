@@ -143,6 +143,8 @@ def validate_recipe_doc(doc: Any, source_label: str = "<recipe>") -> ValidationR
         _validate_recipe_metadata_field(
             recipe, "tags", source_label, result
         )
+        # v1.17.s123 — output_folder soft validation.
+        _validate_output_folder(recipe, source_label, result)
 
     packs = doc.get("packs")
     if not isinstance(packs, list):
@@ -297,6 +299,65 @@ def _validate_pack(
                 f"{pack_label} ({pack_id}): 'tier' must be 0, 1, 2, or 3 "
                 f"(P0..P3 priority); got {tier_val!r}"
             )
+
+
+def _validate_output_folder(
+    recipe: dict[str, Any],
+    source_label: str,
+    result: ValidationResult,
+) -> None:
+    """Soft-validate recipe.output_folder (v1.17.s123).
+
+    Catches:
+      - Non-string value (ERROR)
+      - Empty/whitespace (WARNING)
+      - Absolute paths on a project-relative field (WARNING)
+      - Backslashes (cross-platform portability WARNING)
+      - Illegal path chars: < > : " | ? * NUL (ERROR on Windows; WARNING otherwise)
+    """
+    if "output_folder" not in recipe:
+        return  # field optional
+    value = recipe["output_folder"]
+    if value is None:
+        return
+    if not isinstance(value, str):
+        result.ok = False
+        result.errors.append(
+            f"{source_label}: recipe.output_folder must be a string; "
+            f"got {type(value).__name__}"
+        )
+        return
+    stripped = value.strip()
+    if not stripped:
+        result.warnings.append(
+            f"{source_label}: recipe.output_folder is empty/whitespace; "
+            "pipeline will fall back to a default path"
+        )
+        return
+    # Absolute path soft warning.
+    if stripped.startswith(("/", "\\")) or (
+        len(stripped) >= 2 and stripped[1] == ":"  # windows drive letter
+    ):
+        result.warnings.append(
+            f"{source_label}: recipe.output_folder is absolute "
+            f"({stripped!r}); recipes typically use project-relative paths "
+            "(e.g. 'Content/MyGame/...') for portability"
+        )
+    # Backslash soft warning.
+    if "\\" in stripped:
+        result.warnings.append(
+            f"{source_label}: recipe.output_folder contains backslashes "
+            "({stripped!r}); use forward slashes for cross-platform consistency"
+        )
+    # Illegal chars: hard error.
+    illegal = [c for c in '<>:"|?*' if c in stripped[2:] if not c == ":"]
+    if any(c in stripped[2:] for c in '<>"|?*'):
+        bad_chars = sorted({c for c in stripped[2:] if c in '<>"|?*'})
+        result.ok = False
+        result.errors.append(
+            f"{source_label}: recipe.output_folder contains illegal path "
+            f"characters: {bad_chars}"
+        )
 
 
 def _validate_recipe_metadata_field(
