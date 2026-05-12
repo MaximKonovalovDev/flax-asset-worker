@@ -1323,6 +1323,13 @@ class TyperCliSmokeTests(unittest.TestCase):
                 self.assertIn("utc", hist)
                 self.assertEqual(hist["query"], "q")
                 self.assertEqual(hist["providers_run"], 6)
+                # v1.16.s115 enrichment fields.
+                self.assertIn("wall_time_s", hist)
+                self.assertIsInstance(hist["wall_time_s"], (int, float))
+                self.assertGreaterEqual(hist["wall_time_s"], 0.0)
+                self.assertIn("command_shape", hist)
+                self.assertIn("--query 'q'", hist["command_shape"])
+                self.assertIn("--write-history", hist["command_shape"])
             finally:
                 os.chdir(old_cwd)
 

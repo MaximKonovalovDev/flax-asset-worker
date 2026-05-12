@@ -2117,6 +2117,10 @@ def all_no_key_cmd(
     out_dir_arg: Path | None = output_dir if str(output_dir) else None
     base_pack_id = pack_id or f"ALL_NO_KEY_{query.replace(' ', '_').upper()}"
 
+    # v1.16.s115 — wall-time measurement for history enrichment.
+    import time as _time
+    _wall_start = _time.perf_counter()
+
     def _result_to_record(provider: str, r) -> dict:
         return {
             "provider": provider,
@@ -2244,6 +2248,14 @@ def all_no_key_cmd(
             **summary,
             "kind": "all_no_key",
             "utc": utc.isoformat() + "Z",
+            # v1.16.s115 enrichment
+            "wall_time_s": round(_time.perf_counter() - _wall_start, 3),
+            "command_shape": (
+                f"gen all-no-key --query {query!r} --count {count} "
+                + ("--parallel " if parallel else "")
+                + ("--dry-run " if dry_run else "--no-dry-run ")
+                + "--write-history"
+            ),
         }
         history_path.write_text(
             json.dumps(history_record, indent=2), encoding="utf-8"
