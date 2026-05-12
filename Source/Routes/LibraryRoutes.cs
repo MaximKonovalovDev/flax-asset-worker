@@ -231,6 +231,111 @@ namespace FAW.Routes
         }
 
         /// <summary>
+        /// v1.14.s106 — unified library/provider health report.
+        /// Combines C# ProviderRegistry counts + Python r1a-status (no live
+        /// probes by default; pass {"check_live": true} to enable them).
+        /// </summary>
+        public static async Task<JObject> HandleHealthAsync(HttpListenerContext ctx)
+        {
+            try
+            {
+                bool checkLive = false;
+                if (ctx != null && ctx.Request != null && ctx.Request.HasEntityBody)
+                {
+                    try
+                    {
+                        var bodyStr = await new StreamReader(ctx.Request.InputStream).ReadToEndAsync();
+                        if (!string.IsNullOrWhiteSpace(bodyStr))
+                        {
+                            var req = JObject.Parse(bodyStr);
+                            checkLive = req["check_live"]?.Value<bool>() ?? false;
+                        }
+                    }
+                    catch { /* ignore malformed body */ }
+                }
+
+                // C# native provider registry side.
+                JObject csNative;
+                try
+                {
+                    csNative = ProviderRegistry.Instance.ListProviders();
+                    csNative["count"] = ProviderRegistry.Instance.Count;
+                }
+                catch (Exception csExc)
+                {
+                    csNative = new JObject { ["error"] = $"csharp_registry_failed: {csExc.Message}" };
+                }
+
+                // Python R1A side via subprocess.
+                var args = checkLive
+                    ? "-m assetboy.cli library r1a-status --check-live --json"
+                    : "-m assetboy.cli library r1a-status --json";
+                var timeoutMs = checkLive ? 30000 : 15000;
+                JObject r1a;
+                try
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = "python",
+                        Arguments = args,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        StandardOutputEncoding = Encoding.UTF8,
+                        StandardErrorEncoding = Encoding.UTF8,
+                    };
+                    var proc = new Process { StartInfo = psi };
+                    proc.Start();
+                    var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+                    var stderrTask = proc.StandardError.ReadToEndAsync();
+                    if (!proc.WaitForExit(timeoutMs))
+                    {
+                        try { proc.Kill(); } catch { }
+                        r1a = new JObject { ["error"] = $"python_r1a_timeout_{timeoutMs / 1000}s" };
+                    }
+                    else
+                    {
+                        var stdout = await stdoutTask;
+                        var stderr = await stderrTask;
+                        if (proc.ExitCode != 0)
+                        {
+                            r1a = new JObject
+                            {
+                                ["error"] = $"python_r1a_failed: exit={proc.ExitCode}",
+                                ["stderr"] = stderr,
+                            };
+                        }
+                        else
+                        {
+                            try { r1a = JObject.Parse(stdout); }
+                            catch (Exception jx)
+                            {
+                                r1a = new JObject { ["error"] = $"python_r1a_unparseable: {jx.Message}" };
+                            }
+                        }
+                    }
+                }
+                catch (Exception pyExc)
+                {
+                    r1a = new JObject { ["error"] = $"python_r1a_crashed: {pyExc.Message}" };
+                }
+
+                return new JObject
+                {
+                    ["success"] = true,
+                    ["checked_live"] = checkLive,
+                    ["csharp_native_providers"] = csNative,
+                    ["python_r1a"] = r1a,
+                };
+            }
+            catch (Exception exc)
+            {
+                return Error($"health_crashed: {exc.Message}");
+            }
+        }
+
+        /// <summary>
         /// v1.13.s96 — scout-by-license via subprocess. Body shape:
         ///   {"license": "cc0", "query": "stone wall", "count": 2, "dry_run": true}
         /// </summary>
