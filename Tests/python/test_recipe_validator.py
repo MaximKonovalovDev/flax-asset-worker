@@ -476,9 +476,9 @@ class AutoFixWarningsTests(unittest.TestCase):
         self.assertEqual(fixed["packs"][0]["asset_kind"], "prop")
 
     def test_already_valid_pack_unchanged_minus_minor(self) -> None:
-        """If a pack already has all three fields, no manual_browser/license fix applies."""
+        """If pack has all three fields, no per-pack fix; only recipe tag auto-fill (v1.13.s81)."""
         doc = {
-            "recipe": {"id": "x", "game": "test"},
+            "recipe": {"id": "x", "game": "test", "tags": ["preset"]},  # tags set -> no auto-fill
             "packs": [{
                 "id": "PACK_OK",
                 "provider": "fab",
@@ -492,7 +492,55 @@ class AutoFixWarningsTests(unittest.TestCase):
         # Source_url preserved exactly
         self.assertEqual(fixed["packs"][0]["source_url"], "https://www.fab.com/listings/abc")
         self.assertEqual(fixed["packs"][0]["license"]["kind"], "fab_standard")
+        self.assertEqual(fixed["recipe"]["tags"], ["preset"])
         self.assertEqual(fixes, [])
+
+    def test_recipe_missing_tags_gets_auto_tagged(self) -> None:
+        """v1.13.s81: recipe without tags -> auto-fill ['auto-tagged']."""
+        doc = {
+            "recipe": {"id": "x", "game": "test"},
+            "packs": [{
+                "id": "P", "provider": "polyhaven",
+                "acquisition_method": "direct_url",
+                "license": {"kind": "cc0"},
+                "asset_kind": "texture",
+                "assets": [{"asset_id": "x"}],
+            }],
+        }
+        fixed, fixes = self.auto_fix(doc)
+        self.assertEqual(fixed["recipe"]["tags"], ["auto-tagged"])
+        self.assertTrue(any("auto-tagged" in f for f in fixes))
+
+    def test_recipe_existing_tags_preserved(self) -> None:
+        """Operator-set tags should NOT be overwritten."""
+        doc = {
+            "recipe": {"id": "x", "game": "test", "tags": ["custom"]},
+            "packs": [{
+                "id": "P", "provider": "polyhaven",
+                "acquisition_method": "direct_url",
+                "license": {"kind": "cc0"},
+                "asset_kind": "texture",
+                "assets": [{"asset_id": "x"}],
+            }],
+        }
+        fixed, fixes = self.auto_fix(doc)
+        self.assertEqual(fixed["recipe"]["tags"], ["custom"])
+        self.assertFalse(any("auto-tagged" in f for f in fixes))
+
+    def test_recipe_empty_tags_list_gets_auto_filled(self) -> None:
+        """Operator set tags=[] explicitly -> still fill with default."""
+        doc = {
+            "recipe": {"id": "x", "game": "test", "tags": []},
+            "packs": [{
+                "id": "P", "provider": "polyhaven",
+                "acquisition_method": "direct_url",
+                "license": {"kind": "cc0"},
+                "asset_kind": "texture",
+                "assets": [{"asset_id": "x"}],
+            }],
+        }
+        fixed, fixes = self.auto_fix(doc)
+        self.assertEqual(fixed["recipe"]["tags"], ["auto-tagged"])
 
     def test_non_dict_doc_returns_unchanged(self) -> None:
         fixed, fixes = self.auto_fix("not a dict")  # type: ignore[arg-type]

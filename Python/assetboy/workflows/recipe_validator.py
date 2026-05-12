@@ -570,4 +570,24 @@ def auto_fix_warnings(doc: dict) -> tuple[dict, list[str]]:
         new_packs.append(patched)
 
     fixed_doc["packs"] = new_packs
+
+    # v1.13.s81 — recipe-level metadata auto-fill.
+    # If recipe block exists and lacks 'tags', add a single 'auto' tag
+    # so future discovery queries can filter "untagged" recipes by absence.
+    recipe = fixed_doc.get("recipe")
+    if isinstance(recipe, dict):
+        recipe_changed = False
+        # Only fill 'tags' if absent or empty — never overwrite operator values.
+        if "tags" not in recipe or (
+            isinstance(recipe.get("tags"), list) and not recipe["tags"]
+        ):
+            recipe["tags"] = ["auto-tagged"]
+            recipe_changed = True
+            fixes.append(
+                "recipe: added default tags=['auto-tagged'] (operator can refine via "
+                "pack list-recipes --filter tags:<tag>)"
+            )
+        if recipe_changed:
+            fixed_doc["recipe"] = recipe
+
     return fixed_doc, fixes
