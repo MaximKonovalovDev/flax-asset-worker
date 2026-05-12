@@ -104,6 +104,20 @@ class IconifyLiveTests(unittest.TestCase):
             self.assertIn(":", icon_id)
 
 
+# v1.13.s88 — iNaturalist (no API key, just FAW_RUN_LIVE_TESTS=1)
+@LIVE_TESTS_SKIP
+class INaturalistLiveTests(unittest.TestCase):
+    def test_search_returns_observations(self) -> None:
+        from assetboy.execution.inaturalist_runner import search_inaturalist_observations
+        obs = search_inaturalist_observations("oak tree", per_page=2)
+        self.assertIsInstance(obs, list)
+        # Common query should return >0 results.
+        self.assertGreater(len(obs), 0)
+        # Each observation should have an id + observation_photos.
+        for o in obs:
+            self.assertIn("id", o)
+
+
 # --------------------------------------------------------------------------- #
 # v1.13.s79 — keyed providers (need env var + FAW_RUN_LIVE_TESTS)
 # --------------------------------------------------------------------------- #
