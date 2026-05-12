@@ -1117,6 +1117,33 @@ class TyperCliSmokeTests(unittest.TestCase):
     # gen unsplash photos (v1.10.s35)
     # ----------------------------------------------------------------- #
 
+    def test_unsplash_photos_collection_threads_through(self) -> None:
+        """v1.19.s133: --collection flag flows into run_unsplash_photo_batch kwargs."""
+        from unittest.mock import patch
+        from assetboy.execution.unsplash_runner import UnsplashResult
+        import os, tempfile
+        captured: dict = {}
+
+        def capture(**kwargs):
+            captured.update(kwargs)
+            return UnsplashResult(
+                pack_id="x", query="q", output_dir=Path(tempfile.gettempdir()),
+                photos_matched=0, ok=True, error="no_matches",
+            )
+
+        with patch.dict(os.environ, {"UNSPLASH_ACCESS_KEY": "test"}):
+            with patch(
+                "assetboy.execution.unsplash_runner.run_unsplash_photo_batch",
+                side_effect=capture,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "unsplash", "photos", "--query", "q",
+                     "--collection", "42,99", "--dry-run"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(captured.get("collections"), "42,99")
+
     def test_unsplash_photos_help_renders(self) -> None:
         result = self.runner.invoke(self.app, ["gen", "unsplash", "photos", "--help"])
         self.assertEqual(result.exit_code, 0)

@@ -69,6 +69,20 @@ class UnsplashSearchTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.mod.search_unsplash_photos("x", access_key="k", orientation="diagonal")
 
+    def test_search_includes_collections_param(self) -> None:
+        """v1.19.s133: collections= appears in URL when set."""
+        captured_urls: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured_urls.append(str(req.full_url))
+            return _json_response({"results": []})
+
+        with patch.object(self.mod.urllib.request, "urlopen", side_effect=capture):
+            self.mod.search_unsplash_photos(
+                "x", access_key="k", collections="42,99",
+            )
+        self.assertIn("collections=42%2C99", captured_urls[0])
+
     def test_search_accepts_valid_orientation(self) -> None:
         payload = {"results": []}
         with patch.object(

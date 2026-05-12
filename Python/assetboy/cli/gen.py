@@ -2010,6 +2010,13 @@ def unsplash_photos_cmd(
             help="landscape | portrait | squarish (default: any).",
         ),
     ] = "",
+    collection: Annotated[
+        str,
+        typer.Option(
+            "--collection",
+            help="v1.19.s133: comma-separated Unsplash collection IDs to scope search to.",
+        ),
+    ] = "",
     pack_id: Annotated[str, typer.Option("--pack-id")] = "",
     output_dir: Annotated[Path, typer.Option("--output-dir")] = Path(""),
     skip_download_ping: Annotated[
@@ -2042,11 +2049,13 @@ def unsplash_photos_cmd(
     out_dir_arg: Path | None = output_dir if str(output_dir) else None
     pack_id_arg: str | None = pack_id if pack_id else None
     orientation_arg: str | None = orientation.strip().lower() if orientation.strip() else None
+    collection_arg: str | None = collection.strip() or None  # v1.19.s133
 
     try:
         result = run_unsplash_photo_batch(
             query=query, pack_id=pack_id_arg, count=count, variant=variant,
             orientation=orientation_arg,
+            collections=collection_arg,
             output_dir=out_dir_arg, dry_run=dry_run,
             skip_download_ping=skip_download_ping,
         )

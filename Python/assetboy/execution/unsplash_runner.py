@@ -137,9 +137,13 @@ def search_unsplash_photos(
     per_page: int = 10,
     page: int = 1,
     orientation: str | None = None,
+    collections: str | None = None,
     timeout: float = 20.0,
 ) -> list[dict]:
-    """Hit /search/photos; return results list."""
+    """Hit /search/photos; return results list.
+
+    v1.19.s133: optional collections= filter (comma-separated collection IDs).
+    """
     if orientation and orientation not in _VALID_ORIENTATIONS:
         raise ValueError(
             f"invalid orientation {orientation!r}; valid: {sorted(_VALID_ORIENTATIONS)}"
@@ -151,6 +155,8 @@ def search_unsplash_photos(
     }
     if orientation:
         params["orientation"] = orientation
+    if collections:
+        params["collections"] = collections
     url = f"{UNSPLASH_API}/search/photos?{urllib.parse.urlencode(params)}"
     payload = _authed_get_json(url, access_key, timeout=timeout)
     return list(payload.get("results", []))
@@ -164,6 +170,7 @@ def run_unsplash_photo_batch(
     count: int = 6,
     variant: str = "regular",
     orientation: str | None = None,
+    collections: str | None = None,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.2,
     dry_run: bool = False,
@@ -212,7 +219,7 @@ def run_unsplash_photo_batch(
     try:
         photos = search_unsplash_photos(
             query, access_key=key, per_page=min(count, 30),
-            orientation=orientation,
+            orientation=orientation, collections=collections,
         )
     except urllib.error.HTTPError as exc:
         result.ok = False
