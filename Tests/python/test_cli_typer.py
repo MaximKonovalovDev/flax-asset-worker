@@ -2323,6 +2323,70 @@ class TyperCliSmokeTests(unittest.TestCase):
     # library install-r1a-pack (v1.14.s103)
     # ----------------------------------------------------------------- #
 
+    def test_library_install_r1a_pack_recipe_mode_resolves_manifests(self) -> None:
+        """v1.15.s109: --recipe enumerates R1A manifests for matching packs."""
+        import tempfile, json as _json
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            drop_root = tmp_p / "manual_drop"
+            (drop_root / "met_museum" / "RECIPE_MET").mkdir(parents=True)
+            (drop_root / "met_museum" / "RECIPE_MET" / "met_museum_manifest.json").write_text(
+                _json.dumps({
+                    "source": "met_museum", "pack_id": "RECIPE_MET",
+                    "entries": [{"id": 1, "local_path": "x", "downloaded": True}],
+                }), encoding="utf-8",
+            )
+            # Recipe with 2 packs: one met_museum (manifest exists), one polyhaven (skipped).
+            import yaml as _yaml
+            recipe_path = tmp_p / "test_recipe.yaml"
+            recipe_doc = {
+                "recipe": {"id": "test_recipe", "game": "x", "tags": ["t"]},
+                "packs": [
+                    {"id": "RECIPE_MET", "provider": "met_museum",
+                     "acquisition_method": "direct_url",
+                     "license": {"kind": "cc0"}, "asset_kind": "ref",
+                     "search_terms": ["x"]},
+                    {"id": "RECIPE_PH", "provider": "polyhaven",
+                     "acquisition_method": "direct_url",
+                     "license": {"kind": "cc0"}, "asset_kind": "texture",
+                     "assets": [{"asset_id": "x"}]},
+                ],
+            }
+            recipe_path.write_text(_yaml.dump(recipe_doc), encoding="utf-8")
+
+            with patch(
+                "assetboy.execution.comfyui_runner.manual_drop_dir",
+                return_value=drop_root,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["library", "install-r1a-pack",
+                     "--recipe", str(recipe_path),
+                     "--dry-run", "--json"],
+                )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            data = _json.loads(result.stdout.strip())
+            self.assertEqual(data["packs_total"], 2)
+            # met_museum manifest resolves; polyhaven not r1a -> skipped.
+            self.assertEqual(data["manifests_resolved"], 1)
+            self.assertTrue(any(
+                p["provider"] == "met_museum" and "manifest_path" in p
+                for p in data["per_pack"]
+            ))
+            self.assertTrue(any(
+                p["provider"] == "polyhaven" and "skipped" in p
+                for p in data["per_pack"]
+            ))
+
+    def test_library_install_r1a_pack_recipe_not_found_exits_1(self) -> None:
+        result = self.runner.invoke(
+            self.app,
+            ["library", "install-r1a-pack", "--recipe", "does_not_exist.yaml"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("recipe_not_found", result.stdout)
+
     def test_library_install_r1a_pack_help_renders(self) -> None:
         result = self.runner.invoke(self.app, ["library", "install-r1a-pack", "--help"])
         self.assertEqual(result.exit_code, 0)
