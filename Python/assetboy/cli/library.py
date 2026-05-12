@@ -680,6 +680,16 @@ def readiness_cmd(
 
 @app.command("r1a-status")
 def r1a_status_cmd(
+    check_live: Annotated[
+        bool,
+        typer.Option(
+            "--check-live",
+            help=(
+                "v1.13.s80: probe each provider's API with a minimal search."
+                " Adds ~1-3s wall time. Sets live_ok per provider in output."
+            ),
+        ),
+    ] = False,
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -689,13 +699,11 @@ def r1a_status_cmd(
     Pulls together:
       - gen list-providers (env-key state per provider)
       - pack manifest-stats (on-disk counts per source)
-
-    Returns a single picture of "what providers are configured" + "what have
-    I actually fetched". No subprocesses; calls the underlying functions
-    directly.
+      - (v1.13.s80) live API probe per provider when --check-live is set
 
     Examples:
       assetboy library r1a-status
+      assetboy library r1a-status --check-live
       assetboy library r1a-status --json
     """
     import os
@@ -779,12 +787,80 @@ def r1a_status_cmd(
         prov["manifests_on_disk"] = disk.get("manifests", 0)
         prov["downloaded_on_disk"] = disk.get("downloaded", 0)
         prov["bytes_on_disk"] = disk.get("bytes", 0)
+        # v1.13.s80 default: live_ok=None (not probed). Filled below if check_live.
+        prov["live_ok"] = None
+        prov["live_error"] = None
+
+    # v1.13.s80 — live probes (concurrent via ThreadPoolExecutor).
+    if check_live:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        def _probe(prov: dict) -> tuple[str, bool, str | None]:
+            pid = prov["id"]
+            try:
+                if prov["env_var"] is not None and not prov["env_set"]:
+                    return pid, False, "missing_env_key"
+                if pid == "met-museum":
+                    from assetboy.execution.met_museum_runner import search_met_object_ids
+                    ids = search_met_object_ids("vermeer", has_images=True)
+                    return pid, len(ids) > 0, None if ids else "no_results"
+                if pid == "wikimedia":
+                    from assetboy.execution.wikimedia_runner import search_wikimedia_files
+                    files = search_wikimedia_files("stone wall", limit=2)
+                    return pid, len(files) > 0, None if files else "no_results"
+                if pid == "archive-org":
+                    from assetboy.execution.archive_org_runner import search_archive_items
+                    items = search_archive_items("subject:roman", rows=2)
+                    return pid, len(items) > 0, None if items else "no_results"
+                if pid == "scryfall":
+                    from assetboy.execution.scryfall_runner import search_scryfall_cards
+                    cards = search_scryfall_cards("type:dragon")
+                    return pid, len(cards) > 0, None if cards else "no_results"
+                if pid == "iconify":
+                    from assetboy.execution.iconify_runner import search_iconify_icons
+                    icons = search_iconify_icons("sword", limit=2)
+                    return pid, len(icons) > 0, None if icons else "no_results"
+                if pid == "pexels":
+                    from assetboy.execution.pexels_runner import search_pexels_photos, get_api_key
+                    photos = search_pexels_photos("fire", api_key=get_api_key(), per_page=2)
+                    return pid, len(photos) > 0, None if photos else "no_results"
+                if pid == "pixabay":
+                    from assetboy.execution.pixabay_runner import search_pixabay_photos, get_api_key
+                    hits = search_pixabay_photos("stone wall", api_key=get_api_key(), per_page=3)
+                    return pid, len(hits) > 0, None if hits else "no_results"
+                if pid == "unsplash":
+                    from assetboy.execution.unsplash_runner import search_unsplash_photos, get_access_key
+                    photos = search_unsplash_photos("mountain", access_key=get_access_key(), per_page=2)
+                    return pid, len(photos) > 0, None if photos else "no_results"
+                if pid == "rawg":
+                    from assetboy.execution.rawg_runner import search_rawg_games, get_api_key
+                    games = search_rawg_games("roguelike", api_key=get_api_key(), page_size=2)
+                    return pid, len(games) > 0, None if games else "no_results"
+                if pid == "jamendo":
+                    from assetboy.execution.jamendo_runner import search_jamendo_tracks, get_client_id
+                    tracks = search_jamendo_tracks("ambient", client_id=get_client_id(), limit=2)
+                    return pid, True, None if tracks else "no_results_but_call_succeeded"
+                return pid, False, "unknown_provider"
+            except Exception as exc:
+                return pid, False, f"probe_failed: {exc}"
+
+        with ThreadPoolExecutor(max_workers=len(providers_state)) as pool:
+            futs = {pool.submit(_probe, p): p for p in providers_state}
+            for fut in as_completed(futs):
+                pid_done, ok_done, err_done = fut.result()
+                for p in providers_state:
+                    if p["id"] == pid_done:
+                        p["live_ok"] = ok_done
+                        p["live_error"] = err_done
+                        break
 
     no_key_count = sum(1 for p in providers_state if p["env_var"] is None)
     key_set = sum(1 for p in providers_state if p["env_set"] is True)
     key_unset = sum(1 for p in providers_state if p["env_set"] is False)
     total_downloaded = sum(p["downloaded_on_disk"] for p in providers_state)
     total_bytes = sum(p["bytes_on_disk"] for p in providers_state)
+    live_ok_count = sum(1 for p in providers_state if p["live_ok"] is True)
+    live_failed_count = sum(1 for p in providers_state if p["live_ok"] is False)
 
     summary = {
         "manual_drop_root": str(scan_root),
@@ -795,6 +871,9 @@ def r1a_status_cmd(
         "providers_key_unset": key_unset,
         "total_downloaded_on_disk": total_downloaded,
         "total_bytes_on_disk": total_bytes,
+        "checked_live": check_live,
+        "live_ok_count": live_ok_count,
+        "live_failed_count": live_failed_count,
         "providers": providers_state,
     }
 

@@ -1776,6 +1776,65 @@ class TyperCliSmokeTests(unittest.TestCase):
         # 0/5 keys set.
         self.assertIn("library_r1a_status_providers_key_set=0/5", result.stdout)
 
+    def test_library_r1a_status_check_live_with_mocked_probes(self) -> None:
+        """v1.13.s80: --check-live runs probes; mock to verify wiring."""
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {}, clear=False):
+            for k in ("PEXELS_API_KEY", "PIXABAY_API_KEY",
+                      "UNSPLASH_ACCESS_KEY", "RAWG_API_KEY", "JAMENDO_CLIENT_ID"):
+                os.environ.pop(k, None)
+            with patch(
+                "assetboy.execution.met_museum_runner.search_met_object_ids",
+                return_value=[1, 2, 3],
+            ), patch(
+                "assetboy.execution.wikimedia_runner.search_wikimedia_files",
+                return_value=["File:X.jpg"],
+            ), patch(
+                "assetboy.execution.archive_org_runner.search_archive_items",
+                return_value=[{"identifier": "x"}],
+            ), patch(
+                "assetboy.execution.scryfall_runner.search_scryfall_cards",
+                return_value=[{"id": "x"}],
+            ), patch(
+                "assetboy.execution.iconify_runner.search_iconify_icons",
+                return_value=["mdi:sword"],
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["library", "r1a-status", "--check-live", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertTrue(data["checked_live"])
+        # 5 no-key providers probed OK; 5 keyed return live_ok=False
+        # because env keys unset.
+        self.assertEqual(data["live_ok_count"], 5)
+        self.assertEqual(data["live_failed_count"], 5)
+        # Each provider has live_ok and live_error keys.
+        for p in data["providers"]:
+            self.assertIn("live_ok", p)
+            self.assertIn("live_error", p)
+
+    def test_library_r1a_status_no_check_live_leaves_probes_unset(self) -> None:
+        """When --check-live omitted, all providers have live_ok=None."""
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {}, clear=False):
+            for k in ("PEXELS_API_KEY", "PIXABAY_API_KEY",
+                      "UNSPLASH_ACCESS_KEY", "RAWG_API_KEY", "JAMENDO_CLIENT_ID"):
+                os.environ.pop(k, None)
+            result = self.runner.invoke(
+                self.app, ["library", "r1a-status", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertFalse(data["checked_live"])
+        for p in data["providers"]:
+            self.assertIsNone(p["live_ok"])
+
     def test_library_r1a_status_json_shape(self) -> None:
         """JSON mode includes per-provider rows + aggregates."""
         result = self.runner.invoke(
