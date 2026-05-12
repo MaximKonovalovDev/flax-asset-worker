@@ -310,5 +310,50 @@ class CanaryJsonContractTests(unittest.TestCase):
             self.assertIn("ms", probe_result, f"probe {probe_name} missing 'ms'")
 
 
+class ScoutByLicenseJsonContractTests(JsonContractTests):
+    """v1.14.s102: shape consumed by C# /api/v1/library/scout-by-license."""
+
+    def test_gen_scout_by_license_json_shape(self) -> None:
+        """gen scout-by-license --json with dry-run produces parseable C#-compatible JSON."""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(PYTHON_PACKAGE_ROOT)
+        # Clear key envs to make missing-key skips deterministic.
+        for k in ("PEXELS_API_KEY", "PIXABAY_API_KEY", "UNSPLASH_ACCESS_KEY"):
+            env.pop(k, None)
+        cmd = [
+            sys.executable, "-m", "assetboy.cli",
+            "gen", "scout-by-license",
+            "--license", "cc0",
+            "--query", "stone",
+            "--count", "1",
+            "--dry-run",
+            "--json",
+        ]
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=60,
+            cwd=str(PYTHON_PACKAGE_ROOT), env=env,
+        )
+        # The command may hit live no-key APIs; allow some providers to fail
+        # individually but the subprocess itself should exit 0 with valid JSON.
+        try:
+            parsed = json.loads(proc.stdout)
+        except json.JSONDecodeError as e:
+            self.fail(f"stdout not valid JSON: {e}\nFIRST 300 chars:\n{proc.stdout[:300]}")
+        for k in (
+            "license_token", "query", "count_per_provider", "dry_run",
+            "providers_matched_by_license", "providers_run",
+            "providers_ok", "providers_skipped", "providers_failed",
+            "total_matched", "total_downloaded", "providers",
+        ):
+            self.assertIn(k, parsed, f"missing top-level key {k!r}")
+        # Each provider entry has the C#-expected shape.
+        for p in parsed["providers"]:
+            for k in ("provider", "license", "ok", "skipped",
+                      "matched", "downloaded", "error"):
+                self.assertIn(k, p, f"provider entry missing {k!r}: {p}")
+        # license_token gets normalized to lower.
+        self.assertEqual(parsed["license_token"], "cc0")
+
+
 if __name__ == "__main__":
     unittest.main()

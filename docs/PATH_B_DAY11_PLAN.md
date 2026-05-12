@@ -652,3 +652,34 @@ All v1.13+ slices (s90..s94) SHIPPED. Five fresh ideas for the next round:
   150-commit milestone (we're at 149 as of v1.13.12).
 
 Ship order: s96, s97, s98, s99, s100.
+
+---
+
+## v1.14+ backlog (added 2026-05-12, s101)
+
+All v1.14+ s96..s100 SHIPPED. Five fresh ideas:
+
+- **s102 — scout-by-license HTTP test coverage**: pytest-level smoke
+  test invoking the C# subprocess wrapper via the python CLI directly
+  (since the C# server isn't running in pytest). Verify the JSON shape
+  C# parses matches what the runner emits.
+
+- **s103 — `library install-r1a-pack <pack_id>` CLI**: take an entry
+  from a manifest file and copy its `local_path` file(s) into the
+  Library/ directory, registering them in asset_library.json. Bridges
+  R1A scouting -> long-term project library.
+
+- **s104 — canary R1A probe rotation**: extend Python/assetboy/canary.py
+  with a 6th probe that calls one R1A provider per run on rotation
+  (Met -> Wikimedia -> Archive.org -> ...). Keeps R1A health visible
+  to the weekly canary without adding 10 simultaneous probes.
+
+- **s105 — recipe ordering by tier**: `pack list-recipes --sort tier`
+  returns recipes ordered by min-tier across their packs (most
+  critical first). Helps operator prioritize.
+
+- **s106 — provider-health JSON endpoint**: `/api/v1/library/health`
+  combines library r1a-status --check-live (live probes) + the C#-
+  native ProviderRegistry health into a unified health report.
+
+Ship order: s102, s103, s104, s105, s106.
