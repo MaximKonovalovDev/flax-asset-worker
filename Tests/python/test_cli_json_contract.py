@@ -355,5 +355,103 @@ class ScoutByLicenseJsonContractTests(JsonContractTests):
         self.assertEqual(parsed["license_token"], "cc0")
 
 
+class R1aStatusJsonContractTests(JsonContractTests):
+    """v1.17.s124: shape consumed by C# /api/v1/library/r1a-status."""
+
+    def test_library_r1a_status_default_json_shape(self) -> None:
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(PYTHON_PACKAGE_ROOT)
+        cmd = [
+            sys.executable, "-m", "assetboy.cli",
+            "library", "r1a-status", "--json",
+        ]
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=30,
+            cwd=str(PYTHON_PACKAGE_ROOT), env=env,
+        )
+        self.assertEqual(proc.returncode, 0)
+        try:
+            parsed = json.loads(proc.stdout)
+        except json.JSONDecodeError as e:
+            self.fail(f"r1a-status JSON unparseable: {e}\n{proc.stdout[:300]}")
+        for k in (
+            "manual_drop_root", "manifests_scanned",
+            "providers_total", "providers_no_key",
+            "providers_key_set", "providers_key_unset",
+            "total_downloaded_on_disk", "total_bytes_on_disk",
+            "checked_live", "live_ok_count", "live_failed_count",
+            "providers",
+        ):
+            self.assertIn(k, parsed, f"missing key {k!r}")
+        # 11 providers in the catalog (v1.13.s86: added iNat).
+        self.assertEqual(parsed["providers_total"], 11)
+
+
+class ManifestStatsJsonContractTests(JsonContractTests):
+    """v1.17.s124: shape consumed by C# /api/v1/manifest/stats."""
+
+    def test_pack_manifest_stats_default_json_shape(self) -> None:
+        import tempfile, os as _os
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(PYTHON_PACKAGE_ROOT)
+        with tempfile.TemporaryDirectory() as tmp:
+            cmd = [
+                sys.executable, "-m", "assetboy.cli",
+                "pack", "manifest-stats",
+                "--root", tmp,
+                "--json",
+            ]
+            proc = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=30,
+                cwd=str(PYTHON_PACKAGE_ROOT), env=env,
+            )
+        self.assertEqual(proc.returncode, 0)
+        try:
+            parsed = json.loads(proc.stdout)
+        except json.JSONDecodeError as e:
+            self.fail(f"manifest-stats JSON unparseable: {e}")
+        for k in (
+            "root", "manifests_scanned", "manifests_after_filter",
+            "sources_seen", "total_downloaded", "total_skipped",
+            "total_failed", "total_bytes", "by_source",
+        ):
+            self.assertIn(k, parsed, f"missing key {k!r}")
+        # Empty tempdir -> 0 manifests.
+        self.assertEqual(parsed["manifests_scanned"], 0)
+
+
+class GenListProvidersJsonContractTests(JsonContractTests):
+    """v1.17.s124: shape consumed by C# /api/v1/providers/list-gen."""
+
+    def test_gen_list_providers_default_json_shape(self) -> None:
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(PYTHON_PACKAGE_ROOT)
+        cmd = [
+            sys.executable, "-m", "assetboy.cli",
+            "gen", "list-providers", "--json",
+        ]
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=30,
+            cwd=str(PYTHON_PACKAGE_ROOT), env=env,
+        )
+        self.assertEqual(proc.returncode, 0)
+        try:
+            parsed = json.loads(proc.stdout)
+        except json.JSONDecodeError as e:
+            self.fail(f"list-providers JSON unparseable: {e}")
+        for k in (
+            "providers", "total", "no_key_count", "key_required_count",
+            "key_set_count", "key_unset_count", "filters_applied",
+        ):
+            self.assertIn(k, parsed, f"missing key {k!r}")
+        # 13 providers in catalog (v1.13.s86: added iNat).
+        self.assertEqual(parsed["total"], 13)
+        # Each provider entry has expected fields.
+        for p in parsed["providers"]:
+            for k in ("id", "cli", "env_var", "license", "asset_class",
+                      "what", "env_set"):
+                self.assertIn(k, p, f"provider entry missing {k!r}")
+
+
 if __name__ == "__main__":
     unittest.main()
