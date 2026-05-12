@@ -746,3 +746,31 @@ All v1.15+ s108..s111 + s112 milestone SHIPPED. Five fresh ideas:
   auto-open the generated HTML in the system browser.
 
 Ship order: s114, s115, s116, s117, s118.
+
+---
+
+## v1.17+ backlog (added 2026-05-12, s119)
+
+All v1.16+ s114..s118 SHIPPED. Five fresh ideas:
+
+- **s120 — `gen all-key --write-history`**: mirror v1.15.s108's
+  history snapshot for the keyed fan-out. Same shape but kind=
+  'all_key'. Then v1.16.s116's --history mode aggregates both
+  natively (since it groups by kind).
+
+- **s121 — `pack list-recipes --sort path` explicit + `pack
+  list-recipes --reverse`**: explicit sort key + reversal flag.
+  Useful with --sort tier --reverse (least-critical first).
+
+- **s122 — `gen scout-by-license` parallel mode**: like
+  all-no-key/all-key. The scout-by-license loop is currently
+  sequential. ThreadPoolExecutor speed-up applies.
+
+- **s123 — recipe `output_folder` validation**: validator catches
+  recipes whose `output_folder` contains illegal path chars or
+  starts with absolute path on non-Windows. Soft warning, not error.
+
+- **s124 — milestone v1.16-WAVE-COMPLETE + 750-test stretch**:
+  capstone tag once s120..s123 ship. Approach 750 tests.
+
+Ship order: s120, s121, s122, s123, s124.

@@ -2334,6 +2334,13 @@ def all_key_cmd(
             help="v1.12.s65: dispatch keyed runners concurrently (ThreadPoolExecutor).",
         ),
     ] = False,
+    write_history: Annotated[
+        bool,
+        typer.Option(
+            "--write-history",
+            help="v1.17.s120: append run to state/r1a_history/<utc>.json (kind=all_key).",
+        ),
+    ] = False,
     json_out: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Fan out one query across key-required R1A providers (Path B v1.11.s38).
@@ -2407,6 +2414,10 @@ def all_key_cmd(
             "manifest_path": None, "error": f"crashed: {exc}",
             "output_dir": "",
         }
+
+    # v1.17.s120 — wall-time bracket for history snapshot.
+    import time as _time
+    _wall_start = _time.perf_counter()
 
     # Build dispatch tasks. Each entry: (pid, key_getter, runner, kwargs).
     tasks: list[tuple[str, object, object, dict]] = [
@@ -2508,6 +2519,32 @@ def all_key_cmd(
         "providers": providers_run,
     }
 
+    # v1.17.s120 — history snapshot (mirrors v1.15.s108 for all-no-key).
+    if write_history:
+        import datetime
+        utc = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        history_dir = Path("state") / "r1a_history"
+        history_dir.mkdir(parents=True, exist_ok=True)
+        fname = f"all_key_{utc.strftime('%Y%m%dT%H%M%SZ')}.json"
+        history_path = history_dir / fname
+        history_record = {
+            **summary,
+            "kind": "all_key",
+            "utc": utc.isoformat() + "Z",
+            "wall_time_s": round(_time.perf_counter() - _wall_start, 3),
+            "command_shape": (
+                f"gen all-key --query {query!r} --count {count} "
+                + ("--include-video " if include_video else "")
+                + ("--parallel " if parallel else "")
+                + ("--dry-run " if dry_run else "--no-dry-run ")
+                + "--write-history"
+            ),
+        }
+        history_path.write_text(
+            json.dumps(history_record, indent=2), encoding="utf-8"
+        )
+        summary["history_path"] = str(history_path)
+
     if json_out:
         json.dump(summary, sys.stdout, indent=2)
         sys.stdout.write("\n")
@@ -2516,6 +2553,8 @@ def all_key_cmd(
         print(f"gen_all_key_dry_run={dry_run}")
         print(f"gen_all_key_include_video={include_video}")
         print(f"gen_all_key_parallel={parallel}")
+        if write_history:
+            print(f"gen_all_key_history_path={summary['history_path']}")
         print(f"gen_all_key_providers_ok={providers_ok}/{len(providers_run)}")
         print(f"gen_all_key_providers_skipped={providers_skipped}")
         print(f"gen_all_key_providers_failed={providers_failed}")

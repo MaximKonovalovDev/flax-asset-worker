@@ -2023,6 +2023,38 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["providers_run"], 7)
         self.assertTrue(data["include_video"])
 
+    def test_all_key_write_history_creates_file(self) -> None:
+        """v1.17.s120: --write-history writes state/r1a_history/all_key_<utc>.json."""
+        import os, tempfile, json as _json
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(tmp_p)
+                # No env keys -> all 5 keyed providers skipped, history still written.
+                with patch.dict(os.environ, {}, clear=False):
+                    for k in ("PEXELS_API_KEY", "PIXABAY_API_KEY",
+                              "UNSPLASH_ACCESS_KEY", "RAWG_API_KEY", "JAMENDO_CLIENT_ID"):
+                        os.environ.pop(k, None)
+                    result = self.runner.invoke(
+                        self.app,
+                        ["gen", "all-key", "--query", "q",
+                         "--write-history", "--json"],
+                    )
+                self.assertEqual(result.exit_code, 0, msg=result.stdout)
+                data = _json.loads(result.stdout.strip())
+                self.assertIn("history_path", data)
+                hp = Path(data["history_path"])
+                self.assertTrue(hp.exists())
+                hist = _json.loads(hp.read_text(encoding="utf-8"))
+                self.assertEqual(hist["kind"], "all_key")
+                self.assertIn("wall_time_s", hist)
+                self.assertIn("command_shape", hist)
+                self.assertIn("--write-history", hist["command_shape"])
+            finally:
+                os.chdir(old_cwd)
+
     def test_all_key_parallel_preserves_order_and_skips(self) -> None:
         """v1.12.s65: --parallel preserves task order; missing keys still SKIP."""
         import os
