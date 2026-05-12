@@ -2003,6 +2003,7 @@ def all_no_key_cmd(
     from assetboy.execution.archive_org_runner import run_archive_org_batch
     from assetboy.execution.scryfall_runner import run_scryfall_batch
     from assetboy.execution.iconify_runner import run_iconify_batch
+    from assetboy.execution.inaturalist_runner import run_inaturalist_batch  # v1.13.s87
 
     out_dir_arg: Path | None = output_dir if str(output_dir) else None
     base_pack_id = pack_id or f"ALL_NO_KEY_{query.replace(' ', '_').upper()}"
@@ -2015,12 +2016,14 @@ def all_no_key_cmd(
                        or getattr(r, "objects_matched", 0)
                        or getattr(r, "files_matched", 0)
                        or getattr(r, "cards_matched", 0)
-                       or getattr(r, "icons_matched", 0),
+                       or getattr(r, "icons_matched", 0)
+                       or getattr(r, "observations_matched", 0),  # v1.13.s87 iNat
             "downloaded": getattr(r, "items_downloaded", 0)
                           or getattr(r, "objects_downloaded", 0)
                           or getattr(r, "files_downloaded", 0)
                           or getattr(r, "cards_downloaded", 0)
-                          or getattr(r, "icons_downloaded", 0),
+                          or getattr(r, "icons_downloaded", 0)
+                          or getattr(r, "photos_downloaded", 0),  # v1.13.s87 iNat
             "manifest_path": str(r.manifest_path) if getattr(r, "manifest_path", None) else None,
             "error": r.error,
             "output_dir": str(r.output_dir),
@@ -2061,6 +2064,12 @@ def all_no_key_cmd(
         ("iconify", run_iconify_batch, dict(
             query=query, pack_id=f"{base_pack_id}_IC", count=count,
             output_dir=(out_dir_arg / "iconify") if out_dir_arg else None,
+            dry_run=dry_run,
+        )),
+        # v1.13.s87 — iNaturalist in fan-out (now 6 no-key providers).
+        ("inaturalist", run_inaturalist_batch, dict(
+            query=query, pack_id=f"{base_pack_id}_INAT", count=count,
+            output_dir=(out_dir_arg / "inaturalist") if out_dir_arg else None,
             dry_run=dry_run,
         )),
     ]
@@ -2594,11 +2603,13 @@ def bench_fanout_cmd(
     ] = 1,
     json_out: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
-    """Benchmark sequential vs parallel fan-out for the 5 no-key R1A providers.
+    """Benchmark sequential vs parallel fan-out for the 6 no-key R1A providers.
 
     Runs `gen all-no-key` TWICE (sequential then parallel) with the SAME
     query + count, both in --dry-run mode (no downloads). Reports
     per-mode wall time and the speedup factor.
+
+    v1.13.s87: includes iNaturalist (6 providers now, was 5).
 
     Examples:
       assetboy gen bench-fanout -q "stone wall" -n 1
@@ -2609,6 +2620,7 @@ def bench_fanout_cmd(
     from assetboy.execution.archive_org_runner import run_archive_org_batch
     from assetboy.execution.scryfall_runner import run_scryfall_batch
     from assetboy.execution.iconify_runner import run_iconify_batch
+    from assetboy.execution.inaturalist_runner import run_inaturalist_batch
     from concurrent.futures import ThreadPoolExecutor
 
     tasks = [
@@ -2626,6 +2638,9 @@ def bench_fanout_cmd(
         )),
         ("iconify", run_iconify_batch, dict(
             query=query, pack_id="BENCH_IC", count=count, dry_run=True,
+        )),
+        ("inaturalist", run_inaturalist_batch, dict(
+            query=query, pack_id="BENCH_INAT", count=count, dry_run=True,
         )),
     ]
 

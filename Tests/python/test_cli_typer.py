@@ -1017,6 +1017,15 @@ class TyperCliSmokeTests(unittest.TestCase):
                     pack_id="IC", query="q", output_dir=Path(tmp),
                     icons_matched=50, icons_downloaded=2, ok=True,
                 ),
+            ), patch(
+                "assetboy.execution.inaturalist_runner.run_inaturalist_batch",
+                return_value=__import__(
+                    "assetboy.execution.inaturalist_runner",
+                    fromlist=["INaturalistResult"],
+                ).INaturalistResult(
+                    pack_id="INAT", query="q", output_dir=Path(tmp),
+                    observations_matched=7, photos_downloaded=2, ok=True,
+                ),
             ):
                 result = self.runner.invoke(
                     self.app,
@@ -1025,10 +1034,11 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         import json as _json
         data = _json.loads(result.stdout.strip())
-        self.assertEqual(data["providers_run"], 5)
-        self.assertEqual(data["providers_ok"], 5)
-        self.assertEqual(data["total_matched"], 10 + 20 + 5 + 30 + 50)
-        self.assertEqual(data["total_downloaded"], 10)
+        # v1.13.s87: catalog grew to 6 providers (added iNaturalist).
+        self.assertEqual(data["providers_run"], 6)
+        self.assertEqual(data["providers_ok"], 6)
+        self.assertEqual(data["total_matched"], 10 + 20 + 5 + 30 + 50 + 7)
+        self.assertEqual(data["total_downloaded"], 12)  # 2*6 providers
 
     def test_all_no_key_parallel_dispatch_preserves_order(self) -> None:
         """v1.12.s64: --parallel returns same shape + preserves task order."""
@@ -1071,6 +1081,15 @@ class TyperCliSmokeTests(unittest.TestCase):
                     pack_id="IC", query="q", output_dir=Path(tmp),
                     icons_matched=5, icons_downloaded=5, ok=True,
                 ),
+            ), patch(
+                "assetboy.execution.inaturalist_runner.run_inaturalist_batch",
+                return_value=__import__(
+                    "assetboy.execution.inaturalist_runner",
+                    fromlist=["INaturalistResult"],
+                ).INaturalistResult(
+                    pack_id="IN", query="q", output_dir=Path(tmp),
+                    observations_matched=6, photos_downloaded=6, ok=True,
+                ),
             ):
                 result = self.runner.invoke(
                     self.app,
@@ -1080,13 +1099,16 @@ class TyperCliSmokeTests(unittest.TestCase):
         import json as _json
         data = _json.loads(result.stdout.strip())
         self.assertTrue(data["parallel"])
-        self.assertEqual(data["providers_run"], 5)
-        self.assertEqual(data["providers_ok"], 5)
-        # Order must be: met_museum, wikimedia, archive_org, scryfall, iconify.
-        expected_order = ["met_museum", "wikimedia", "archive_org", "scryfall", "iconify"]
+        # v1.13.s87: 6 providers now.
+        self.assertEqual(data["providers_run"], 6)
+        self.assertEqual(data["providers_ok"], 6)
+        # Order: met_museum, wikimedia, archive_org, scryfall, iconify, inaturalist.
+        expected_order = [
+            "met_museum", "wikimedia", "archive_org", "scryfall", "iconify", "inaturalist",
+        ]
         self.assertEqual([p["provider"] for p in data["providers"]], expected_order)
-        # Counts (matched=1,2,3,4,5) preserved per provider.
-        self.assertEqual([p["matched"] for p in data["providers"]], [1, 2, 3, 4, 5])
+        # Counts (matched=1,2,3,4,5,6) preserved per provider.
+        self.assertEqual([p["matched"] for p in data["providers"]], [1, 2, 3, 4, 5, 6])
 
     def test_all_no_key_parallel_isolates_crash(self) -> None:
         """--parallel: one provider crashing doesn't break the others."""
@@ -1257,13 +1279,14 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("parallel", result.stdout.lower())
 
     def test_bench_fanout_runs_both_modes_with_mocked_runners(self) -> None:
-        """Mock all 5 runners as no-ops; verify both modes execute + JSON shape."""
+        """Mock all 6 runners as no-ops; verify both modes execute + JSON shape."""
         from unittest.mock import patch
         from assetboy.execution.met_museum_runner import MetMuseumResult
         from assetboy.execution.wikimedia_runner import WikimediaResult
         from assetboy.execution.archive_org_runner import ArchiveOrgResult
         from assetboy.execution.scryfall_runner import ScryfallResult
         from assetboy.execution.iconify_runner import IconifyResult
+        from assetboy.execution.inaturalist_runner import INaturalistResult
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -1292,6 +1315,11 @@ class TyperCliSmokeTests(unittest.TestCase):
                 return_value=IconifyResult(
                     pack_id="x", query="q", output_dir=Path(tmp), ok=True,
                 ),
+            ), patch(
+                "assetboy.execution.inaturalist_runner.run_inaturalist_batch",
+                return_value=INaturalistResult(
+                    pack_id="x", query="q", output_dir=Path(tmp), ok=True,
+                ),
             ):
                 result = self.runner.invoke(
                     self.app,
@@ -1306,7 +1334,8 @@ class TyperCliSmokeTests(unittest.TestCase):
         ):
             self.assertIn(key, data)
         self.assertEqual(data["query"], "q")
-        self.assertEqual(len(data["providers"]), 5)
+        # v1.13.s87: bench-fanout grew to 6 providers (added iNaturalist).
+        self.assertEqual(len(data["providers"]), 6)
         # With mocked no-op runners, both times will be near zero — verify type + non-negative.
         self.assertGreaterEqual(data["sequential_total_s"], 0.0)
         self.assertGreaterEqual(data["parallel_total_s"], 0.0)
@@ -1354,6 +1383,15 @@ class TyperCliSmokeTests(unittest.TestCase):
                     pack_id="I", query="q", output_dir=Path(tmp),
                     icons_matched=7, icons_downloaded=0, ok=True,
                 ),
+            ), patch(
+                "assetboy.execution.inaturalist_runner.run_inaturalist_batch",
+                return_value=__import__(
+                    "assetboy.execution.inaturalist_runner",
+                    fromlist=["INaturalistResult"],
+                ).INaturalistResult(
+                    pack_id="N", query="q", output_dir=Path(tmp),
+                    observations_matched=4, photos_downloaded=0, ok=True,
+                ),
             ):
                 result = self.runner.invoke(
                     self.app,
@@ -1362,8 +1400,9 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         import json as _json
         data = _json.loads(result.stdout.strip())
-        self.assertEqual(data["providers_run"], 5)
-        self.assertEqual(data["providers_ok"], 4)
+        # v1.13.s87: 6 providers (5 OK + 1 crashed = wikimedia).
+        self.assertEqual(data["providers_run"], 6)
+        self.assertEqual(data["providers_ok"], 5)
         self.assertEqual(data["providers_failed"], 1)
         # The crashed one has the error string.
         crashed = [p for p in data["providers"] if not p["ok"]]
