@@ -1233,6 +1233,34 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["providers_skipped"], 1)
         self.assertEqual(data["total_matched"], 3 + 2 + 1 + 5 + 4)
 
+    def test_scout_by_license_parallel_preserves_order(self) -> None:
+        """v1.17.s122: --parallel returns same shape + preserves matched-by-license order."""
+        from unittest.mock import patch
+        from assetboy.execution.iconify_runner import IconifyResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch(
+                "assetboy.execution.iconify_runner.run_iconify_batch",
+                return_value=IconifyResult(
+                    pack_id="x", query="q", output_dir=Path(tmp),
+                    icons_matched=4, ok=True,
+                ),
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "scout-by-license",
+                     "--license", "mit", "--query", "sword",
+                     "--parallel", "--dry-run", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertTrue(data["parallel"])
+        # MIT token only matches iconify.
+        self.assertEqual(data["providers_matched_by_license"], 1)
+        self.assertEqual(data["providers"][0]["provider"], "iconify")
+
     def test_scout_by_license_mit_matches_only_iconify(self) -> None:
         """MIT is only in Iconify's license string."""
         from unittest.mock import patch

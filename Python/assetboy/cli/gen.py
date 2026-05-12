@@ -3093,6 +3093,13 @@ def scout_by_license_cmd(
         int, typer.Option("--count", "-n", help="Per-provider count."),
     ] = 2,
     dry_run: Annotated[bool, typer.Option("--dry-run")] = True,
+    parallel: Annotated[
+        bool,
+        typer.Option(
+            "--parallel",
+            help="v1.17.s122: dispatch license-filtered providers concurrently.",
+        ),
+    ] = False,
     json_out: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Scout across providers filtered by license token (Path B v1.13.s94).
@@ -3147,16 +3154,13 @@ def scout_by_license_cmd(
     # Filter by license token.
     matched = [t for t in catalog if token in t[1].lower()]
 
-    results: list[dict] = []
-    for pid, lic, env_var, fn, kwargs in matched:
+    def _run_one(pid: str, lic: str, env_var, fn, kwargs) -> dict:
         if env_var and not os.environ.get(env_var, "").strip():
-            results.append({
+            return {
                 "provider": pid, "license": lic, "ok": False,
                 "skipped": True, "matched": 0, "downloaded": 0,
                 "error": f"missing_env_key:{env_var}",
-            })
-            continue
-        # Per-provider extra kwargs.
+            }
         call_kwargs = dict(kwargs)
         if pid == "pexels":
             call_kwargs["api_key"] = _pexels_key()
@@ -3166,9 +3170,8 @@ def scout_by_license_cmd(
             call_kwargs["access_key"] = _unsplash_key()
         try:
             r = fn(**call_kwargs)
-            results.append({
-                "provider": pid, "license": lic, "ok": r.ok,
-                "skipped": False,
+            return {
+                "provider": pid, "license": lic, "ok": r.ok, "skipped": False,
                 "matched": getattr(r, "items_matched", 0)
                            or getattr(r, "objects_matched", 0)
                            or getattr(r, "files_matched", 0)
@@ -3183,19 +3186,38 @@ def scout_by_license_cmd(
                               or getattr(r, "icons_downloaded", 0)
                               or getattr(r, "photos_downloaded", 0),
                 "error": r.error,
-            })
+            }
         except Exception as exc:
-            results.append({
+            return {
                 "provider": pid, "license": lic, "ok": False,
                 "skipped": False, "matched": 0, "downloaded": 0,
                 "error": f"crashed: {exc}",
-            })
+            }
+
+    results: list[dict] = []
+    if parallel and matched:
+        # v1.17.s122 — concurrent dispatch.
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        results_by_idx: dict[int, dict] = {}
+        with ThreadPoolExecutor(max_workers=max(1, len(matched))) as pool:
+            futs = {
+                pool.submit(_run_one, pid, lic, ev, fn, kw): i
+                for i, (pid, lic, ev, fn, kw) in enumerate(matched)
+            }
+            for fut in as_completed(futs):
+                results_by_idx[futs[fut]] = fut.result()
+        for i in range(len(matched)):
+            results.append(results_by_idx[i])
+    else:
+        for pid, lic, env_var, fn, kwargs in matched:
+            results.append(_run_one(pid, lic, env_var, fn, kwargs))
 
     summary = {
         "license_token": token,
         "query": query,
         "count_per_provider": count,
         "dry_run": dry_run,
+        "parallel": parallel,
         "providers_matched_by_license": len(matched),
         "providers_run": len(results),
         "providers_ok": sum(1 for r in results if r["ok"]),
