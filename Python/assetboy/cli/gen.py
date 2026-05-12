@@ -1994,12 +1994,22 @@ def all_no_key_cmd(
             help="v1.12.s64: dispatch all 5 providers concurrently (ThreadPoolExecutor); ~5x faster wall time.",
         ),
     ] = False,
+    write_history: Annotated[
+        bool,
+        typer.Option(
+            "--write-history",
+            help=(
+                "v1.15.s108: append this run to state/r1a_history/<utc>.json"
+                " for trend tracking. One file per run; timestamped + indexed."
+            ),
+        ),
+    ] = False,
     json_out: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
-    """Fan out one query across all 5 no-key R1A providers (Path B v1.11.s37).
+    """Fan out one query across all 6 no-key R1A providers (Path B v1.11.s37+).
 
     Hits Met Museum, Wikimedia Commons, Archive.org (image mediatype),
-    Scryfall, and Iconify. Use --parallel for concurrent dispatch (v1.12.s64).
+    Scryfall, Iconify, iNaturalist. Use --parallel for concurrent dispatch.
 
     Examples:
       assetboy gen all-no-key -q "dragon" -n 2 --dry-run
@@ -2129,6 +2139,25 @@ def all_no_key_cmd(
         "providers": providers_run,
     }
 
+    # v1.15.s108 — append to history directory.
+    if write_history:
+        import datetime
+        utc = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        # Repo state dir; relative to CWD (where assetboy is invoked from).
+        history_dir = Path("state") / "r1a_history"
+        history_dir.mkdir(parents=True, exist_ok=True)
+        fname = f"all_no_key_{utc.strftime('%Y%m%dT%H%M%SZ')}.json"
+        history_path = history_dir / fname
+        history_record = {
+            **summary,
+            "kind": "all_no_key",
+            "utc": utc.isoformat() + "Z",
+        }
+        history_path.write_text(
+            json.dumps(history_record, indent=2), encoding="utf-8"
+        )
+        summary["history_path"] = str(history_path)
+
     if json_out:
         json.dump(summary, sys.stdout, indent=2)
         sys.stdout.write("\n")
@@ -2136,6 +2165,8 @@ def all_no_key_cmd(
         print(f"gen_all_no_key_query={query!r}")
         print(f"gen_all_no_key_dry_run={dry_run}")
         print(f"gen_all_no_key_parallel={parallel}")
+        if write_history:
+            print(f"gen_all_no_key_history_path={summary['history_path']}")
         print(f"gen_all_no_key_providers_ok={providers_ok}/{len(providers_run)}")
         print(f"gen_all_no_key_total_matched={total_matched}")
         print(f"gen_all_no_key_total_downloaded={total_downloaded}")

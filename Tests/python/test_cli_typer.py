@@ -1187,6 +1187,119 @@ class TyperCliSmokeTests(unittest.TestCase):
     # gen all-no-key (v1.11.s37)
     # ----------------------------------------------------------------- #
 
+    def test_all_no_key_write_history_creates_file(self) -> None:
+        """v1.15.s108: --write-history writes a state/r1a_history/<utc>.json file."""
+        from unittest.mock import patch
+        from assetboy.execution.met_museum_runner import MetMuseumResult
+        from assetboy.execution.wikimedia_runner import WikimediaResult
+        from assetboy.execution.archive_org_runner import ArchiveOrgResult
+        from assetboy.execution.scryfall_runner import ScryfallResult
+        from assetboy.execution.iconify_runner import IconifyResult
+        from assetboy.execution.inaturalist_runner import INaturalistResult
+        import tempfile, os, json as _json
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(tmp_p)
+                with patch(
+                    "assetboy.execution.met_museum_runner.run_met_museum_batch",
+                    return_value=MetMuseumResult(
+                        pack_id="x", query="q", output_dir=tmp_p, ok=True,
+                    ),
+                ), patch(
+                    "assetboy.execution.wikimedia_runner.run_wikimedia_batch",
+                    return_value=WikimediaResult(
+                        pack_id="x", query="q", output_dir=tmp_p, ok=True,
+                    ),
+                ), patch(
+                    "assetboy.execution.archive_org_runner.run_archive_org_batch",
+                    return_value=ArchiveOrgResult(
+                        pack_id="x", query="q", output_dir=tmp_p, ok=True,
+                    ),
+                ), patch(
+                    "assetboy.execution.scryfall_runner.run_scryfall_batch",
+                    return_value=ScryfallResult(
+                        pack_id="x", query="q", output_dir=tmp_p, ok=True,
+                    ),
+                ), patch(
+                    "assetboy.execution.iconify_runner.run_iconify_batch",
+                    return_value=IconifyResult(
+                        pack_id="x", query="q", output_dir=tmp_p, ok=True,
+                    ),
+                ), patch(
+                    "assetboy.execution.inaturalist_runner.run_inaturalist_batch",
+                    return_value=INaturalistResult(
+                        pack_id="x", query="q", output_dir=tmp_p, ok=True,
+                    ),
+                ):
+                    result = self.runner.invoke(
+                        self.app,
+                        ["gen", "all-no-key", "--query", "q",
+                         "--write-history", "--json"],
+                    )
+                self.assertEqual(result.exit_code, 0, msg=result.stdout)
+                data = _json.loads(result.stdout.strip())
+                self.assertIn("history_path", data)
+                # File exists and parses to expected shape.
+                hp = Path(data["history_path"])
+                self.assertTrue(hp.exists())
+                hist = _json.loads(hp.read_text(encoding="utf-8"))
+                self.assertEqual(hist["kind"], "all_no_key")
+                self.assertIn("utc", hist)
+                self.assertEqual(hist["query"], "q")
+                self.assertEqual(hist["providers_run"], 6)
+            finally:
+                os.chdir(old_cwd)
+
+    def test_all_no_key_no_write_history_no_file(self) -> None:
+        """Without --write-history, no history file is written."""
+        from unittest.mock import patch
+        from assetboy.execution.met_museum_runner import MetMuseumResult
+        from assetboy.execution.wikimedia_runner import WikimediaResult
+        from assetboy.execution.archive_org_runner import ArchiveOrgResult
+        from assetboy.execution.scryfall_runner import ScryfallResult
+        from assetboy.execution.iconify_runner import IconifyResult
+        from assetboy.execution.inaturalist_runner import INaturalistResult
+        import tempfile, os, json as _json
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(tmp_p)
+                with patch(
+                    "assetboy.execution.met_museum_runner.run_met_museum_batch",
+                    return_value=MetMuseumResult(pack_id="x", query="q", output_dir=tmp_p, ok=True),
+                ), patch(
+                    "assetboy.execution.wikimedia_runner.run_wikimedia_batch",
+                    return_value=WikimediaResult(pack_id="x", query="q", output_dir=tmp_p, ok=True),
+                ), patch(
+                    "assetboy.execution.archive_org_runner.run_archive_org_batch",
+                    return_value=ArchiveOrgResult(pack_id="x", query="q", output_dir=tmp_p, ok=True),
+                ), patch(
+                    "assetboy.execution.scryfall_runner.run_scryfall_batch",
+                    return_value=ScryfallResult(pack_id="x", query="q", output_dir=tmp_p, ok=True),
+                ), patch(
+                    "assetboy.execution.iconify_runner.run_iconify_batch",
+                    return_value=IconifyResult(pack_id="x", query="q", output_dir=tmp_p, ok=True),
+                ), patch(
+                    "assetboy.execution.inaturalist_runner.run_inaturalist_batch",
+                    return_value=INaturalistResult(pack_id="x", query="q", output_dir=tmp_p, ok=True),
+                ):
+                    result = self.runner.invoke(
+                        self.app,
+                        ["gen", "all-no-key", "--query", "q", "--json"],
+                    )
+                self.assertEqual(result.exit_code, 0)
+                data = _json.loads(result.stdout.strip())
+                self.assertNotIn("history_path", data)
+                # No state/r1a_history directory was created.
+                self.assertFalse((tmp_p / "state" / "r1a_history").exists())
+            finally:
+                os.chdir(old_cwd)
+
     def test_all_no_key_help_renders(self) -> None:
         result = self.runner.invoke(self.app, ["gen", "all-no-key", "--help"])
         self.assertEqual(result.exit_code, 0)

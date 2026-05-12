@@ -683,3 +683,34 @@ All v1.14+ s96..s100 SHIPPED. Five fresh ideas:
   native ProviderRegistry health into a unified health report.
 
 Ship order: s102, s103, s104, s105, s106.
+
+---
+
+## v1.15+ backlog (added 2026-05-12, s107)
+
+All v1.14+ s102..s106 SHIPPED. Five fresh ideas:
+
+- **s108 — `gen all-no-key --since-history`**: track each fan-out
+  run's per-provider results in `state/r1a_history/<date>.json`.
+  Operator can later `pack manifest-stats --since-history` to see
+  trend lines. Minimal: write file alongside the existing manifests.
+
+- **s109 — recipe-aware `library install-r1a-pack` mode**: when
+  passed `--recipe <yaml>`, automatically resolve which packs in
+  the recipe correspond to known R1A manifests on disk and install
+  them all in one shot (vs one manifest per call).
+
+- **s110 — provider `polite_sleep_s` override env var**: each runner
+  hardcodes a polite sleep (200-500ms). Add `FAW_POLITE_SLEEP_S=0.05`
+  to globally tune. Useful for local-cache scenarios with no rate-
+  limit concern.
+
+- **s111 — Iconify icon-set browser**: `gen iconify list-sets`
+  shows the 150+ icon sets with their SPDX license. Operator can
+  browse before queries. Iconify's `/collections` endpoint
+  (already used internally) becomes a first-class CLI surface.
+
+- **s112 — milestone v1.14-WAVE-COMPLETE tag** + HEARTBEAT/RELEASE
+  notes refresh once s108..s111 ship.
+
+Ship order: s108, s109, s110, s111, s112.
