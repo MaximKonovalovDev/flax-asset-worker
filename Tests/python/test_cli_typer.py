@@ -3317,6 +3317,28 @@ class TyperCliSmokeTests(unittest.TestCase):
         names = {p["provider"] for p in data["providers"]}
         self.assertEqual(names, {"unsplash", "jamendo"})
 
+    def test_all_key_compact_emits_single_line(self) -> None:
+        """v1.35.s204: --compact single-line JSON for all-key."""
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {}, clear=False):
+            for k in ("PEXELS_API_KEY", "PIXABAY_API_KEY",
+                      "UNSPLASH_ACCESS_KEY", "RAWG_API_KEY",
+                      "JAMENDO_CLIENT_ID"):
+                os.environ.pop(k, None)
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "all-key", "--query", "x",
+                 "--compact", "--dry-run", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        body = result.stdout.strip()
+        self.assertEqual(body.count("\n"), 0,
+                         msg=f"unexpected newlines: {body[:200]}")
+        import json as _json
+        data = _json.loads(body)
+        self.assertIn("providers", data)
+
     def test_all_key_bail_on_error_help_lists_flag(self) -> None:
         """v1.28.s182: --bail-on-error visible in help."""
         result = self.runner.invoke(self.app, ["gen", "all-key", "--help"])
