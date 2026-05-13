@@ -1217,6 +1217,16 @@ def scryfall_fetch_cmd(
             ),
         ),
     ] = "",
+    card_type: Annotated[
+        str,
+        typer.Option(
+            "--type",
+            help=(
+                "v1.24.s164: card type filter (e.g. 'creature', 'land',"
+                " 'artifact', 'planeswalker'). Appends 'type:<value>' to query."
+            ),
+        ),
+    ] = "",
     pack_id: Annotated[
         str, typer.Option("--pack-id", help="Pack id for output dir."),
     ] = "",
@@ -1261,6 +1271,7 @@ def scryfall_fetch_cmd(
     out_dir_arg: Path | None = output_dir if str(output_dir) else None
     pack_id_arg: str | None = pack_id if pack_id else None
     set_code_arg: str | None = set_code.strip() or None  # v1.22.s153
+    card_type_arg: str | None = card_type.strip() or None  # v1.24.s164
 
     try:
         result = run_scryfall_batch(
@@ -1269,6 +1280,7 @@ def scryfall_fetch_cmd(
             count=count,
             variant=variant,
             set_code=set_code_arg,
+            card_type=card_type_arg,
             output_dir=out_dir_arg,
             dry_run=dry_run,
         )

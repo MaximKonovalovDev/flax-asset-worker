@@ -130,6 +130,7 @@ def run_scryfall_batch(
     count: int = 6,
     variant: str = "art_crop",
     set_code: str | None = None,
+    card_type: str | None = None,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.1,
     dry_run: bool = False,
@@ -144,6 +145,8 @@ def run_scryfall_batch(
                  use 'png' for full-card with frame, 'large'/'normal' for smaller).
         set_code: v1.22.s153 — Scryfall set code (e.g. 'cmm', 'lea'); appends
                   ' set:<code>' to the query string before search.
+        card_type: v1.24.s164 — card type filter (e.g. 'creature', 'land',
+                   'artifact'); appends 'type:<value>' to the query.
         output_dir: override; default <manual_drop>/scryfall/<pack_id>/.
         polite_sleep_s: delay between image downloads (Scryfall recommends 50-100ms).
         dry_run: when True, hit search but skip binary downloads.
@@ -151,6 +154,9 @@ def run_scryfall_batch(
     # v1.22.s153 — append set:<code> to query if set_code provided.
     if set_code and set_code.strip():
         query = f"{query} set:{set_code.strip()}".strip()
+    # v1.24.s164 — append type:<value> to query if card_type provided.
+    if card_type and card_type.strip():
+        query = f"{query} type:{card_type.strip()}".strip()
     variant = variant.strip().lower()
     if variant not in _VALID_IMAGE_VARIANTS:
         result = ScryfallResult(

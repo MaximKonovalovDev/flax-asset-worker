@@ -97,6 +97,54 @@ class ScryfallRunnerTests(unittest.TestCase):
         # First call is the /cards/search; URL should contain 'set:cmm'.
         self.assertTrue(any("set%3Acmm" in u for u in captured_urls))
 
+    def test_batch_appends_card_type_to_query(self) -> None:
+        """v1.24.s164: --type <value> appends 'type:<value>' to query."""
+        captured_urls: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured_urls.append(str(req.full_url))
+            return _json_response({"data": []})
+
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(
+                self.mod.urllib.request, "urlopen", side_effect=capture
+            ):
+                with patch.object(self.mod.time, "sleep"):
+                    self.mod.run_scryfall_batch(
+                        query="c:r", pack_id="SC",
+                        count=1, card_type="creature", output_dir=Path(tmp),
+                    )
+        # URL should contain 'type:creature' URL-encoded.
+        self.assertTrue(
+            any("type%3Acreature" in u for u in captured_urls),
+            f"missing type:creature in {captured_urls}",
+        )
+
+    def test_batch_set_and_type_both_appended(self) -> None:
+        """--set and --type together: both filters in query."""
+        captured_urls: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured_urls.append(str(req.full_url))
+            return _json_response({"data": []})
+
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(
+                self.mod.urllib.request, "urlopen", side_effect=capture
+            ):
+                with patch.object(self.mod.time, "sleep"):
+                    self.mod.run_scryfall_batch(
+                        query="c:r", pack_id="SC", count=1,
+                        set_code="lea", card_type="land",
+                        output_dir=Path(tmp),
+                    )
+        # Both must appear.
+        urls_str = " ".join(captured_urls)
+        self.assertIn("set%3Alea", urls_str)
+        self.assertIn("type%3Aland", urls_str)
+
     def test_batch_downloads_art_crop(self) -> None:
         search = _json_response({
             "data": [
