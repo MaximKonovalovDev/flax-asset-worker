@@ -2355,6 +2355,15 @@ def all_no_key_cmd(
             ),
         ),
     ] = False,
+    compact: Annotated[
+        bool,
+        typer.Option(
+            "--compact",
+            help=(
+                "v1.35.s203: single-line JSON output. No effect without --json."
+            ),
+        ),
+    ] = False,
     json_out: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Fan out one query across all 6 no-key R1A providers (Path B v1.11.s37+).
@@ -2543,7 +2552,8 @@ def all_no_key_cmd(
         summary["history_path"] = str(history_path)
 
     if json_out:
-        json.dump(summary, sys.stdout, indent=2)
+        # v1.35.s203 — --compact emits single-line JSON.
+        json.dump(summary, sys.stdout, indent=None if compact else 2)
         sys.stdout.write("\n")
     else:
         print(f"gen_all_no_key_query={query!r}")
