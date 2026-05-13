@@ -1847,6 +1847,28 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn("unknown_kind", result.stdout)
 
+    def test_scout_by_license_max_providers_caps_dispatch(self) -> None:
+        """v1.32.s196: --max-providers 1 fans out to first catalog-order match."""
+        # cc0 matches multiple no-key providers; cap=1 keeps just one.
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "scout-by-license", "--license", "cc0",
+             "--query", "test", "--max-providers", "1",
+             "--dry-run", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        # Only 1 provider should actually run; deferred has the rest.
+        self.assertEqual(data["providers_run"], 1)
+        self.assertEqual(data["max_providers"], 1)
+        self.assertGreater(len(data["deferred"]), 0)
+        # providers_matched_by_license stays full (cap doesn't lie).
+        self.assertEqual(
+            data["providers_matched_by_license"],
+            1 + len(data["deferred"]),
+        )
+
     def test_scout_by_license_help_renders(self) -> None:
         result = self.runner.invoke(self.app, ["gen", "scout-by-license", "--help"])
         self.assertEqual(result.exit_code, 0)

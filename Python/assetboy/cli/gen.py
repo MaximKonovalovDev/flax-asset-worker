@@ -3427,6 +3427,18 @@ def scout_by_license_cmd(
             help="v1.17.s122: dispatch license-filtered providers concurrently.",
         ),
     ] = False,
+    max_providers: Annotated[
+        int,
+        typer.Option(
+            "--max-providers",
+            help=(
+                "v1.32.s196: cap how many license-matched providers to"
+                " actually fan out to (0 = unlimited, default). When >0"
+                " and matched > N, only the first N (in catalog order)"
+                " run; the rest appear in 'deferred' in the summary."
+            ),
+        ),
+    ] = 0,
     json_out: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Scout across providers filtered by license token (Path B v1.13.s94).
@@ -3480,6 +3492,12 @@ def scout_by_license_cmd(
 
     # Filter by license token.
     matched = [t for t in catalog if token in t[1].lower()]
+
+    # v1.32.s196 — apply --max-providers cap (catalog order preserved).
+    deferred_ids: list[str] = []
+    if max_providers > 0 and len(matched) > max_providers:
+        deferred_ids = [t[0] for t in matched[max_providers:]]
+        matched = matched[:max_providers]
 
     def _run_one(pid: str, lic: str, env_var, fn, kwargs) -> dict:
         if env_var and not os.environ.get(env_var, "").strip():
@@ -3545,7 +3563,9 @@ def scout_by_license_cmd(
         "count_per_provider": count,
         "dry_run": dry_run,
         "parallel": parallel,
-        "providers_matched_by_license": len(matched),
+        "providers_matched_by_license": len(matched) + len(deferred_ids),
+        "max_providers": max_providers if max_providers > 0 else None,
+        "deferred": deferred_ids,
         "providers_run": len(results),
         "providers_ok": sum(1 for r in results if r["ok"]),
         "providers_skipped": sum(1 for r in results if r["skipped"]),
