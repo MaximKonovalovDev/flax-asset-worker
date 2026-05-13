@@ -1,27 +1,30 @@
 # HEARTBEAT — assetboi (operator hibernation read-back)
 
-> **Last update:** 2026-05-13 (continuous loop, **263 commits + 245 tags
-> shipped this run** (origin), **909 tests**; latest tag
-> v1.37.1-history-tail-compact)
+> **Last update:** 2026-05-13 (continuous loop, **271 commits + 254 tags
+> shipped this run** (origin), **926 tests**; latest tag
+> v1.39.4-fanout-provider-skip)
 > **Repo:** `flax-asset-worker` (this repo; assetboi commits freely here)
-> **Loop status:** **NEVER-STOP ACTIVE** per BOSS Rule 3
+> **Loop status:** Operator-handoff ready (loop pausable on command)
 
-## TL;DR — top-of-loop milestone (v1.37.1, this turn)
+## TL;DR — top-of-loop milestone (v1.39.4, post-documentation-pass)
 
-**263 commits since baseline `0b1ad7d`, 245 tags pushed, 909 tests
-passing. 12 R1A providers + 18 HTTP endpoints + 24 wave milestones
-shipped (v1.10..v1.36 complete; v1.37 in flight). 24 consecutive
-waves (v1.13->v1.36) with 0 RULE violations. Recent v1.30..v1.37
-slices: recipe.platform metadata, list-recipes --sort platform/
-updated_utc, r1a-status --kind/--env-set-only, scout-by-license
---max-providers, manifest-stats --since-days, list-recipes --filter
-has-FIELD (presence test), --compact JSON flag rolled out across 8
-commands (list-recipes/list-providers/r1a-status/all-no-key/all-key/
-scout-by-license/manifest-stats/history-tail) for shell pipe
-integration.**
+**271 commits since baseline `0b1ad7d`, 254 tags pushed, 926 tests
+passing. 12 R1A providers + 18 HTTP endpoints + 26 wave milestones
+shipped (v1.10..v1.38 complete; v1.39 in flight). 26 consecutive
+waves (v1.13->v1.38) with 0 RULE violations. Recent waves: v1.38
+recipe.cost_minutes + --cost-budget guard rail, v1.39 from-recipe
+--provider-skip + fan-out --provider-skip mirror + completed
+--compact rollout across all 11 commands (list-recipes/list-providers/
+r1a-status/all-no-key/all-key/scout-by-license/manifest-stats/
+history-tail + from-recipe/validate-all/rerun-failed). Documentation
+pass shipped RELEASE_NOTES_v1.21_v1.39.md (208-line summary of 19
+waves) + _INDEX.md routing updates + .gitignore additions for
+test-artifact dirs.**
 
 Daemon restarted once mid-loop (~30s downtime); buffer survived; loop
-resumed without intervention.
+resumed without intervention. Operator returned during documentation
+pass; loop continued shipping the called-out backlog (--compact trio,
+fan-out --provider-skip, .gitignore cleanup, this HEARTBEAT bump).
 
 This is the single doc to read first if you (operator) just woke up.
 Everything else (PATH_B_DAY11_PLAN.md, COMMIT_READY-assetboi.md, README,

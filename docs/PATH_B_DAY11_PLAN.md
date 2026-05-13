@@ -944,3 +944,100 @@ in/out). Five fresh ideas:
   combined); v1.23-WAVE-COMPLETE after s157-s160 ship**.
 
 Ship order: s157, s158, s159, s160, s161.
+
+---
+
+## v1.40+ backlog (added 2026-05-13, s221)
+
+State at s221 close: **271 commits since 0b1ad7d, 254 tags, 926 tests,
+26 consecutive wave milestones (v1.13->v1.38) with 0 RULE violations**.
+v1.39 wave closes with s221. v1.40+ candidates organized by theme:
+
+### A. HTML/dashboard surface (mirror r1a-status patterns)
+
+- **s222 — `pack manifest-stats --html <path>`**: render per-source
+  bars + total bytes badge as standalone HTML. Twin to
+  r1a-status --html (v1.13.s97). Adds --open companion flag.
+
+- **s223 — `gen history-tail --html <path>`**: trend-line per provider
+  over the last N runs. Adds --since-days filter, --open helper.
+
+- **s224 — `gen list-providers --html <path>`**: catalog dashboard
+  with license SPDX + env-set status. CSS badge per asset_class.
+
+### B. More provider-specific filters
+
+- **s225 — Met Museum `--has-images-only`**: filter the search to
+  only objects with downloadable images (already implicit; surface as
+  explicit flag to skip image-less hits).
+
+- **s226 — Iconify `--style outline|filled|duotone|two-tone`**:
+  add a post-search filter on icon style heuristic (set-name prefix
+  pattern: `mdi-outline:`, `mdi-filled:`, etc.).
+
+- **s227 — Archive.org `--year-from/--year-to`**: filter on
+  Internet Archive `year` facet (1500..2026). Useful for narrowing
+  historical-art queries.
+
+- **s228 — Pexels/Pixabay/Unsplash `--min-width/--min-height`**:
+  filter low-resolution hits at search time. Pexels supports
+  `min_width` / `min_height` natively.
+
+### C. Recipe ergonomics
+
+- **s229 — `recipe.last_run_utc` derived field**: surface in
+  list-recipes JSON when a pack pipeline ledger exists; read-only
+  (computed from `state/pack_pipeline/<game>/<id>.json` mtime).
+
+- **s230 — `pack validate-all --html <path>`**: validation
+  dashboard with per-recipe pass/fail/warning counts + drilldown
+  to error messages. CSS color coding.
+
+- **s231 — `pack list-recipes --since-days N`**: filter by
+  updated_utc <= N days ago (only recipes touched recently). Mirrors
+  manifest-stats --since-days (v1.33.s198).
+
+- **s232 — recipe schema `recipe.engine_version`**: optional
+  string ('1.6', '6.0', '2026.1'); validator warns on non-string;
+  surfaces in list-recipes.
+
+### D. Operational polish
+
+- **s233 — `library r1a-status --refresh`**: force re-probe even
+  when --check-live is omitted. Helpful after a flaky probe.
+
+- **s234 — `gen all-no-key --retry <N>`** + **all-key --retry**:
+  per-provider retry-on-error counter inside the fan-out loop.
+  Composes with --bail-on-error.
+
+- **s235 — `pack manifest-stats --json --gauge`**: emit
+  `total_bytes_gib`/`total_files_thousand` precomputed fields for
+  dashboards.
+
+- **s236 — `gen history-tail --format csv|markdown`**: output
+  format toggle. Markdown table for paste-into-issue, CSV for
+  Excel/Sheets ingestion.
+
+### E. Milestones
+
+- **s237 — v1.40-WAVE-COMPLETE**: cut after s222-s225 ship (4-slice
+  HTML/dashboard wave).
+
+- **s238 — v1.41-WAVE-COMPLETE**: cut after s226-s228 ship
+  (provider-filter wave).
+
+- **s239 — v1.42-WAVE-COMPLETE**: cut after s229-s232 ship (recipe
+  ergonomics wave).
+
+- **s240 — v1.43-WAVE-COMPLETE**: cut after s233-s236 ship
+  (operational polish wave).
+
+- **s241 — v2.0 cut decision**: operator-only call. By s240 close
+  the surface will be feature-complete for the "shipping Path B
+  assistant" use case. v2.0 would mean: stable API contract,
+  comprehensive docs, formal SemVer commitment.
+
+Ship order: A->B->C->D (one wave per theme). Each theme can be
+postponed indefinitely without breaking anything.
+
+### Standing rule: HEARTBEAT refresh every ~15 slices closed.

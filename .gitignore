@@ -36,6 +36,21 @@ state/
 # someone runs in self-hosting fallback mode (Path B v1.3+).
 artifacts/
 
+# v1.39.s219 — test-artifact dirs that may land at repo root when pytest
+# runs a runner with default output_dir resolution. Per-machine, no git.
+inaturalist/
+met_museum/
+wikimedia/
+archive_org/
+scryfall/
+iconify/
+pexels/
+pixabay/
+unsplash/
+rawg/
+jamendo/
+openlibrary/
+
 # Fab/Mixamo/Unity Hub auth state (per-user, no git, never share)
 .private/
 
