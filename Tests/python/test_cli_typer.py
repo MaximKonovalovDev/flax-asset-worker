@@ -3742,6 +3742,27 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertNotIn("Bytes-on-disk proportion", result.stdout)
 
+    def test_library_r1a_status_provider_filter_zooms_to_one(self) -> None:
+        """v1.26.s174: --provider met-museum narrows to 1 provider."""
+        result = self.runner.invoke(
+            self.app,
+            ["library", "r1a-status", "--provider", "met-museum", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["providers_total"], 1)
+        self.assertEqual(len(data["providers"]), 1)
+        self.assertEqual(data["providers"][0]["id"], "met-museum")
+
+    def test_library_r1a_status_provider_filter_unknown_exits_1(self) -> None:
+        result = self.runner.invoke(
+            self.app,
+            ["library", "r1a-status", "--provider", "nonsense-provider", "--json"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("provider_not_found", result.stdout)
+
     def test_library_r1a_status_json_shape(self) -> None:
         """JSON mode includes per-provider rows + aggregates."""
         result = self.runner.invoke(

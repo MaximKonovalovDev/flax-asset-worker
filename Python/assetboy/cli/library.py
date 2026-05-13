@@ -732,6 +732,16 @@ def r1a_status_cmd(
             ),
         ),
     ] = Path(""),
+    provider_filter: Annotated[
+        str,
+        typer.Option(
+            "--provider",
+            help=(
+                "v1.26.s174: zoom dashboard to ONE provider by id"
+                " (e.g. 'met-museum', 'unsplash'). Default empty = all."
+            ),
+        ),
+    ] = "",
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -902,6 +912,23 @@ def r1a_status_cmd(
                         p["live_ok"] = ok_done
                         p["live_error"] = err_done
                         break
+
+    # v1.26.s174 — --provider zooms to one provider id (filters last).
+    provider_filter_norm = provider_filter.strip().lower()
+    if provider_filter_norm:
+        match = [p for p in providers_state if p["id"].lower() == provider_filter_norm]
+        if not match:
+            msg = (
+                f"provider_not_found: {provider_filter!r}"
+                f" (valid: {[p['id'] for p in providers_state]})"
+            )
+            if json_out:
+                json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"library_r1a_status_error={msg}")
+            raise typer.Exit(code=1)
+        providers_state = match  # narrow to one
 
     no_key_count = sum(1 for p in providers_state if p["env_var"] is None)
     key_set = sum(1 for p in providers_state if p["env_set"] is True)
