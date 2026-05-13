@@ -3742,6 +3742,36 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertNotIn("Bytes-on-disk proportion", result.stdout)
 
+    def test_library_r1a_status_check_live_includes_response_ms(self) -> None:
+        """v1.26.s175: --check-live populates live_response_ms (None or float)."""
+        from unittest.mock import patch
+        # Patch search functions to return quickly; verify timing field present.
+        with patch("assetboy.execution.met_museum_runner.search_met_object_ids",
+                   return_value=[1, 2]), \
+             patch("assetboy.execution.wikimedia_runner.search_wikimedia_files",
+                   return_value=["File:1.jpg"]), \
+             patch("assetboy.execution.archive_org_runner.search_archive_items",
+                   return_value=[{"identifier": "a"}]), \
+             patch("assetboy.execution.scryfall_runner.search_scryfall_cards",
+                   return_value=[{"id": "x"}]), \
+             patch("assetboy.execution.iconify_runner.search_iconify_icons",
+                   return_value=["mdi:sword"]), \
+             patch("assetboy.execution.inaturalist_runner.search_inaturalist_observations",
+                   return_value=[{"id": 1}]):
+            result = self.runner.invoke(
+                self.app,
+                ["library", "r1a-status", "--check-live", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        # Every provider has the new field (None if missing key, float ms otherwise).
+        for p in data["providers"]:
+            self.assertIn("live_response_ms", p)
+            if p["live_ok"] is True:
+                self.assertIsInstance(p["live_response_ms"], (int, float))
+                self.assertGreaterEqual(p["live_response_ms"], 0)
+
     def test_library_r1a_status_provider_filter_zooms_to_one(self) -> None:
         """v1.26.s174: --provider met-museum narrows to 1 provider."""
         result = self.runner.invoke(

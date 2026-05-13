@@ -849,8 +849,13 @@ def r1a_status_cmd(
     # v1.13.s80 — live probes (concurrent via ThreadPoolExecutor).
     if check_live:
         from concurrent.futures import ThreadPoolExecutor, as_completed
+        import time as _live_time
 
-        def _probe(prov: dict) -> tuple[str, bool, str | None]:
+        # v1.26.s175 — initialize per-provider live_response_ms.
+        for _prov in providers_state:
+            _prov["live_response_ms"] = None
+
+        def _probe_inner(prov: dict) -> tuple[str, bool, str | None]:
             pid = prov["id"]
             try:
                 if prov["env_var"] is not None and not prov["env_set"]:
@@ -903,14 +908,26 @@ def r1a_status_cmd(
             except Exception as exc:
                 return pid, False, f"probe_failed: {exc}"
 
+        def _probe(prov: dict) -> tuple[str, bool, str | None, float | None]:
+            """v1.26.s175 — wrap inner probe with wall-time measurement."""
+            pid = prov["id"]
+            # Skip the timing if we're going to return missing_env_key fast.
+            if prov["env_var"] is not None and not prov["env_set"]:
+                return pid, False, "missing_env_key", None
+            t0 = _live_time.perf_counter()
+            inner_pid, ok, err = _probe_inner(prov)
+            ms = (_live_time.perf_counter() - t0) * 1000.0
+            return inner_pid, ok, err, round(ms, 1)
+
         with ThreadPoolExecutor(max_workers=len(providers_state)) as pool:
             futs = {pool.submit(_probe, p): p for p in providers_state}
             for fut in as_completed(futs):
-                pid_done, ok_done, err_done = fut.result()
+                pid_done, ok_done, err_done, ms_done = fut.result()
                 for p in providers_state:
                     if p["id"] == pid_done:
                         p["live_ok"] = ok_done
                         p["live_error"] = err_done
+                        p["live_response_ms"] = ms_done
                         break
 
     # v1.26.s174 — --provider zooms to one provider id (filters last).
