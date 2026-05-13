@@ -2972,6 +2972,12 @@ def list_providers_cmd(
             if value.lower() == "none":
                 return ev is None
             return ev == value or (ev is not None and ev.lower() == value.lower())
+        if field_name == "kind":
+            # v1.25.s170 — substring match on asset_class (case-insensitive).
+            # Supports 'image', 'audio', 'video', 'icon', 'generated', 'photo',
+            # 'fantasy', 'nature', etc.
+            ac = str(provider.get("asset_class", "")).lower()
+            return value.strip().lower() in ac
         return False  # unknown field -> never matches
 
     if parsed_filters:

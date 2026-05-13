@@ -3003,6 +3003,48 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn("bad_filter_shape", result.stdout)
 
+    def test_list_providers_filter_kind_audio(self) -> None:
+        """v1.25.s170: --filter kind:audio narrows to audio providers (Jamendo)."""
+        import json as _json
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "list-providers", "--filter", "kind:audio", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = [p["id"] for p in data["providers"]]
+        # Jamendo is the only pure-audio provider.
+        self.assertIn("jamendo", ids)
+        # No image-only providers should be in this filtered set.
+        for p in data["providers"]:
+            self.assertIn("audio", p["asset_class"].lower(),
+                          msg=f"{p['id']} leaked into audio filter")
+
+    def test_list_providers_filter_kind_video_includes_video_providers(self) -> None:
+        """--filter kind:video matches providers carrying VIDEO in asset_class."""
+        import json as _json
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "list-providers", "--filter", "kind:video", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout)
+        ids = [p["id"] for p in data["providers"]]
+        # Pexels + Pixabay both carry videos; archive-org too.
+        self.assertIn("pexels", ids)
+        self.assertIn("pixabay", ids)
+
+    def test_list_providers_filter_kind_unknown_returns_empty(self) -> None:
+        """--filter kind:bogus matches nothing."""
+        import json as _json
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "list-providers", "--filter", "kind:hologram", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout)
+        self.assertEqual(data["total"], 0)
+
     def test_list_providers_detects_set_env_var(self) -> None:
         """When PEXELS_API_KEY is set, env_set=True for pexels."""
         import os
