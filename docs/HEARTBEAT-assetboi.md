@@ -1,20 +1,22 @@
 # HEARTBEAT — assetboi (operator hibernation read-back)
 
-> **Last update:** 2026-05-13 (continuous loop, **230 commits + 197 tags
-> shipped this run** (origin), **856 tests**; latest tag
-> v1.25.3-list-providers-kind)
+> **Last update:** 2026-05-13 (continuous loop, **245 commits + 217 tags
+> shipped this run** (origin), **885 tests**; latest tag
+> v1.29.2-manifest-stats-csv)
 > **Repo:** `flax-asset-worker` (this repo; assetboi commits freely here)
 > **Loop status:** **NEVER-STOP ACTIVE** per BOSS Rule 3
 
-## TL;DR — top-of-loop milestone (v1.25.3, this turn)
+## TL;DR — top-of-loop milestone (v1.29.2, this turn)
 
-**230 commits since baseline `0b1ad7d`, 197 tags pushed, 856 tests
-passing. 12 R1A providers + 18 HTTP endpoints + 14 wave milestones
-shipped (v1.10..v1.24 complete; v1.25 in flight). Most recent 6 slices
-(v1.24+ continuation): history-tail, HTTP /gen/history-tail, Scryfall
---type, Pixabay --orientation, Pexels --orientation, Pixabay videos
---video-type, rerun-failed --max-attempts, manifest-stats --min-bytes,
-list-providers --filter kind.**
+**245 commits since baseline `0b1ad7d`, 217 tags pushed, 885 tests
+passing. 12 R1A providers + 18 HTTP endpoints + 17 wave milestones
+shipped (v1.10..v1.28 complete; v1.29 in flight). 16 consecutive waves
+(v1.13->v1.28) with 0 RULE violations. Recent v1.25..v1.29 slices:
+recipe author/contact metadata, r1a-status --provider, response_ms
+timing, --sort by bytes/downloaded/response_ms/last_manifest_utc/id,
+from-recipe --max-tier, all-no-key/all-key --bail-on-error, Pexels/
+Pixabay videos --min-duration, list-recipes --filter author/contact,
+manifest-stats --csv.**
 
 Daemon restarted once mid-loop (~30s downtime); buffer survived; loop
 resumed without intervention.
