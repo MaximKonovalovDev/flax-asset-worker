@@ -103,16 +103,29 @@ def _download_binary(url: str, dest: Path, *, timeout: float = 60.0) -> int:
 # Public API
 # --------------------------------------------------------------------------- #
 
+_VALID_PEXELS_ORIENTATIONS = {"landscape", "portrait", "square"}
+
+
 def search_pexels_photos(
     query: str,
     *,
     api_key: str,
     per_page: int = 15,
     page: int = 1,
+    orientation: str | None = None,
     timeout: float = 20.0,
 ) -> list[dict]:
-    """Hit /v1/search; return list of photo records."""
+    """Hit /v1/search; return list of photo records.
+
+    v1.24.s166: orientation = 'landscape' | 'portrait' | 'square' (Pexels native).
+    """
+    if orientation and orientation not in _VALID_PEXELS_ORIENTATIONS:
+        raise ValueError(
+            f"invalid orientation {orientation!r}; valid: {sorted(_VALID_PEXELS_ORIENTATIONS)}"
+        )
     params = {"query": query, "per_page": str(per_page), "page": str(page)}
+    if orientation:
+        params["orientation"] = orientation
     url = f"{PEXELS_API}/v1/search?{urllib.parse.urlencode(params)}"
     payload = _authed_get_json(url, api_key, timeout=timeout)
     return list(payload.get("photos", []))
@@ -166,6 +179,7 @@ def run_pexels_photo_batch(
     pack_id: str | None = None,
     count: int = 6,
     variant: str = "large",
+    orientation: str | None = None,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.1,
     dry_run: bool = False,
@@ -202,7 +216,10 @@ def run_pexels_photo_batch(
         return result
 
     try:
-        photos = search_pexels_photos(query, api_key=key, per_page=min(count, 80))
+        photos = search_pexels_photos(
+            query, api_key=key, per_page=min(count, 80),
+            orientation=orientation,
+        )
     except urllib.error.HTTPError as exc:
         result.ok = False
         result.error = f"search_failed: HTTP {exc.code}"

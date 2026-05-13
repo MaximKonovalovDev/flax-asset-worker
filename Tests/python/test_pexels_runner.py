@@ -53,6 +53,56 @@ class PexelsApiKeyTests(unittest.TestCase):
             self.assertEqual(self.fn(), "abc123")
 
 
+class PexelsSearchOrientationTests(unittest.TestCase):
+    """v1.24.s166 — orientation filter for search_pexels_photos."""
+
+    def setUp(self) -> None:
+        from assetboy.execution import pexels_runner
+        self.mod = pexels_runner
+
+    def test_orientation_added_to_url(self) -> None:
+        captured_urls: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured_urls.append(str(req.full_url))
+            import io
+            return io.BytesIO(b'{"photos": []}')
+
+        with patch.object(
+            self.mod.urllib.request, "urlopen", side_effect=capture
+        ):
+            self.mod.search_pexels_photos(
+                "x", api_key="k", orientation="portrait",
+            )
+        self.assertTrue(
+            any("orientation=portrait" in u for u in captured_urls),
+            f"missing orientation; got {captured_urls}",
+        )
+
+    def test_invalid_orientation_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            self.mod.search_pexels_photos(
+                "x", api_key="k", orientation="diagonal",
+            )
+
+    def test_no_orientation_omits_param(self) -> None:
+        captured_urls: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured_urls.append(str(req.full_url))
+            import io
+            return io.BytesIO(b'{"photos": []}')
+
+        with patch.object(
+            self.mod.urllib.request, "urlopen", side_effect=capture
+        ):
+            self.mod.search_pexels_photos("x", api_key="k")
+        self.assertFalse(
+            any("orientation=" in u for u in captured_urls),
+            f"unexpected orientation param; got {captured_urls}",
+        )
+
+
 class PexelsPickVideoFileTests(unittest.TestCase):
     def setUp(self) -> None:
         from assetboy.execution.pexels_runner import pick_video_file

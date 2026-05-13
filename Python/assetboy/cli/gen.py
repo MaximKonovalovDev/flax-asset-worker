@@ -1591,6 +1591,16 @@ def pexels_photos_cmd(
                  "portrait | landscape.",
         ),
     ] = "large",
+    orientation: Annotated[
+        str,
+        typer.Option(
+            "--orientation",
+            help=(
+                "v1.24.s166: filter by aspect: 'landscape' | 'portrait'"
+                " | 'square' (default empty = unset, no filter)."
+            ),
+        ),
+    ] = "",
     pack_id: Annotated[str, typer.Option("--pack-id")] = "",
     output_dir: Annotated[Path, typer.Option("--output-dir")] = Path(""),
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
@@ -1609,10 +1619,12 @@ def pexels_photos_cmd(
 
     out_dir_arg: Path | None = output_dir if str(output_dir) else None
     pack_id_arg: str | None = pack_id if pack_id else None
+    orientation_arg: str | None = orientation.strip().lower() or None
 
     try:
         result = run_pexels_photo_batch(
             query=query, pack_id=pack_id_arg, count=count, variant=variant,
+            orientation=orientation_arg,
             output_dir=out_dir_arg, dry_run=dry_run,
         )
     except Exception as exc:
