@@ -737,8 +737,19 @@ def r1a_status_cmd(
         typer.Option(
             "--provider",
             help=(
-                "v1.26.s174: zoom dashboard to ONE provider by id"
+                "v1.26.s174: zoom dashboard to ONE provider id"
                 " (e.g. 'met-museum', 'unsplash'). Default empty = all."
+            ),
+        ),
+    ] = "",
+    sort: Annotated[
+        str,
+        typer.Option(
+            "--sort",
+            help=(
+                "v1.26.s176: sort providers by 'bytes' (desc),"
+                " 'downloaded' (desc), 'response_ms' (asc; requires"
+                " --check-live), or 'id' (alpha; default empty = stable)."
             ),
         ),
     ] = "",
@@ -946,6 +957,42 @@ def r1a_status_cmd(
                 print(f"library_r1a_status_error={msg}")
             raise typer.Exit(code=1)
         providers_state = match  # narrow to one
+
+    # v1.26.s176 — --sort applies after the provider filter.
+    sort_norm = sort.strip().lower()
+    if sort_norm:
+        valid_sorts = {"bytes", "downloaded", "response_ms", "id"}
+        if sort_norm not in valid_sorts:
+            msg = (
+                f"unknown_sort: {sort!r}"
+                f" (valid: {sorted(valid_sorts)})"
+            )
+            if json_out:
+                json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"library_r1a_status_error={msg}")
+            raise typer.Exit(code=1)
+        if sort_norm == "bytes":
+            providers_state.sort(
+                key=lambda p: int(p.get("bytes_on_disk", 0) or 0),
+                reverse=True,
+            )
+        elif sort_norm == "downloaded":
+            providers_state.sort(
+                key=lambda p: int(p.get("downloaded_on_disk", 0) or 0),
+                reverse=True,
+            )
+        elif sort_norm == "response_ms":
+            # None sorts last (treat as +inf).
+            providers_state.sort(
+                key=lambda p: (
+                    p.get("live_response_ms") is None,
+                    p.get("live_response_ms") or 0,
+                ),
+            )
+        elif sort_norm == "id":
+            providers_state.sort(key=lambda p: str(p.get("id", "")).lower())
 
     no_key_count = sum(1 for p in providers_state if p["env_var"] is None)
     key_set = sum(1 for p in providers_state if p["env_set"] is True)

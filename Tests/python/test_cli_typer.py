@@ -3742,6 +3742,26 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertNotIn("Bytes-on-disk proportion", result.stdout)
 
+    def test_library_r1a_status_sort_id_alpha_order(self) -> None:
+        """v1.26.s176: --sort id orders providers alphabetically."""
+        import json as _json
+        result = self.runner.invoke(
+            self.app,
+            ["library", "r1a-status", "--sort", "id", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout.strip())
+        ids = [p["id"] for p in data["providers"]]
+        self.assertEqual(ids, sorted(ids))
+
+    def test_library_r1a_status_sort_unknown_exits_1(self) -> None:
+        result = self.runner.invoke(
+            self.app,
+            ["library", "r1a-status", "--sort", "weight", "--json"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("unknown_sort", result.stdout)
+
     def test_library_r1a_status_check_live_includes_response_ms(self) -> None:
         """v1.26.s175: --check-live populates live_response_ms (None or float)."""
         from unittest.mock import patch
