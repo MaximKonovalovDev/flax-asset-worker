@@ -1919,6 +1919,22 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn("unknown_kind", result.stdout)
 
+    def test_scout_by_license_compact_emits_single_line(self) -> None:
+        """v1.36.s205: --compact single-line JSON for scout-by-license."""
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "scout-by-license", "--license", "cc0",
+             "--query", "test", "--max-providers", "1",
+             "--compact", "--dry-run", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        body = result.stdout.strip()
+        self.assertEqual(body.count("\n"), 0,
+                         msg=f"unexpected newlines: {body[:200]}")
+        import json as _json
+        data = _json.loads(body)
+        self.assertIn("providers", data)
+
     def test_scout_by_license_max_providers_caps_dispatch(self) -> None:
         """v1.32.s196: --max-providers 1 fans out to first catalog-order match."""
         # cc0 matches multiple no-key providers; cap=1 keeps just one.

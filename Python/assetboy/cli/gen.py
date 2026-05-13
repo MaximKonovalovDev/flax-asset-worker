@@ -3470,6 +3470,15 @@ def scout_by_license_cmd(
             ),
         ),
     ] = 0,
+    compact: Annotated[
+        bool,
+        typer.Option(
+            "--compact",
+            help=(
+                "v1.36.s205: single-line JSON output. No effect without --json."
+            ),
+        ),
+    ] = False,
     json_out: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Scout across providers filtered by license token (Path B v1.13.s94).
@@ -3607,7 +3616,8 @@ def scout_by_license_cmd(
     }
 
     if json_out:
-        json.dump(summary, sys.stdout, indent=2)
+        # v1.36.s205 — --compact emits single-line JSON.
+        json.dump(summary, sys.stdout, indent=None if compact else 2)
         sys.stdout.write("\n")
     else:
         print(f"gen_scout_by_license_token={token!r}")
