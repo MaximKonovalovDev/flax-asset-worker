@@ -918,5 +918,45 @@ class CreatedUpdatedUtcMetadataTests(unittest.TestCase):
         self.assertFalse(any("created_utc" in w for w in r.warnings))
 
 
+class AuthorContactMetadataTests(unittest.TestCase):
+    """v1.25.s172 — optional author / contact string fields."""
+
+    def _recipe_with(self, **meta: object) -> dict:
+        doc = _ok_recipe()
+        doc["recipe"].update(meta)
+        return doc
+
+    def test_valid_author_string_passes_no_warnings(self) -> None:
+        r = validate_recipe_doc(
+            self._recipe_with(author="J Doe", contact="jdoe@example.com"),
+            "auth.yaml",
+        )
+        self.assertTrue(r.ok)
+        self.assertFalse(any("author" in w for w in r.warnings))
+        self.assertFalse(any("contact" in w for w in r.warnings))
+
+    def test_non_string_author_warns(self) -> None:
+        r = validate_recipe_doc(
+            self._recipe_with(author=123),
+            "auth.yaml",
+        )
+        self.assertTrue(r.ok)
+        self.assertTrue(any("author" in w and "string" in w for w in r.warnings))
+
+    def test_empty_contact_warns(self) -> None:
+        r = validate_recipe_doc(
+            self._recipe_with(contact="   "),
+            "auth.yaml",
+        )
+        self.assertTrue(r.ok)
+        self.assertTrue(any("contact" in w and "empty" in w for w in r.warnings))
+
+    def test_missing_silent(self) -> None:
+        r = validate_recipe_doc(_ok_recipe(), "auth.yaml")
+        self.assertTrue(r.ok)
+        self.assertFalse(any("author" in w for w in r.warnings))
+        self.assertFalse(any("contact" in w for w in r.warnings))
+
+
 if __name__ == "__main__":
     unittest.main()

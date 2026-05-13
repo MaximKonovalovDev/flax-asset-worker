@@ -163,6 +163,20 @@ def validate_recipe_doc(doc: Any, source_label: str = "<recipe>") -> ValidationR
                             f"{source_label}: recipe.{ts_key}={ts_val!r}"
                             f" is not parseable as ISO 8601"
                         )
+        # v1.25.s172 — optional author / contact string fields.
+        for str_key in ("author", "contact"):
+            if str_key in recipe and recipe[str_key] is not None:
+                val = recipe[str_key]
+                if not isinstance(val, str):
+                    result.warnings.append(
+                        f"{source_label}: recipe.{str_key} should be a"
+                        f" string; got {type(val).__name__}"
+                    )
+                elif not val.strip():
+                    result.warnings.append(
+                        f"{source_label}: recipe.{str_key} is empty;"
+                        " consider removing the field"
+                    )
         # v1.18.s130 — optional integer expected_min_assets field.
         if "expected_min_assets" in recipe and recipe["expected_min_assets"] is not None:
             ema = recipe["expected_min_assets"]
