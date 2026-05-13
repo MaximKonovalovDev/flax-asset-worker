@@ -1778,6 +1778,17 @@ def manifest_stats_cmd(
             ),
         ),
     ] = 0,
+    min_bytes: Annotated[
+        int,
+        typer.Option(
+            "--min-bytes",
+            help=(
+                "v1.25.s169: hide providers whose total bytes is below"
+                " this threshold. 0 (default) shows all. Useful to ignore"
+                " tiny manifests after a failed scout pass."
+            ),
+        ),
+    ] = 0,
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -1996,6 +2007,16 @@ def manifest_stats_cmd(
         per_source_view = dict(ranked[:top])
         top_truncated = True
 
+    # v1.25.s169 — --min-bytes hides providers below the threshold.
+    min_bytes_filtered = 0
+    if min_bytes > 0:
+        before_n = len(per_source_view)
+        per_source_view = {
+            src: b for src, b in per_source_view.items()
+            if int(b.get("bytes", 0) or 0) >= min_bytes
+        }
+        min_bytes_filtered = before_n - len(per_source_view)
+
     summary = {
         "root": str(scan_root),
         "manifests_scanned": len(manifests),
@@ -2009,6 +2030,8 @@ def manifest_stats_cmd(
         "total_bytes": total_bytes,
         "top_filter": top if top > 0 else None,
         "top_truncated": top_truncated,
+        "min_bytes_filter": min_bytes if min_bytes > 0 else None,
+        "min_bytes_filtered_count": min_bytes_filtered,
         "by_source": per_source_view,
     }
 

@@ -2270,6 +2270,44 @@ class TyperCliSmokeTests(unittest.TestCase):
         # Aggregate totals stay full (not truncated).
         self.assertEqual(data["total_bytes"], 9100)
 
+    def test_pack_manifest_stats_min_bytes_filters_low_providers(self) -> None:
+        """v1.25.s169: --min-bytes N drops providers below N bytes."""
+        import tempfile, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            # tiny: 50 bytes
+            (tmp_p / "tiny").mkdir()
+            (tmp_p / "tiny" / "tiny_manifest.json").write_text(
+                _json.dumps({
+                    "source": "tinysrc", "objects_downloaded": 1,
+                    "objects_skipped_non_pd": 0, "objects_failed": 0,
+                    "entries": [{"bytes": 50}],
+                }), encoding="utf-8",
+            )
+            # big: 5000 bytes
+            (tmp_p / "big").mkdir()
+            (tmp_p / "big" / "big_manifest.json").write_text(
+                _json.dumps({
+                    "source": "bigsrc", "objects_downloaded": 1,
+                    "objects_skipped_non_pd": 0, "objects_failed": 0,
+                    "entries": [{"bytes": 5000}],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "manifest-stats", "--root", str(tmp_p),
+                 "--min-bytes", "1000", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["min_bytes_filter"], 1000)
+        self.assertEqual(data["min_bytes_filtered_count"], 1)  # tinysrc dropped
+        self.assertEqual(len(data["by_source"]), 1)
+        self.assertIn("bigsrc", data["by_source"])
+        self.assertNotIn("tinysrc", data["by_source"])
+        # Aggregate totals stay full.
+        self.assertEqual(data["total_bytes"], 5050)
+
     def test_pack_manifest_stats_top_zero_keeps_all(self) -> None:
         """--top 0 (default) keeps every provider; top_truncated False."""
         import tempfile, json as _json
