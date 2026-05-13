@@ -1845,6 +1845,35 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn("history_root_not_found", result.stdout)
 
+    def test_history_tail_compact_emits_single_line(self) -> None:
+        """v1.37.s207: --compact single-line JSON for history-tail."""
+        import tempfile, os, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            hist_dir = tmp_p / "state" / "r1a_history"
+            hist_dir.mkdir(parents=True)
+            (hist_dir / "all_no_key_001.json").write_text(_json.dumps({
+                "kind": "all_no_key",
+                "providers": [{"provider": "x", "matched": 1,
+                                "downloaded": 1, "ok": True,
+                                "skipped": False}],
+            }), encoding="utf-8")
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "history-tail", "--compact", "--json"],
+                )
+            finally:
+                os.chdir(old_cwd)
+        self.assertEqual(result.exit_code, 0)
+        body = result.stdout.strip()
+        self.assertEqual(body.count("\n"), 0,
+                         msg=f"unexpected newlines: {body[:200]}")
+        data = _json.loads(body)
+        self.assertIn("providers", data)
+
     def test_history_tail_aggregates_synthetic_snapshots(self) -> None:
         """Writes 3 fake snapshots; verifies rolling avg + ok_rate."""
         import tempfile, os, json as _json

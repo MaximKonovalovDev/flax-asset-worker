@@ -3661,6 +3661,15 @@ def history_tail_cmd(
             ),
         ),
     ] = "",
+    compact: Annotated[
+        bool,
+        typer.Option(
+            "--compact",
+            help=(
+                "v1.37.s207: single-line JSON output. No effect without --json."
+            ),
+        ),
+    ] = False,
     json_out: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Summarize the last N R1A fan-out runs from state/r1a_history.
@@ -3757,7 +3766,8 @@ def history_tail_cmd(
     }
 
     if json_out:
-        json.dump(payload, sys.stdout, indent=2)
+        # v1.37.s207 — --compact emits single-line JSON.
+        json.dump(payload, sys.stdout, indent=None if compact else 2)
         sys.stdout.write("\n")
     else:
         print(f"gen_history_tail_history_root={history_root}")
