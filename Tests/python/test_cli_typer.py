@@ -4314,6 +4314,20 @@ class TyperCliSmokeTests(unittest.TestCase):
                 self.assertIsInstance(p["live_response_ms"], (int, float))
                 self.assertGreaterEqual(p["live_response_ms"], 0)
 
+    def test_library_r1a_status_compact_emits_single_line(self) -> None:
+        """v1.34.s202: --compact single-line JSON for r1a-status."""
+        result = self.runner.invoke(
+            self.app,
+            ["library", "r1a-status", "--compact", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0)
+        body = result.stdout.strip()
+        self.assertEqual(body.count("\n"), 0,
+                         msg=f"unexpected newlines: {body[:200]}")
+        import json as _json
+        data = _json.loads(body)
+        self.assertIn("providers", data)
+
     def test_library_r1a_status_env_set_only_drops_unset_keys(self) -> None:
         """v1.31.s194: --env-set-only keeps no-key + env_set=True only."""
         import os

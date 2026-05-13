@@ -778,6 +778,16 @@ def r1a_status_cmd(
             ),
         ),
     ] = False,
+    compact: Annotated[
+        bool,
+        typer.Option(
+            "--compact",
+            help=(
+                "v1.34.s202: emit single-line JSON (no indent)."
+                " No effect without --json."
+            ),
+        ),
+    ] = False,
     sort: Annotated[
         str,
         typer.Option(
@@ -1223,7 +1233,8 @@ def r1a_status_cmd(
         return
 
     if json_out:
-        json.dump(summary, sys.stdout, indent=2)
+        # v1.34.s202 — --compact emits single-line JSON.
+        json.dump(summary, sys.stdout, indent=None if compact else 2)
         sys.stdout.write("\n")
         return
 
