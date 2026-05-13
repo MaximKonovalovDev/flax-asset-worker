@@ -336,5 +336,80 @@ class PexelsVideoRunnerTests(unittest.TestCase):
             self.assertEqual(entry["quality"], "hd")
 
 
+class PexelsVideoMinDurationTests(unittest.TestCase):
+    """v1.28.s183 — min_duration_s filter."""
+
+    def setUp(self) -> None:
+        from assetboy.execution import pexels_runner
+        self.mod = pexels_runner
+
+    def test_min_duration_filters_out_short_videos(self) -> None:
+        """Three videos of duration 3/5/10s; min_duration=8 should keep only the 10s one."""
+        search = _json_response({
+            "videos": [
+                {"id": 1, "duration": 3,
+                 "url": "https://p/1/", "user": {"name": "U"},
+                 "video_files": [{"link": "https://v/1.mp4", "height": 720,
+                                  "width": 1280, "quality": "hd",
+                                  "file_type": "video/mp4"}]},
+                {"id": 2, "duration": 5,
+                 "url": "https://p/2/", "user": {"name": "U"},
+                 "video_files": [{"link": "https://v/2.mp4", "height": 720,
+                                  "width": 1280, "quality": "hd",
+                                  "file_type": "video/mp4"}]},
+                {"id": 3, "duration": 10,
+                 "url": "https://p/3/", "user": {"name": "U"},
+                 "video_files": [{"link": "https://v/3.mp4", "height": 720,
+                                  "width": 1280, "quality": "hd",
+                                  "file_type": "video/mp4"}]},
+            ],
+        })
+        vid_blob = _binary_response(b"\x00\x00\x00\x18ftypisom-fake")
+        # Only one binary fetch expected (the 10s video).
+        responses = iter([search, vid_blob])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(
+                self.mod.urllib.request, "urlopen",
+                side_effect=lambda *a, **kw: next(responses),
+            ):
+                with patch.object(self.mod.time, "sleep"):
+                    result = self.mod.run_pexels_video_batch(
+                        query="x", api_key="k", pack_id="V",
+                        count=5, max_height=1080,
+                        min_duration_s=8.0,
+                        output_dir=Path(tmp),
+                    )
+        self.assertTrue(result.ok)
+        self.assertEqual(result.items_downloaded, 1)
+
+    def test_min_duration_zero_keeps_all(self) -> None:
+        """min_duration=0.0 keeps all (default behavior)."""
+        search = _json_response({
+            "videos": [
+                {"id": 1, "duration": 2,
+                 "url": "https://p/1/", "user": {"name": "U"},
+                 "video_files": [{"link": "https://v/1.mp4", "height": 720,
+                                  "width": 1280, "quality": "hd",
+                                  "file_type": "video/mp4"}]},
+            ],
+        })
+        vid_blob = _binary_response(b"\x00\x00\x00\x18ftypisom-fake")
+        responses = iter([search, vid_blob])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(
+                self.mod.urllib.request, "urlopen",
+                side_effect=lambda *a, **kw: next(responses),
+            ):
+                with patch.object(self.mod.time, "sleep"):
+                    result = self.mod.run_pexels_video_batch(
+                        query="x", api_key="k", pack_id="V",
+                        count=5, max_height=1080,
+                        output_dir=Path(tmp),
+                    )
+        self.assertEqual(result.items_downloaded, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

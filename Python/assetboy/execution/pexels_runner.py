@@ -321,6 +321,7 @@ def run_pexels_video_batch(
     pack_id: str | None = None,
     count: int = 3,
     max_height: int = 1080,
+    min_duration_s: float = 0.0,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.2,
     dry_run: bool = False,
@@ -332,6 +333,8 @@ def run_pexels_video_batch(
         api_key: PEXELS_API_KEY (falls back to env var).
         count: max videos to download.
         max_height: prefer the highest-quality file <= this many pixels.
+        min_duration_s: v1.28.s183 - skip videos shorter than this duration
+                        (Pexels reports duration in seconds). 0.0 = no filter.
     """
     resolved_pack_id = pack_id or f"PEXELS_VIDEOS_{query.replace(' ', '_').upper()}"
     out_dir = (
@@ -373,6 +376,11 @@ def run_pexels_video_batch(
             break
         if not isinstance(video, dict):
             continue
+        # v1.28.s183 — apply min_duration_s filter (Pexels duration is int seconds).
+        if min_duration_s > 0:
+            dur = video.get("duration", 0) or 0
+            if dur < min_duration_s:
+                continue
         file_info = pick_video_file(video, max_height=max_height)
         if not file_info:
             result.items_failed += 1

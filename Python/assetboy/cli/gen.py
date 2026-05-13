@@ -1691,6 +1691,16 @@ def pexels_videos_cmd(
             help="Prefer highest-quality file at or below this many pixels.",
         ),
     ] = 1080,
+    min_duration_s: Annotated[
+        float,
+        typer.Option(
+            "--min-duration",
+            help=(
+                "v1.28.s183: skip videos shorter than N seconds."
+                " 0.0 (default) = no filter."
+            ),
+        ),
+    ] = 0.0,
     pack_id: Annotated[str, typer.Option("--pack-id")] = "",
     output_dir: Annotated[Path, typer.Option("--output-dir")] = Path(""),
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
@@ -1703,6 +1713,7 @@ def pexels_videos_cmd(
     Examples:
       assetboy gen pexels videos -q "fire crackling" -n 2 --max-height 1080
       assetboy gen pexels videos -q "ocean waves" --max-height 720 -n 4
+      assetboy gen pexels videos -q "fog" --min-duration 8 -n 3
     """
     from assetboy.execution.pexels_runner import run_pexels_video_batch
 
@@ -1712,7 +1723,9 @@ def pexels_videos_cmd(
     try:
         result = run_pexels_video_batch(
             query=query, pack_id=pack_id_arg, count=count,
-            max_height=max_height, output_dir=out_dir_arg, dry_run=dry_run,
+            max_height=max_height,
+            min_duration_s=min_duration_s,
+            output_dir=out_dir_arg, dry_run=dry_run,
         )
     except Exception as exc:
         msg = f"pexels_runner_crashed: {exc}"
