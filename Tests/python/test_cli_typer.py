@@ -276,6 +276,35 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("historical", entry["theme"])
         self.assertIn("smoke-test", entry["tags"])
 
+    def test_pack_list_recipes_sort_updated_utc_newest_first(self) -> None:
+        """v1.32.s195: --sort updated_utc orders newest-first."""
+        import tempfile, json as _json, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, ts in [
+                ("r_old", "2026-01-01T00:00:00"),
+                ("r_new", "2026-05-13T00:00:00"),
+                ("r_mid", "2026-03-15T00:00:00"),
+                ("r_none", None),
+            ]:
+                recipe = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if ts:
+                    recipe["recipe"]["updated_utc"] = ts
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(recipe), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--sort", "updated_utc", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = [r["recipe_id"] for r in data["recipes"]]
+        # Newest first: r_new, r_mid, r_old, then untagged r_none last.
+        self.assertEqual(ids, ["r_new", "r_mid", "r_old", "r_none"])
+
     def test_pack_list_recipes_sort_platform_alpha(self) -> None:
         """v1.30.s191: --sort platform orders by platform field; untagged last."""
         import tempfile, json as _json, yaml as _yaml

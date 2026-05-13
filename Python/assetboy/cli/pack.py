@@ -247,9 +247,30 @@ def list_recipes_cmd(
             str(e.get("platform", "")).lower(),
             e["path"],
         ))
+    elif sort_norm in ("updated_utc", "created_utc"):
+        # v1.32.s195 — sort by timestamp field (newest first);
+        # entries without that field sort last.
+        ts_key = sort_norm
+        from datetime import datetime as _dt_now
+        def _ts_to_epoch(v: object) -> float:
+            if not isinstance(v, str):
+                return -1.0
+            try:
+                return _dt_now.fromisoformat(v.strip()).timestamp()
+            except (ValueError, TypeError):
+                return -1.0
+        entries.sort(key=lambda e: (
+            e.get(ts_key) is None,
+            -_ts_to_epoch(e.get(ts_key)),
+            e["path"],
+        ))
     elif sort_norm not in ("", "path"):
         # Unknown sort key -> error.
-        msg = f"unknown_sort_key: {sort_norm!r} (valid: 'path', 'tier', 'name', 'platform')"
+        msg = (
+            f"unknown_sort_key: {sort_norm!r}"
+            " (valid: 'path', 'tier', 'name', 'platform',"
+            " 'updated_utc', 'created_utc')"
+        )
         if json_out:
             json.dump({"error": msg}, sys.stdout, indent=2)
             sys.stdout.write("\n")
