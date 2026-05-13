@@ -276,6 +276,35 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("historical", entry["theme"])
         self.assertIn("smoke-test", entry["tags"])
 
+    def test_pack_list_recipes_filter_platform_exact(self) -> None:
+        """v1.30.s190: --filter platform:flax matches recipes with that platform."""
+        import tempfile, json as _json, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "r1.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "r1", "game": "g1", "platform": "flax"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "r2.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "r2", "game": "g1", "platform": "unity"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "platform:flax", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["recipes"][0]["recipe_id"], "r1")
+        self.assertEqual(data["recipes"][0]["platform"], "flax")
+
     def test_pack_list_recipes_filter_author_substring(self) -> None:
         """v1.29.s185: --filter author:Jane substring-matches recipe.author."""
         import tempfile, json as _json, yaml as _yaml
