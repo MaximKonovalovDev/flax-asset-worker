@@ -1847,6 +1847,16 @@ def pixabay_videos_cmd(
         str,
         typer.Option("--variant", help="large (1920x1080) | medium (1280x720, default) | small | tiny."),
     ] = "medium",
+    video_type: Annotated[
+        str,
+        typer.Option(
+            "--video-type",
+            help=(
+                "v1.24.s167: filter by content kind: 'film' | 'animation'"
+                " | 'all' (default empty = unset, no filter)."
+            ),
+        ),
+    ] = "",
     pack_id: Annotated[str, typer.Option("--pack-id")] = "",
     output_dir: Annotated[Path, typer.Option("--output-dir")] = Path(""),
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
@@ -1859,15 +1869,18 @@ def pixabay_videos_cmd(
     Examples:
       assetboy gen pixabay videos -q "fire" -n 2 --variant large
       assetboy gen pixabay videos -q "rain" --variant medium -n 4
+      assetboy gen pixabay videos -q "magic" --video-type animation -n 3
     """
     from assetboy.execution.pixabay_runner import run_pixabay_video_batch
 
     out_dir_arg: Path | None = output_dir if str(output_dir) else None
     pack_id_arg: str | None = pack_id if pack_id else None
+    video_type_arg: str | None = video_type.strip().lower() or None
 
     try:
         result = run_pixabay_video_batch(
             query=query, pack_id=pack_id_arg, count=count, variant=variant,
+            video_type=video_type_arg,
             output_dir=out_dir_arg, dry_run=dry_run,
         )
     except Exception as exc:

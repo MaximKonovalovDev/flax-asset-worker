@@ -116,6 +116,31 @@ class PixabaySearchTests(unittest.TestCase):
         self.assertEqual(len(hits), 1)
         self.assertEqual(hits[0]["id"], 99)
 
+    def test_search_videos_video_type_added_to_url(self) -> None:
+        """v1.24.s167: video_type='animation' adds to URL params."""
+        captured_urls: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured_urls.append(str(req.full_url))
+            return _json_response({"hits": []})
+
+        with patch.object(
+            self.mod.urllib.request, "urlopen", side_effect=capture
+        ):
+            self.mod.search_pixabay_videos(
+                "x", api_key="k", video_type="animation",
+            )
+        self.assertTrue(
+            any("video_type=animation" in u for u in captured_urls),
+            f"missing video_type; got {captured_urls}",
+        )
+
+    def test_search_videos_invalid_video_type_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            self.mod.search_pixabay_videos(
+                "x", api_key="k", video_type="silent_film",
+            )
+
 
 class PixabayPickVideoQualityTests(unittest.TestCase):
     def setUp(self) -> None:

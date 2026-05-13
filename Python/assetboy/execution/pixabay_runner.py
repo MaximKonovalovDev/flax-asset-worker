@@ -140,6 +140,9 @@ def search_pixabay_photos(
     return list(payload.get("hits", []))
 
 
+_VALID_VIDEO_TYPES = {"all", "film", "animation"}
+
+
 def search_pixabay_videos(
     query: str,
     *,
@@ -147,9 +150,17 @@ def search_pixabay_videos(
     per_page: int = 20,
     page: int = 1,
     safesearch: bool = True,
+    video_type: str | None = None,
     timeout: float = 20.0,
 ) -> list[dict]:
-    """Hit /api/videos/; return hits list."""
+    """Hit /api/videos/; return hits list.
+
+    v1.24.s167: video_type = 'all' | 'film' | 'animation' (Pixabay native).
+    """
+    if video_type and video_type not in _VALID_VIDEO_TYPES:
+        raise ValueError(
+            f"invalid video_type {video_type!r}; valid: {sorted(_VALID_VIDEO_TYPES)}"
+        )
     params = {
         "key": api_key,
         "q": query,
@@ -157,6 +168,8 @@ def search_pixabay_videos(
         "page": str(page),
         "safesearch": "true" if safesearch else "false",
     }
+    if video_type:
+        params["video_type"] = video_type
     url = f"{PIXABAY_API}/videos/?{urllib.parse.urlencode(params)}"
     payload = _get_json(url, timeout=timeout)
     return list(payload.get("hits", []))
@@ -346,6 +359,7 @@ def run_pixabay_video_batch(
     pack_id: str | None = None,
     count: int = 3,
     variant: str = "medium",
+    video_type: str | None = None,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.2,
     dry_run: bool = False,
@@ -385,7 +399,10 @@ def run_pixabay_video_batch(
         return result
 
     try:
-        hits = search_pixabay_videos(query, api_key=key, per_page=min(count * 2, 200))
+        hits = search_pixabay_videos(
+            query, api_key=key, per_page=min(count * 2, 200),
+            video_type=video_type,
+        )
     except urllib.error.HTTPError as exc:
         result.ok = False
         result.error = f"search_failed: HTTP {exc.code}"
