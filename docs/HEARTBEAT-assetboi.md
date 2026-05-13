@@ -1,22 +1,24 @@
 # HEARTBEAT — assetboi (operator hibernation read-back)
 
-> **Last update:** 2026-05-13 (continuous loop, **245 commits + 217 tags
-> shipped this run** (origin), **885 tests**; latest tag
-> v1.29.2-manifest-stats-csv)
+> **Last update:** 2026-05-13 (continuous loop, **263 commits + 245 tags
+> shipped this run** (origin), **909 tests**; latest tag
+> v1.37.1-history-tail-compact)
 > **Repo:** `flax-asset-worker` (this repo; assetboi commits freely here)
 > **Loop status:** **NEVER-STOP ACTIVE** per BOSS Rule 3
 
-## TL;DR — top-of-loop milestone (v1.29.2, this turn)
+## TL;DR — top-of-loop milestone (v1.37.1, this turn)
 
-**245 commits since baseline `0b1ad7d`, 217 tags pushed, 885 tests
-passing. 12 R1A providers + 18 HTTP endpoints + 17 wave milestones
-shipped (v1.10..v1.28 complete; v1.29 in flight). 16 consecutive waves
-(v1.13->v1.28) with 0 RULE violations. Recent v1.25..v1.29 slices:
-recipe author/contact metadata, r1a-status --provider, response_ms
-timing, --sort by bytes/downloaded/response_ms/last_manifest_utc/id,
-from-recipe --max-tier, all-no-key/all-key --bail-on-error, Pexels/
-Pixabay videos --min-duration, list-recipes --filter author/contact,
-manifest-stats --csv.**
+**263 commits since baseline `0b1ad7d`, 245 tags pushed, 909 tests
+passing. 12 R1A providers + 18 HTTP endpoints + 24 wave milestones
+shipped (v1.10..v1.36 complete; v1.37 in flight). 24 consecutive
+waves (v1.13->v1.36) with 0 RULE violations. Recent v1.30..v1.37
+slices: recipe.platform metadata, list-recipes --sort platform/
+updated_utc, r1a-status --kind/--env-set-only, scout-by-license
+--max-providers, manifest-stats --since-days, list-recipes --filter
+has-FIELD (presence test), --compact JSON flag rolled out across 8
+commands (list-recipes/list-providers/r1a-status/all-no-key/all-key/
+scout-by-license/manifest-stats/history-tail) for shell pipe
+integration.**
 
 Daemon restarted once mid-loop (~30s downtime); buffer survived; loop
 resumed without intervention.
