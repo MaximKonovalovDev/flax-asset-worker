@@ -2155,6 +2155,75 @@ class TyperCliSmokeTests(unittest.TestCase):
         names = {p["provider"] for p in data["providers"]}
         self.assertEqual(names, {"met_museum", "iconify"})
 
+    def test_all_no_key_bail_on_error_stops_after_first_failure(self) -> None:
+        """v1.28.s181: --bail-on-error halts sequential after first ok=False."""
+        from unittest.mock import patch
+        from assetboy.execution.met_museum_runner import MetMuseumResult
+        from assetboy.execution.iconify_runner import IconifyResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            # met_museum FAILS first; later providers should be skipped.
+            with patch(
+                "assetboy.execution.met_museum_runner.run_met_museum_batch",
+                return_value=MetMuseumResult(
+                    pack_id="x", query="q", output_dir=Path(tmp),
+                    ok=False, error="forced_failure",
+                ),
+            ), patch(
+                "assetboy.execution.iconify_runner.run_iconify_batch",
+                return_value=IconifyResult(
+                    pack_id="x", query="q", output_dir=Path(tmp),
+                    icons_matched=2, ok=True,
+                ),
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "all-no-key", "--query", "q",
+                     "--provider", "met_museum,iconify",
+                     "--bail-on-error", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertTrue(data["bailed"])
+        # Only the failing met_museum should appear; iconify skipped.
+        self.assertEqual(data["providers_run"], 1)
+        self.assertEqual(data["providers"][0]["provider"], "met_museum")
+        self.assertFalse(data["providers"][0]["ok"])
+
+    def test_all_no_key_bail_default_runs_all(self) -> None:
+        """Without --bail-on-error, all providers run even after failures."""
+        from unittest.mock import patch
+        from assetboy.execution.met_museum_runner import MetMuseumResult
+        from assetboy.execution.iconify_runner import IconifyResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch(
+                "assetboy.execution.met_museum_runner.run_met_museum_batch",
+                return_value=MetMuseumResult(
+                    pack_id="x", query="q", output_dir=Path(tmp),
+                    ok=False, error="forced",
+                ),
+            ), patch(
+                "assetboy.execution.iconify_runner.run_iconify_batch",
+                return_value=IconifyResult(
+                    pack_id="x", query="q", output_dir=Path(tmp),
+                    icons_matched=2, ok=True,
+                ),
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "all-no-key", "--query", "q",
+                     "--provider", "met_museum,iconify", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertFalse(data["bailed"])
+        self.assertEqual(data["providers_run"], 2)
+
     def test_all_no_key_provider_filter_no_match_exits_1(self) -> None:
         """--provider unknown -> exit 1 with explanation."""
         result = self.runner.invoke(

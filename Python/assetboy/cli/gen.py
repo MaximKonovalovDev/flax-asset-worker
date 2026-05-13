@@ -2319,6 +2319,17 @@ def all_no_key_cmd(
             ),
         ),
     ] = "",
+    bail_on_error: Annotated[
+        bool,
+        typer.Option(
+            "--bail-on-error",
+            help=(
+                "v1.28.s181: stop on the first provider that fails (ok=False);"
+                " skip remaining. Has no effect in --parallel mode."
+                " Useful for CI / scout-debugging."
+            ),
+        ),
+    ] = False,
     json_out: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Fan out one query across all 6 no-key R1A providers (Path B v1.11.s37+).
@@ -2446,12 +2457,18 @@ def all_no_key_cmd(
             providers_run.append(results_by_idx[i])
     else:
         # Original sequential path.
+        bailed = False  # v1.28.s181
         for pid, fn, kwargs in tasks:
             try:
                 r = fn(**kwargs)
-                providers_run.append(_result_to_record(pid, r))
+                rec = _result_to_record(pid, r)
             except Exception as exc:
-                providers_run.append(_crashed_record(pid, exc))
+                rec = _crashed_record(pid, exc)
+            providers_run.append(rec)
+            # v1.28.s181 — bail out on first failure (sequential only).
+            if bail_on_error and not rec.get("ok", False):
+                bailed = True
+                break
 
     total_matched = sum(p["matched"] for p in providers_run)
     total_downloaded = sum(p["downloaded"] for p in providers_run)
@@ -2463,6 +2480,8 @@ def all_no_key_cmd(
         "count_per_provider": count,
         "dry_run": dry_run,
         "parallel": parallel,
+        "bail_on_error": bail_on_error,
+        "bailed": locals().get("bailed", False),
         "providers_run": len(providers_run),
         "providers_ok": providers_ok,
         "providers_failed": providers_failed,
