@@ -27,6 +27,20 @@ except ImportError as _exc:  # pragma: no cover
 
 DEFAULT_BASE = "http://localhost:8790"
 
+
+def _iso_to_epoch_or_neg(iso_str: str | None) -> float:
+    """v1.27.s180 helper: ISO 8601 -> epoch float. None / unparseable -> -1.
+
+    Used by --sort last_manifest_utc; the negation produces newest-first ordering.
+    """
+    if not iso_str:
+        return -1.0
+    try:
+        from datetime import datetime as _dt
+        return _dt.fromisoformat(iso_str).timestamp()
+    except (ValueError, TypeError):
+        return -1.0
+
 app = typer.Typer(
     name="library",
     help="Local FAW asset library: search / install / ready / audit.",
@@ -747,9 +761,10 @@ def r1a_status_cmd(
         typer.Option(
             "--sort",
             help=(
-                "v1.26.s176: sort providers by 'bytes' (desc),"
+                "v1.26.s176 / v1.27.s180: sort providers by 'bytes' (desc),"
                 " 'downloaded' (desc), 'response_ms' (asc; requires"
-                " --check-live), or 'id' (alpha; default empty = stable)."
+                " --check-live), 'last_manifest_utc' (newest first),"
+                " or 'id' (alpha; default empty = stable)."
             ),
         ),
     ] = "",
@@ -979,7 +994,8 @@ def r1a_status_cmd(
     # v1.26.s176 — --sort applies after the provider filter.
     sort_norm = sort.strip().lower()
     if sort_norm:
-        valid_sorts = {"bytes", "downloaded", "response_ms", "id"}
+        valid_sorts = {"bytes", "downloaded", "response_ms",
+                       "last_manifest_utc", "id"}
         if sort_norm not in valid_sorts:
             msg = (
                 f"unknown_sort: {sort!r}"
@@ -1007,6 +1023,14 @@ def r1a_status_cmd(
                 key=lambda p: (
                     p.get("live_response_ms") is None,
                     p.get("live_response_ms") or 0,
+                ),
+            )
+        elif sort_norm == "last_manifest_utc":
+            # v1.27.s180 — newest first; None values sort last.
+            providers_state.sort(
+                key=lambda p: (
+                    p.get("last_manifest_utc") is None,
+                    -(_iso_to_epoch_or_neg(p.get("last_manifest_utc"))),
                 ),
             )
         elif sort_norm == "id":

@@ -3810,6 +3810,18 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertNotIn("Bytes-on-disk proportion", result.stdout)
 
+    def test_library_r1a_status_sort_last_manifest_utc_accepts(self) -> None:
+        """v1.27.s180: --sort last_manifest_utc is a valid sort key."""
+        result = self.runner.invoke(
+            self.app,
+            ["library", "r1a-status", "--sort", "last_manifest_utc", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        # Just verify it runs; without manifests, all None, so order unchanged.
+        self.assertEqual(data["providers_total"], 11)
+
     def test_library_r1a_status_last_manifest_utc_present(self) -> None:
         """v1.27.s179: every provider row has last_manifest_utc (None or ISO)."""
         import json as _json
