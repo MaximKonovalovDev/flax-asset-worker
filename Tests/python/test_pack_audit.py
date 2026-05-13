@@ -324,6 +324,24 @@ class PackAuditCliTests(unittest.TestCase):
         # Should not crash (exit 0 = no failures, exit 1 = retry attempted)
         self.assertIn(result.exit_code, (0, 1))
 
+    def test_rerun_failed_max_attempts_help_lists_flag(self) -> None:
+        """v1.25.s168: --max-attempts flag visible in help."""
+        result = self.runner.invoke(self.app, ["pack", "rerun-failed", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("--max-attempts", result.stdout)
+
+    def test_rerun_failed_max_attempts_zero_passes(self) -> None:
+        """v1.25.s168: --max-attempts 0 (default) doesn't cap."""
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "rerun-failed",
+             "--recipe", "sandbox/one_pack_smoke.yaml",
+             "--max-attempts", "0",
+             "--dry-run", "--json"],
+        )
+        # Either 0 (no failures) or 1 (some attempted); not 2 (typer arg error).
+        self.assertIn(result.exit_code, (0, 1))
+
 
 if __name__ == "__main__":
     unittest.main()

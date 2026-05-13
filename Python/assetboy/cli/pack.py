@@ -1342,6 +1342,18 @@ def rerun_failed_cmd(
             ),
         ),
     ] = False,
+    max_attempts: Annotated[
+        int,
+        typer.Option(
+            "--max-attempts",
+            help=(
+                "v1.25.s168: cap how many packs to retry in one invocation"
+                " (0 = unlimited, default). When set and there are more"
+                " failed packs than this, only the first N are run; the"
+                " rest are listed in 'deferred' in the summary."
+            ),
+        ),
+    ] = 0,
     dry_run: Annotated[
         bool,
         typer.Option("--dry-run", help="Plan only; don't re-execute."),
@@ -1446,6 +1458,13 @@ def rerun_failed_cmd(
                 print(f"pack_rerun_failed_skipped={pid}")
         return
 
+    # v1.25.s168 — apply --max-attempts cap.
+    deferred_ids: list[str] = []
+    if max_attempts > 0 and len(targets) > max_attempts:
+        deferred = targets[max_attempts:]
+        targets = targets[:max_attempts]
+        deferred_ids = [str(p.get("id", "?")) for p in deferred]
+
     # Execute the matched packs
     results: list[dict[str, Any]] = []
     re_success = 0
@@ -1510,10 +1529,12 @@ def rerun_failed_cmd(
         "recipe": str(resolved),
         "game_filter": effective_game_filter,
         "total_failed_in_audit": len(failed),
-        "matched_in_recipe": len(targets),
+        "matched_in_recipe": len(targets) + len(deferred_ids),
         "skipped_not_in_recipe": skipped_not_in_recipe,
         "rerun_succeeded": re_success,
         "rerun_failed": re_fail,
+        "max_attempts": max_attempts if max_attempts > 0 else None,
+        "deferred": deferred_ids,
         "results": results,
     }
     if expected_status_r is not None:
@@ -1530,6 +1551,8 @@ def rerun_failed_cmd(
         print(f"pack_rerun_failed_failed={re_fail}")
         if skipped_not_in_recipe:
             print(f"pack_rerun_failed_skipped_count={len(skipped_not_in_recipe)}")
+        if deferred_ids:
+            print(f"pack_rerun_failed_deferred_count={len(deferred_ids)}")
         if expected_status_r is not None:
             lbl = "OK" if expected_status_r["meets_expected_min"] else "WARN"
             print(
