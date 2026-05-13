@@ -1,8 +1,23 @@
 # HEARTBEAT — assetboi (operator hibernation read-back)
 
-> **Last update:** 2026-05-12 (continuous loop, **203 commits + 171 tags shipped this run** (origin), **823 tests**; latest tag v1.22.2-scryfall-set)
+> **Last update:** 2026-05-13 (continuous loop, **230 commits + 197 tags
+> shipped this run** (origin), **856 tests**; latest tag
+> v1.25.3-list-providers-kind)
 > **Repo:** `flax-asset-worker` (this repo; assetboi commits freely here)
 > **Loop status:** **NEVER-STOP ACTIVE** per BOSS Rule 3
+
+## TL;DR — top-of-loop milestone (v1.25.3, this turn)
+
+**230 commits since baseline `0b1ad7d`, 197 tags pushed, 856 tests
+passing. 12 R1A providers + 18 HTTP endpoints + 14 wave milestones
+shipped (v1.10..v1.24 complete; v1.25 in flight). Most recent 6 slices
+(v1.24+ continuation): history-tail, HTTP /gen/history-tail, Scryfall
+--type, Pixabay --orientation, Pexels --orientation, Pixabay videos
+--video-type, rerun-failed --max-attempts, manifest-stats --min-bytes,
+list-providers --filter kind.**
+
+Daemon restarted once mid-loop (~30s downtime); buffer survived; loop
+resumed without intervention.
 
 This is the single doc to read first if you (operator) just woke up.
 Everything else (PATH_B_DAY11_PLAN.md, COMMIT_READY-assetboi.md, README,
