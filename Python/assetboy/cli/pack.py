@@ -1819,6 +1819,18 @@ def manifest_stats_cmd(
             ),
         ),
     ] = "",
+    since_days: Annotated[
+        int,
+        typer.Option(
+            "--since-days",
+            help=(
+                "v1.33.s198: relative-time variant of --since;"
+                " include manifests modified within the last N days."
+                " 0 (default) = disabled. Mutex-friendly with --since"
+                " (if both set, since-days takes priority)."
+            ),
+        ),
+    ] = 0,
     history: Annotated[
         bool,
         typer.Option(
@@ -1999,9 +2011,13 @@ def manifest_stats_cmd(
 
     norm_filter = source_filter.strip().lower() if source_filter else ""
 
-    # v1.13.s92 — parse --since ISO 8601 into POSIX timestamp.
+    # v1.13.s92 / v1.33.s198 — parse --since* into POSIX timestamp.
     since_epoch: float | None = None
-    if since.strip():
+    if since_days > 0:
+        # v1.33.s198 — relative-time: now - N days.
+        import time as _t
+        since_epoch = _t.time() - (since_days * 86400.0)
+    elif since.strip():
         from datetime import datetime
         try:
             dt = datetime.fromisoformat(since.strip())
@@ -2096,6 +2112,7 @@ def manifest_stats_cmd(
         "manifests_after_filter": sum(b["manifests"] for b in per_source.values()),
         "source_filter": norm_filter or None,
         "since_filter": since.strip() or None,  # v1.13.s92
+        "since_days_filter": since_days if since_days > 0 else None,  # v1.33.s198
         "sources_seen": len(per_source),
         "total_downloaded": total_downloaded,
         "total_skipped": total_skipped,

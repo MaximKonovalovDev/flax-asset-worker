@@ -2569,6 +2569,60 @@ class TyperCliSmokeTests(unittest.TestCase):
         # Aggregate totals stay full (not truncated).
         self.assertEqual(data["total_bytes"], 9100)
 
+    def test_pack_manifest_stats_since_days_includes_recent(self) -> None:
+        """v1.33.s198: --since-days 365 includes manifests from last year."""
+        import tempfile, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "src").mkdir()
+            (tmp_p / "src" / "src_manifest.json").write_text(
+                _json.dumps({
+                    "source": "fresh_src", "objects_downloaded": 1,
+                    "objects_skipped_non_pd": 0, "objects_failed": 0,
+                    "entries": [{"bytes": 100}],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "manifest-stats", "--root", str(tmp_p),
+                 "--since-days", "365", "--json"],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            data = _json.loads(result.stdout.strip())
+            # Just-created file is within 365 days.
+            self.assertEqual(data["since_days_filter"], 365)
+            self.assertEqual(data["sources_seen"], 1)
+
+    def test_pack_manifest_stats_since_days_excludes_old(self) -> None:
+        """v1.33.s198: --since-days 0.5 (half a day, ~12h)... actually
+        we set since_days=1 and forcibly set mtime to 5 days ago to verify
+        the filter drops it."""
+        import tempfile, json as _json, os, time
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "src").mkdir()
+            mf = tmp_p / "src" / "src_manifest.json"
+            mf.write_text(
+                _json.dumps({
+                    "source": "old_src", "objects_downloaded": 1,
+                    "objects_skipped_non_pd": 0, "objects_failed": 0,
+                    "entries": [{"bytes": 100}],
+                }), encoding="utf-8",
+            )
+            # Backdate to 5 days ago.
+            old_t = time.time() - (5 * 86400)
+            os.utime(mf, (old_t, old_t))
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "manifest-stats", "--root", str(tmp_p),
+                 "--since-days", "1", "--json"],
+            )
+            self.assertEqual(result.exit_code, 0)
+            data = _json.loads(result.stdout.strip())
+            self.assertEqual(data["since_days_filter"], 1)
+            # Backdated file should be excluded.
+            self.assertEqual(data["sources_seen"], 0)
+
     def test_pack_manifest_stats_csv_writes_file(self) -> None:
         """v1.29.s186: --csv writes per-source rows with correct header."""
         import tempfile, json as _json
