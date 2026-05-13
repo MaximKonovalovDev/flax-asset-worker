@@ -360,6 +360,7 @@ def run_pixabay_video_batch(
     count: int = 3,
     variant: str = "medium",
     video_type: str | None = None,
+    min_duration_s: float = 0.0,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.2,
     dry_run: bool = False,
@@ -423,6 +424,11 @@ def run_pixabay_video_batch(
             break
         if not isinstance(hit, dict):
             continue
+        # v1.29.s184 — min_duration_s filter (Pixabay duration is int seconds).
+        if min_duration_s > 0:
+            dur = hit.get("duration", 0) or 0
+            if dur < min_duration_s:
+                continue
         vinfo = pick_video_quality(hit, variant=variant)
         if not vinfo or not vinfo.get("url"):
             result.items_failed += 1

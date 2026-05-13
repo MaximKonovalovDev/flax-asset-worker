@@ -304,6 +304,40 @@ class PixabayVideoRunnerTests(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertIn("invalid_variant", result.error or "")
 
+    def test_video_min_duration_filters_short_clips(self) -> None:
+        """v1.29.s184: min_duration_s=10 keeps only the 12s video."""
+        search = _json_response({
+            "hits": [
+                {"id": 1, "tags": "x", "user": "U", "pageURL": "u",
+                 "duration": 3,
+                 "videos": {"medium": {"url": "https://v/1.mp4",
+                                       "width": 1280, "height": 720,
+                                       "size": 100}}},
+                {"id": 2, "tags": "x", "user": "U", "pageURL": "u",
+                 "duration": 12,
+                 "videos": {"medium": {"url": "https://v/2.mp4",
+                                       "width": 1280, "height": 720,
+                                       "size": 100}}},
+            ],
+        })
+        blob = _binary_response(b"\x00\x00\x00\x18ftyp-fake")
+        responses = iter([search, blob])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(
+                self.mod.urllib.request, "urlopen",
+                side_effect=lambda *a, **kw: next(responses),
+            ):
+                with patch.object(self.mod.time, "sleep"):
+                    result = self.mod.run_pixabay_video_batch(
+                        query="x", api_key="k", pack_id="V",
+                        count=5, variant="medium",
+                        min_duration_s=10.0,
+                        output_dir=Path(tmp),
+                    )
+        self.assertTrue(result.ok)
+        self.assertEqual(result.items_downloaded, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

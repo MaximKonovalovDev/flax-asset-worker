@@ -1884,6 +1884,16 @@ def pixabay_videos_cmd(
             ),
         ),
     ] = "",
+    min_duration_s: Annotated[
+        float,
+        typer.Option(
+            "--min-duration",
+            help=(
+                "v1.29.s184: skip videos shorter than N seconds."
+                " 0.0 (default) = no filter."
+            ),
+        ),
+    ] = 0.0,
     pack_id: Annotated[str, typer.Option("--pack-id")] = "",
     output_dir: Annotated[Path, typer.Option("--output-dir")] = Path(""),
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
@@ -1897,6 +1907,7 @@ def pixabay_videos_cmd(
       assetboy gen pixabay videos -q "fire" -n 2 --variant large
       assetboy gen pixabay videos -q "rain" --variant medium -n 4
       assetboy gen pixabay videos -q "magic" --video-type animation -n 3
+      assetboy gen pixabay videos -q "wave" --min-duration 12 -n 2
     """
     from assetboy.execution.pixabay_runner import run_pixabay_video_batch
 
@@ -1908,6 +1919,7 @@ def pixabay_videos_cmd(
         result = run_pixabay_video_batch(
             query=query, pack_id=pack_id_arg, count=count, variant=variant,
             video_type=video_type_arg,
+            min_duration_s=min_duration_s,
             output_dir=out_dir_arg, dry_run=dry_run,
         )
     except Exception as exc:
