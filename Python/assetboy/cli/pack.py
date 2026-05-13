@@ -166,6 +166,12 @@ def list_recipes_cmd(
         field_val = recipe.get(field_name)
         if field_val is None:
             return False
+        # v1.29.s185 — author / contact use substring (case-insensitive)
+        # since exact-match is impractical for human strings.
+        if field_name in ("author", "contact"):
+            if isinstance(field_val, str):
+                return value.strip().lower() in field_val.strip().lower()
+            return False
         if isinstance(field_val, str):
             return field_val.strip().lower() == value.strip().lower()
         if isinstance(field_val, list):

@@ -276,6 +276,58 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("historical", entry["theme"])
         self.assertIn("smoke-test", entry["tags"])
 
+    def test_pack_list_recipes_filter_author_substring(self) -> None:
+        """v1.29.s185: --filter author:Jane substring-matches recipe.author."""
+        import tempfile, json as _json, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "r1.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "r1", "game": "g1",
+                                "author": "Jane Doe"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "r2.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "r2", "game": "g1",
+                                "author": "Alice Smith"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "author:jane", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        # Only Jane Doe's recipe matches.
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["recipes"][0]["recipe_id"], "r1")
+
+    def test_pack_list_recipes_filter_contact_substring(self) -> None:
+        import tempfile, json as _json, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "r.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "r", "game": "g1",
+                                "contact": "ops@example.com"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "contact:example.com", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout)
+        self.assertEqual(data["count"], 1)
+
     def test_pack_list_recipes_surfaces_created_updated_utc(self) -> None:
         """v1.23.s160: list-recipes JSON propagates created_utc / updated_utc."""
         import tempfile, json as _json, yaml as _yaml
