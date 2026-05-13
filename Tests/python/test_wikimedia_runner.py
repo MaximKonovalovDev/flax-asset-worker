@@ -77,6 +77,42 @@ class WikimediaLicenseFilterTests(unittest.TestCase):
         self.assertIsInstance(result, bool)
 
 
+class WikimediaLicenseTokenResolutionTests(unittest.TestCase):
+    """v1.25.s173 — resolve_license_tokens maps filter to allow-tuple."""
+
+    def setUp(self) -> None:
+        from assetboy.execution.wikimedia_runner import resolve_license_tokens
+        self.fn = resolve_license_tokens
+
+    def test_empty_returns_none(self) -> None:
+        self.assertIsNone(self.fn(""))
+        self.assertIsNone(self.fn(None))
+        self.assertIsNone(self.fn("   "))
+
+    def test_cc0_returns_cc0_tuple(self) -> None:
+        result = self.fn("cc0")
+        self.assertEqual(result, ("cc0",))
+
+    def test_cc_by_sa_returns_sa_tuple(self) -> None:
+        result = self.fn("cc-by-sa")
+        self.assertIn("cc-by-sa", result)
+        self.assertNotIn("cc0", result)
+
+    def test_unknown_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            self.fn("commercial-only")
+
+    def test_is_license_accepted_honors_allow_tokens(self) -> None:
+        """When allow_tokens=('cc0',), CC-BY no longer accepted."""
+        from assetboy.execution.wikimedia_runner import is_license_accepted
+        self.assertFalse(
+            is_license_accepted("CC BY 4.0", allow_tokens=("cc0",))
+        )
+        self.assertTrue(
+            is_license_accepted("CC0 1.0", allow_tokens=("cc0",))
+        )
+
+
 class WikimediaRunnerTests(unittest.TestCase):
     def setUp(self) -> None:
         from assetboy.execution import wikimedia_runner

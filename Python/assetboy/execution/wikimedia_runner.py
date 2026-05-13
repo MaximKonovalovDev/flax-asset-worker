@@ -92,16 +92,26 @@ def _download_binary(url: str, dest: Path, *, timeout: float = 30.0) -> int:
 # Public API
 # --------------------------------------------------------------------------- #
 
-def is_license_accepted(license_short_name: str) -> bool:
+def is_license_accepted(
+    license_short_name: str,
+    *,
+    allow_tokens: tuple[str, ...] | None = None,
+) -> bool:
     """True if the license string matches one of our acceptable CC tokens.
 
     Args:
-        license_short_name: e.g. "CC0", "CC BY-SA 4.0", "Public domain", "All rights reserved".
+        license_short_name: e.g. "CC0", "CC BY-SA 4.0", "Public domain",
+                            "All rights reserved".
+        allow_tokens: v1.25.s173 - optional override for the accepted-token
+                      tuple. None uses the full default set. Use a narrower
+                      tuple to enforce a single license family
+                      (e.g. ("cc0",) for strict CC0-only).
     """
     if not license_short_name:
         return False
     norm = license_short_name.strip().lower()
-    return any(tok in norm for tok in _ACCEPTED_LICENSE_TOKENS)
+    tokens = allow_tokens if allow_tokens is not None else _ACCEPTED_LICENSE_TOKENS
+    return any(tok in norm for tok in tokens)
 
 
 def search_wikimedia_files(
@@ -178,12 +188,41 @@ def fetch_wikimedia_imageinfo(file_title: str, *, timeout: float = 15.0) -> dict
     return dict(infos[0])
 
 
+_LICENSE_FAMILY_TOKENS = {
+    "cc0": ("cc0",),
+    "pd": ("public domain", "pd-", "pd "),
+    "cc-by": ("cc-by ", "cc by ",
+              "cc-by-2", "cc by-2", "cc-by-3", "cc by-3",
+              "cc-by-4", "cc by-4"),
+    "cc-by-sa": ("cc-by-sa", "cc by-sa"),
+}
+
+
+def resolve_license_tokens(license_filter: str | None) -> tuple[str, ...] | None:
+    """v1.25.s173: map a filter string to a token tuple.
+
+    license_filter values: 'cc0' / 'pd' / 'cc-by' / 'cc-by-sa' (exact).
+    None or empty -> None (means: accept all default tokens).
+    Unknown -> ValueError.
+    """
+    if not license_filter or not license_filter.strip():
+        return None
+    key = license_filter.strip().lower()
+    if key not in _LICENSE_FAMILY_TOKENS:
+        raise ValueError(
+            f"invalid license_filter {license_filter!r};"
+            f" valid: {sorted(_LICENSE_FAMILY_TOKENS)}"
+        )
+    return _LICENSE_FAMILY_TOKENS[key]
+
+
 def run_wikimedia_batch(
     *,
     query: str,
     pack_id: str | None = None,
     count: int = 6,
     category: str | None = None,
+    license_filter: str | None = None,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.2,
     dry_run: bool = False,
@@ -216,6 +255,14 @@ def run_wikimedia_batch(
         output_dir=out_dir,
         dry_run=dry_run,
     )
+
+    # v1.25.s173 — resolve license_filter (None = default accept-set).
+    try:
+        allow_tokens = resolve_license_tokens(license_filter)
+    except ValueError as exc:
+        result.ok = False
+        result.error = f"license_filter_invalid: {exc}"
+        return result
 
     # Search; oversample 3x to absorb license-filter losses.
     try:
@@ -256,7 +303,7 @@ def run_wikimedia_batch(
         artist_field = extmeta.get("Artist", {}) or {}
         artist_html = str(artist_field.get("value", "") or "")
 
-        if not is_license_accepted(license_short):
+        if not is_license_accepted(license_short, allow_tokens=allow_tokens):
             result.files_skipped_restricted += 1
             continue
         result.files_accepted_license += 1

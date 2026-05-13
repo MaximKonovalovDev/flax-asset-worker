@@ -954,6 +954,17 @@ def wikimedia_fetch_cmd(
     count: Annotated[
         int, typer.Option("--count", "-n", help="Max CC-licensed files to download."),
     ] = 6,
+    license_filter: Annotated[
+        str,
+        typer.Option(
+            "--license",
+            help=(
+                "v1.25.s173: narrow accepted licenses to one family:"
+                " 'cc0' | 'pd' | 'cc-by' | 'cc-by-sa'. Default empty"
+                " (accept any of those four)."
+            ),
+        ),
+    ] = "",
     pack_id: Annotated[
         str,
         typer.Option("--pack-id", help="Pack id for output dir (default: derived from query)."),
@@ -1002,12 +1013,15 @@ def wikimedia_fetch_cmd(
     pack_id_arg: str | None = pack_id if pack_id else None
     category_arg: str | None = category.strip() or None  # v1.19.s134
 
+    license_filter_arg: str | None = license_filter.strip().lower() or None  # v1.25.s173
+
     try:
         result = run_wikimedia_batch(
             query=query,
             pack_id=pack_id_arg,
             count=count,
             category=category_arg,
+            license_filter=license_filter_arg,
             output_dir=out_dir_arg,
             dry_run=dry_run,
         )
