@@ -409,6 +409,74 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["total_packs"], 1)
         self.assertEqual(data["results"][0]["pack_id"], "P_ICN")
 
+    def test_pack_from_recipe_max_tier_keeps_only_low_tier(self) -> None:
+        """v1.26.s178: --max-tier 1 keeps tier=0 and tier=1, drops tier=2+."""
+        inline = (
+            "recipe:\n"
+            "  id: tier_test\n"
+            "  game: sandbox\n"
+            "packs:\n"
+            "  - id: P_T0\n"
+            "    provider: iconify\n"
+            "    tier: 0\n"
+            "    acquisition_method: direct_url\n"
+            "    search_terms: [sword]\n"
+            "  - id: P_T2\n"
+            "    provider: iconify\n"
+            "    tier: 2\n"
+            "    acquisition_method: direct_url\n"
+            "    search_terms: [shield]\n"
+            "  - id: P_T3\n"
+            "    provider: iconify\n"
+            "    tier: 3\n"
+            "    acquisition_method: direct_url\n"
+            "    search_terms: [bow]\n"
+        )
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "from-recipe", "--inline-yaml", inline,
+             "--max-tier", "1", "--dry-run", "--json"],
+        )
+        import json as _json
+        data = _json.loads(result.stdout)
+        # Only P_T0 should pass (tier=0 <= 1; tier=2,3 dropped).
+        self.assertEqual(data["total_packs"], 1)
+        self.assertEqual(data["results"][0]["pack_id"], "P_T0")
+
+    def test_pack_from_recipe_max_tier_out_of_range_exits_1(self) -> None:
+        inline = (
+            "recipe:\n  id: t\n  game: sandbox\npacks: []\n"
+        )
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "from-recipe", "--inline-yaml", inline,
+             "--max-tier", "5", "--dry-run", "--json"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("max_tier_out_of_range", result.stdout)
+
+    def test_pack_from_recipe_max_tier_keeps_untiered_packs(self) -> None:
+        """Packs missing 'tier' should NOT be filtered out by --max-tier."""
+        inline = (
+            "recipe:\n"
+            "  id: untiered\n"
+            "  game: sandbox\n"
+            "packs:\n"
+            "  - id: P_NO_TIER\n"
+            "    provider: iconify\n"
+            "    acquisition_method: direct_url\n"
+            "    search_terms: [test]\n"
+        )
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "from-recipe", "--inline-yaml", inline,
+             "--max-tier", "0", "--dry-run", "--json"],
+        )
+        import json as _json
+        data = _json.loads(result.stdout)
+        # No tier => not filtered out.
+        self.assertEqual(data["total_packs"], 1)
+
     def test_pack_from_recipe_includes_pipeline_log(self) -> None:
         """v1.21.s144: each ledger has pipeline_log with stage/status/ts_utc entries."""
         inline = (

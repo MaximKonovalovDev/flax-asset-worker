@@ -464,6 +464,17 @@ def from_recipe_cmd(
             ),
         ),
     ] = None,
+    max_tier: Annotated[
+        int,
+        typer.Option(
+            "--max-tier",
+            help=(
+                "v1.26.s178: run only packs whose tier is <= N (P0=0..P3=3)."
+                " Default -1 = no tier filter. Composes with --only /"
+                " --provider-only."
+            ),
+        ),
+    ] = -1,
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -602,6 +613,22 @@ def from_recipe_cmd(
         packs = [
             p for p in packs
             if str(p.get("provider", "")).strip().lower() in po_set
+        ]
+    # v1.26.s178 — --max-tier filter (P0=0..P3=3); packs missing tier kept.
+    if max_tier >= 0:
+        if max_tier > 3:
+            msg = f"max_tier_out_of_range: {max_tier} (expected 0..3 or -1)"
+            if json_out:
+                json.dump({"error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"pack_from_recipe_error={msg}")
+            raise typer.Exit(code=1)
+        packs = [
+            p for p in packs
+            if not isinstance(p.get("tier"), int)
+               or isinstance(p.get("tier"), bool)
+               or int(p["tier"]) <= max_tier
         ]
     if skip:
         skip_set = set(skip)
