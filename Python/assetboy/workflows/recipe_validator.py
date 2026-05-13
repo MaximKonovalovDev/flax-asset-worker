@@ -177,6 +177,25 @@ def validate_recipe_doc(doc: Any, source_label: str = "<recipe>") -> ValidationR
                         f"{source_label}: recipe.{str_key} is empty;"
                         " consider removing the field"
                     )
+        # v1.30.s189 — optional platform field; recommended values:
+        # 'flax' / 'unity' / 'unreal' / 'godot' / 'web' / 'any'.
+        # Warn on unknown values; never error (allows custom platforms).
+        if "platform" in recipe and recipe["platform"] is not None:
+            pval = recipe["platform"]
+            if not isinstance(pval, str):
+                result.warnings.append(
+                    f"{source_label}: recipe.platform should be a string;"
+                    f" got {type(pval).__name__}"
+                )
+            else:
+                known_platforms = {"flax", "unity", "unreal",
+                                    "godot", "web", "any"}
+                if pval.strip().lower() not in known_platforms:
+                    result.warnings.append(
+                        f"{source_label}: recipe.platform={pval!r} is not"
+                        f" in known set {sorted(known_platforms)};"
+                        " custom values allowed but tooling may not pick them up"
+                    )
         # v1.18.s130 — optional integer expected_min_assets field.
         if "expected_min_assets" in recipe and recipe["expected_min_assets"] is not None:
             ema = recipe["expected_min_assets"]

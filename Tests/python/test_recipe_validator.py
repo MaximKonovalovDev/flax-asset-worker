@@ -918,6 +918,44 @@ class CreatedUpdatedUtcMetadataTests(unittest.TestCase):
         self.assertFalse(any("created_utc" in w for w in r.warnings))
 
 
+class PlatformMetadataTests(unittest.TestCase):
+    """v1.30.s189 — optional platform field; known set warns on unknown."""
+
+    def _recipe_with(self, **meta: object) -> dict:
+        doc = _ok_recipe()
+        doc["recipe"].update(meta)
+        return doc
+
+    def test_flax_platform_passes_silent(self) -> None:
+        r = validate_recipe_doc(self._recipe_with(platform="flax"), "p.yaml")
+        self.assertTrue(r.ok)
+        self.assertFalse(any("platform" in w for w in r.warnings))
+
+    def test_unity_platform_passes_silent(self) -> None:
+        r = validate_recipe_doc(self._recipe_with(platform="unity"), "p.yaml")
+        self.assertTrue(r.ok)
+        self.assertFalse(any("platform" in w for w in r.warnings))
+
+    def test_unknown_platform_warns(self) -> None:
+        r = validate_recipe_doc(
+            self._recipe_with(platform="msdos"), "p.yaml",
+        )
+        self.assertTrue(r.ok)
+        self.assertTrue(any("platform" in w and "msdos" in w
+                            for w in r.warnings))
+
+    def test_non_string_platform_warns(self) -> None:
+        r = validate_recipe_doc(self._recipe_with(platform=42), "p.yaml")
+        self.assertTrue(r.ok)
+        self.assertTrue(any("platform" in w and "string" in w
+                            for w in r.warnings))
+
+    def test_missing_platform_silent(self) -> None:
+        r = validate_recipe_doc(_ok_recipe(), "p.yaml")
+        self.assertTrue(r.ok)
+        self.assertFalse(any("platform" in w for w in r.warnings))
+
+
 class AuthorContactMetadataTests(unittest.TestCase):
     """v1.25.s172 — optional author / contact string fields."""
 
