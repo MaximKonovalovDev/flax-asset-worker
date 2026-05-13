@@ -538,6 +538,17 @@ def from_recipe_cmd(
             ),
         ),
     ] = None,
+    provider_skip: Annotated[
+        list[str],
+        typer.Option(
+            "--provider-skip",
+            help=(
+                "v1.39.s213: SKIP packs whose provider matches one of these"
+                " ids (repeatable). Inverse of --provider-only; applied after."
+                " Useful for 'run everything except X'."
+            ),
+        ),
+    ] = None,
     max_tier: Annotated[
         int,
         typer.Option(
@@ -716,6 +727,13 @@ def from_recipe_cmd(
         packs = [
             p for p in packs
             if str(p.get("provider", "")).strip().lower() in po_set
+        ]
+    # v1.39.s213 — --provider-skip negative filter.
+    if provider_skip:
+        ps_set = {p.strip().lower() for p in provider_skip if p.strip()}
+        packs = [
+            p for p in packs
+            if str(p.get("provider", "")).strip().lower() not in ps_set
         ]
     # v1.26.s178 — --max-tier filter (P0=0..P3=3); packs missing tier kept.
     if max_tier >= 0:

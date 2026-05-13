@@ -650,6 +650,35 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["total_packs"], 1)
         self.assertEqual(data["results"][0]["pack_id"], "P_ICN")
 
+    def test_pack_from_recipe_provider_skip_filters_out(self) -> None:
+        """v1.39.s213: --provider-skip iconify removes iconify packs."""
+        # Use both providers as iconify (only one type) so skip empties all.
+        inline = (
+            "recipe:\n"
+            "  id: ps_test\n"
+            "  game: sandbox\n"
+            "packs:\n"
+            "  - id: P_ICN1\n"
+            "    provider: iconify\n"
+            "    acquisition_method: direct_url\n"
+            "    search_terms: [sword]\n"
+            "  - id: P_POLY\n"
+            "    provider: polyhaven\n"
+            "    acquisition_method: direct_url\n"
+            "    assets:\n"
+            "      - asset_id: x\n"
+        )
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "from-recipe", "--inline-yaml", inline,
+             "--provider-skip", "iconify", "--dry-run", "--json"],
+        )
+        import json as _json
+        data = _json.loads(result.stdout)
+        # Only polyhaven pack remains.
+        self.assertEqual(data["total_packs"], 1)
+        self.assertEqual(data["results"][0]["pack_id"], "P_POLY")
+
     def test_pack_from_recipe_cost_budget_blocks_over_limit(self) -> None:
         """v1.38.s212: --cost-budget 30 rejects recipe with cost_minutes=60."""
         inline = (
