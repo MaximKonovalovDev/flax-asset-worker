@@ -2639,6 +2639,71 @@ class TyperCliSmokeTests(unittest.TestCase):
         names = {p["provider"] for p in data["providers"]}
         self.assertEqual(names, {"met_museum", "iconify"})
 
+    def test_all_no_key_provider_skip_excludes_after_filter(self) -> None:
+        """v1.39.s218: --provider-skip iconify removes iconify from dispatch."""
+        from unittest.mock import patch
+        from assetboy.execution.met_museum_runner import MetMuseumResult
+        from assetboy.execution.iconify_runner import IconifyResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch(
+                "assetboy.execution.met_museum_runner.run_met_museum_batch",
+                return_value=MetMuseumResult(
+                    pack_id="x", query="q", output_dir=Path(tmp), ok=True,
+                ),
+            ), patch(
+                "assetboy.execution.iconify_runner.run_iconify_batch",
+                return_value=IconifyResult(
+                    pack_id="x", query="q", output_dir=Path(tmp), ok=True,
+                ),
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "all-no-key", "--query", "q",
+                     "--provider", "met_museum,iconify",
+                     "--provider-skip", "iconify",
+                     "--dry-run", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["providers_run"], 1)
+        self.assertEqual(data["providers"][0]["provider"], "met_museum")
+
+    def test_all_no_key_provider_skip_all_exits_1(self) -> None:
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "all-no-key", "--query", "q",
+             "--provider-skip",
+             "met_museum,wikimedia,archive_org,scryfall,iconify,inaturalist",
+             "--dry-run", "--json"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("all_providers_skipped", result.stdout)
+
+    def test_all_key_provider_skip_excludes(self) -> None:
+        """v1.39.s218: --provider-skip on all-key narrows tasks."""
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {}, clear=False):
+            for k in ("PEXELS_API_KEY", "PIXABAY_API_KEY",
+                      "UNSPLASH_ACCESS_KEY", "RAWG_API_KEY",
+                      "JAMENDO_CLIENT_ID"):
+                os.environ.pop(k, None)
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "all-key", "--query", "q",
+                 "--provider-skip", "rawg,jamendo",
+                 "--dry-run", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        names = {p["provider"] for p in data["providers"]}
+        self.assertNotIn("rawg", names)
+        self.assertNotIn("jamendo", names)
+
     def test_all_no_key_compact_emits_single_line(self) -> None:
         """v1.35.s203: --compact single-line JSON for all-no-key."""
         from unittest.mock import patch

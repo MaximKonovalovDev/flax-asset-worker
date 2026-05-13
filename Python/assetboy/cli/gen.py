@@ -2344,6 +2344,16 @@ def all_no_key_cmd(
             ),
         ),
     ] = "",
+    provider_skip: Annotated[
+        str,
+        typer.Option(
+            "--provider-skip",
+            help=(
+                "v1.39.s218: comma-separated provider ids to EXCLUDE."
+                " Inverse of --provider; applied after."
+            ),
+        ),
+    ] = "",
     bail_on_error: Annotated[
         bool,
         typer.Option(
@@ -2461,6 +2471,22 @@ def all_no_key_cmd(
         tasks = [t for t in tasks if t[0].lower() in wanted]
         if not tasks:
             msg = f"no_providers_matched_filter: {sorted(wanted)} (valid: met_museum/wikimedia/archive_org/scryfall/iconify/inaturalist)"
+            if json_out:
+                json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"gen_all_no_key_error={msg}")
+            raise typer.Exit(code=1)
+
+    # v1.39.s218 — --provider-skip excludes after --provider.
+    if provider_skip.strip():
+        skip_set = {p.strip().lower() for p in provider_skip.split(",") if p.strip()}
+        tasks = [t for t in tasks if t[0].lower() not in skip_set]
+        if not tasks:
+            msg = (
+                f"all_providers_skipped: {sorted(skip_set)} (valid: "
+                "met_museum/wikimedia/archive_org/scryfall/iconify/inaturalist)"
+            )
             if json_out:
                 json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
                 sys.stdout.write("\n")
@@ -2618,6 +2644,16 @@ def all_key_cmd(
             ),
         ),
     ] = "",
+    provider_skip: Annotated[
+        str,
+        typer.Option(
+            "--provider-skip",
+            help=(
+                "v1.39.s218: comma-separated keyed provider ids to EXCLUDE."
+                " Inverse of --provider; applied after."
+            ),
+        ),
+    ] = "",
     bail_on_error: Annotated[
         bool,
         typer.Option(
@@ -2763,6 +2799,23 @@ def all_key_cmd(
         if not tasks:
             msg = (
                 f"no_providers_matched_filter: {sorted(wanted)} "
+                "(valid: pexels_photos/pexels_videos/pixabay_photos/"
+                "pixabay_videos/unsplash/rawg/jamendo)"
+            )
+            if json_out:
+                json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"gen_all_key_error={msg}")
+            raise typer.Exit(code=1)
+
+    # v1.39.s218 — --provider-skip excludes after --provider.
+    if provider_skip.strip():
+        skip_set = {p.strip().lower() for p in provider_skip.split(",") if p.strip()}
+        tasks = [t for t in tasks if t[0].lower() not in skip_set]
+        if not tasks:
+            msg = (
+                f"all_providers_skipped: {sorted(skip_set)} "
                 "(valid: pexels_photos/pexels_videos/pixabay_photos/"
                 "pixabay_videos/unsplash/rawg/jamendo)"
             )
