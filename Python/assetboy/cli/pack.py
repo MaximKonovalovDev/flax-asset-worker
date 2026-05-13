@@ -549,6 +549,18 @@ def from_recipe_cmd(
             ),
         ),
     ] = -1,
+    cost_budget_minutes: Annotated[
+        int,
+        typer.Option(
+            "--cost-budget",
+            help=(
+                "v1.38.s212: refuse to run if recipe.cost_minutes exceeds"
+                " this budget. 0 (default) = disabled. Recipes without"
+                " cost_minutes are NOT blocked (operator opts-in to budget"
+                " by setting the field)."
+            ),
+        ),
+    ] = 0,
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -673,6 +685,23 @@ def from_recipe_cmd(
     gates = doc.get("gates") or {}
     required_ids = set(gates.get("required_pack_ids") or [])
     block_on_missing = bool(gates.get("block_on_missing_required", True))
+
+    # v1.38.s212 — enforce --cost-budget (only when both flag and field are set).
+    if cost_budget_minutes > 0:
+        recipe_cost = recipe_meta.get("cost_minutes")
+        if isinstance(recipe_cost, int) and not isinstance(recipe_cost, bool):
+            if recipe_cost > cost_budget_minutes:
+                msg = (
+                    f"cost_budget_exceeded: recipe.cost_minutes={recipe_cost}"
+                    f" > --cost-budget={cost_budget_minutes}"
+                )
+                if json_out:
+                    json.dump({"ok": False, "error": msg},
+                              sys.stdout, indent=2)
+                    sys.stdout.write("\n")
+                else:
+                    print(f"pack_from_recipe_error={msg}")
+                raise typer.Exit(code=1)
 
     packs = list(doc.get("packs") or [])
     # v1.9.s21: --only filter (most-restrictive; applied before --only-required + --skip)

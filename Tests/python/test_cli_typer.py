@@ -650,6 +650,86 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["total_packs"], 1)
         self.assertEqual(data["results"][0]["pack_id"], "P_ICN")
 
+    def test_pack_from_recipe_cost_budget_blocks_over_limit(self) -> None:
+        """v1.38.s212: --cost-budget 30 rejects recipe with cost_minutes=60."""
+        inline = (
+            "recipe:\n"
+            "  id: cb_test\n"
+            "  game: sandbox\n"
+            "  cost_minutes: 60\n"
+            "packs:\n"
+            "  - id: P_X\n"
+            "    provider: iconify\n"
+            "    acquisition_method: direct_url\n"
+            "    search_terms: [x]\n"
+        )
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "from-recipe", "--inline-yaml", inline,
+             "--cost-budget", "30", "--dry-run", "--json"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("cost_budget_exceeded", result.stdout)
+
+    def test_pack_from_recipe_cost_budget_passes_when_under(self) -> None:
+        """--cost-budget 60 allows recipe with cost_minutes=30."""
+        inline = (
+            "recipe:\n"
+            "  id: cb_test_pass\n"
+            "  game: sandbox\n"
+            "  cost_minutes: 30\n"
+            "packs:\n"
+            "  - id: P_X\n"
+            "    provider: iconify\n"
+            "    acquisition_method: direct_url\n"
+            "    search_terms: [x]\n"
+        )
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "from-recipe", "--inline-yaml", inline,
+             "--cost-budget", "60", "--dry-run", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+
+    def test_pack_from_recipe_cost_budget_zero_disabled(self) -> None:
+        """--cost-budget 0 (default) ignores cost_minutes even when set."""
+        inline = (
+            "recipe:\n"
+            "  id: cb_test_off\n"
+            "  game: sandbox\n"
+            "  cost_minutes: 9999\n"
+            "packs:\n"
+            "  - id: P_X\n"
+            "    provider: iconify\n"
+            "    acquisition_method: direct_url\n"
+            "    search_terms: [x]\n"
+        )
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "from-recipe", "--inline-yaml", inline,
+             "--dry-run", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0)
+
+    def test_pack_from_recipe_cost_budget_missing_field_passes(self) -> None:
+        """Recipe with NO cost_minutes is not blocked by --cost-budget."""
+        inline = (
+            "recipe:\n"
+            "  id: cb_test_no_field\n"
+            "  game: sandbox\n"
+            "packs:\n"
+            "  - id: P_X\n"
+            "    provider: iconify\n"
+            "    acquisition_method: direct_url\n"
+            "    search_terms: [x]\n"
+        )
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "from-recipe", "--inline-yaml", inline,
+             "--cost-budget", "5", "--dry-run", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0)
+
     def test_pack_from_recipe_max_tier_keeps_only_low_tier(self) -> None:
         """v1.26.s178: --max-tier 1 keeps tier=0 and tier=1, drops tier=2+."""
         inline = (
