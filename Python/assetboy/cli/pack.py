@@ -161,6 +161,18 @@ def list_recipes_cmd(
                 if isinstance(t, int) and not isinstance(t, bool) and t <= threshold:
                     return True
             return False
+        # v1.33.s199 — has-FIELD:true/false presence test (any recipe meta).
+        if field_name.startswith("has-") or field_name.startswith("has_"):
+            target = field_name[4:].strip().lower()
+            wanted_present = value.strip().lower() in ("true", "yes", "1")
+            recipe_d = doc.get("recipe") or {}
+            val = recipe_d.get(target)
+            is_present = (
+                val is not None and (
+                    not isinstance(val, str) or val.strip() != ""
+                )
+            )
+            return is_present is wanted_present
         # Recipe-level fields.
         recipe = doc.get("recipe") or {}
         field_val = recipe.get(field_name)
