@@ -240,9 +240,16 @@ def list_recipes_cmd(
     elif sort_norm == "name":
         # v1.22.s151 — alphabetical by recipe_id (then by path tiebreak).
         entries.sort(key=lambda e: (str(e.get("recipe_id", "")).lower(), e["path"]))
+    elif sort_norm == "platform":
+        # v1.30.s191 — alphabetical by platform; untagged sort last.
+        entries.sort(key=lambda e: (
+            e.get("platform") is None,
+            str(e.get("platform", "")).lower(),
+            e["path"],
+        ))
     elif sort_norm not in ("", "path"):
         # Unknown sort key -> error.
-        msg = f"unknown_sort_key: {sort_norm!r} (valid: 'path', 'tier', 'name')"
+        msg = f"unknown_sort_key: {sort_norm!r} (valid: 'path', 'tier', 'name', 'platform')"
         if json_out:
             json.dump({"error": msg}, sys.stdout, indent=2)
             sys.stdout.write("\n")

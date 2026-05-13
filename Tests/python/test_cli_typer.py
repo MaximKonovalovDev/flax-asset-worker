@@ -276,6 +276,36 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("historical", entry["theme"])
         self.assertIn("smoke-test", entry["tags"])
 
+    def test_pack_list_recipes_sort_platform_alpha(self) -> None:
+        """v1.30.s191: --sort platform orders by platform field; untagged last."""
+        import tempfile, json as _json, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, plat in [
+                ("r_godot", "godot"),
+                ("r_flax", "flax"),
+                ("r_unity", "unity"),
+                ("r_none", None),
+            ]:
+                recipe = {"recipe": {"id": rid, "game": "g1"},
+                           "packs": []}
+                if plat:
+                    recipe["recipe"]["platform"] = plat
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(recipe), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--sort", "platform", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = [r["recipe_id"] for r in data["recipes"]]
+        # Order: flax, godot, unity, then untagged r_none last.
+        self.assertEqual(ids, ["r_flax", "r_godot", "r_unity", "r_none"])
+
     def test_pack_list_recipes_filter_platform_exact(self) -> None:
         """v1.30.s190: --filter platform:flax matches recipes with that platform."""
         import tempfile, json as _json, yaml as _yaml
