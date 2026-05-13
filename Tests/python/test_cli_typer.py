@@ -4122,6 +4122,30 @@ class TyperCliSmokeTests(unittest.TestCase):
                 self.assertIsInstance(p["live_response_ms"], (int, float))
                 self.assertGreaterEqual(p["live_response_ms"], 0)
 
+    def test_library_r1a_status_kind_audio_narrows_to_jamendo(self) -> None:
+        """v1.31.s193: --kind audio narrows to providers with 'audio' in asset_class."""
+        import json as _json
+        result = self.runner.invoke(
+            self.app,
+            ["library", "r1a-status", "--kind", "audio", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout.strip())
+        # Jamendo is the only audio-class provider.
+        for p in data["providers"]:
+            self.assertIn("audio", p["asset_class"].lower(),
+                          msg=f"{p['id']} leaked into audio filter")
+
+    def test_library_r1a_status_kind_unknown_returns_empty(self) -> None:
+        import json as _json
+        result = self.runner.invoke(
+            self.app,
+            ["library", "r1a-status", "--kind", "hologram", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["providers_total"], 0)
+
     def test_library_r1a_status_provider_filter_zooms_to_one(self) -> None:
         """v1.26.s174: --provider met-museum narrows to 1 provider."""
         result = self.runner.invoke(

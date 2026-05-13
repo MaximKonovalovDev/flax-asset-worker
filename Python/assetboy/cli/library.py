@@ -756,6 +756,17 @@ def r1a_status_cmd(
             ),
         ),
     ] = "",
+    kind_filter: Annotated[
+        str,
+        typer.Option(
+            "--kind",
+            help=(
+                "v1.31.s193: substring match on provider.asset_class"
+                " (e.g. 'audio', 'video', 'icon', 'image'). Default"
+                " empty = no filter. Mutex with --provider."
+            ),
+        ),
+    ] = "",
     sort: Annotated[
         str,
         typer.Option(
@@ -990,6 +1001,14 @@ def r1a_status_cmd(
                 print(f"library_r1a_status_error={msg}")
             raise typer.Exit(code=1)
         providers_state = match  # narrow to one
+
+    # v1.31.s193 — --kind substring match on asset_class.
+    kind_filter_norm = kind_filter.strip().lower()
+    if kind_filter_norm:
+        providers_state = [
+            p for p in providers_state
+            if kind_filter_norm in str(p.get("asset_class", "")).lower()
+        ]
 
     # v1.26.s176 — --sort applies after the provider filter.
     sort_norm = sort.strip().lower()
