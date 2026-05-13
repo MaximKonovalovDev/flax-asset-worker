@@ -572,6 +572,15 @@ def from_recipe_cmd(
             ),
         ),
     ] = 0,
+    compact: Annotated[
+        bool,
+        typer.Option(
+            "--compact",
+            help=(
+                "v1.39.s215: single-line JSON output. No effect without --json."
+            ),
+        ),
+    ] = False,
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -849,7 +858,8 @@ def from_recipe_cmd(
             payload["expected_min_check"] = expected_status
         if min_passes_status is not None:
             payload["min_required_passes_check"] = min_passes_status
-        json.dump(payload, sys.stdout, indent=2, default=str)
+        # v1.39.s215 — --compact emits single-line JSON.
+        json.dump(payload, sys.stdout, indent=None if compact else 2, default=str)
         sys.stdout.write("\n")
     else:
         print()
@@ -1253,6 +1263,15 @@ def validate_all_cmd(
             help="Treat warnings as errors (exit 1 if any warning).",
         ),
     ] = False,
+    compact: Annotated[
+        bool,
+        typer.Option(
+            "--compact",
+            help=(
+                "v1.39.s216: single-line JSON output. No effect without --json."
+            ),
+        ),
+    ] = False,
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -1321,7 +1340,8 @@ def validate_all_cmd(
                 "aggregate_ok": aggregate_ok,
             },
             sys.stdout,
-            indent=2,
+            # v1.39.s216 — --compact emits single-line JSON.
+            indent=None if compact else 2,
         )
         sys.stdout.write("\n")
     else:
@@ -1507,6 +1527,15 @@ def rerun_failed_cmd(
         bool,
         typer.Option("--dry-run", help="Plan only; don't re-execute."),
     ] = False,
+    compact: Annotated[
+        bool,
+        typer.Option(
+            "--compact",
+            help=(
+                "v1.39.s217: single-line JSON output. No effect without --json."
+            ),
+        ),
+    ] = False,
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -1598,7 +1627,8 @@ def rerun_failed_cmd(
             "results": [],
         }
         if json_out:
-            json.dump(summary, sys.stdout, indent=2)
+            # v1.39.s217 — --compact emits single-line JSON.
+            json.dump(summary, sys.stdout, indent=None if compact else 2)
             sys.stdout.write("\n")
         else:
             print(f"pack_rerun_failed_total_failed_in_audit={len(failed)}")
@@ -1692,7 +1722,8 @@ def rerun_failed_cmd(
         summary["min_required_passes_check"] = min_passes_status_r
 
     if json_out:
-        json.dump(summary, sys.stdout, indent=2)
+        # v1.39.s217 — --compact emits single-line JSON.
+        json.dump(summary, sys.stdout, indent=None if compact else 2)
         sys.stdout.write("\n")
     else:
         print(f"pack_rerun_failed_total={len(targets)}")
