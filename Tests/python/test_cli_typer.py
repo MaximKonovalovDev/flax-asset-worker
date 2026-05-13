@@ -4122,6 +4122,32 @@ class TyperCliSmokeTests(unittest.TestCase):
                 self.assertIsInstance(p["live_response_ms"], (int, float))
                 self.assertGreaterEqual(p["live_response_ms"], 0)
 
+    def test_library_r1a_status_env_set_only_drops_unset_keys(self) -> None:
+        """v1.31.s194: --env-set-only keeps no-key + env_set=True only."""
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {}, clear=False):
+            for k in ("PEXELS_API_KEY", "PIXABAY_API_KEY",
+                      "UNSPLASH_ACCESS_KEY", "RAWG_API_KEY",
+                      "JAMENDO_CLIENT_ID"):
+                os.environ.pop(k, None)
+            result = self.runner.invoke(
+                self.app,
+                ["library", "r1a-status", "--env-set-only", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        # No keyed providers should remain.
+        for p in data["providers"]:
+            self.assertTrue(
+                p["env_var"] is None or p["env_set"] is True,
+                f"{p['id']} leaked into env-set-only filter",
+            )
+        # 6 no-key providers expected (met, wikimedia, archive-org,
+        # scryfall, iconify, inaturalist).
+        self.assertEqual(data["providers_total"], 6)
+
     def test_library_r1a_status_kind_audio_narrows_to_jamendo(self) -> None:
         """v1.31.s193: --kind audio narrows to providers with 'audio' in asset_class."""
         import json as _json

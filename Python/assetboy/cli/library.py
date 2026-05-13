@@ -767,6 +767,17 @@ def r1a_status_cmd(
             ),
         ),
     ] = "",
+    env_set_only: Annotated[
+        bool,
+        typer.Option(
+            "--env-set-only",
+            help=(
+                "v1.31.s194: keep only providers whose API key env var"
+                " is set OR who require no key. Useful for 'what can I"
+                " actually scout right now' dashboards."
+            ),
+        ),
+    ] = False,
     sort: Annotated[
         str,
         typer.Option(
@@ -1008,6 +1019,13 @@ def r1a_status_cmd(
         providers_state = [
             p for p in providers_state
             if kind_filter_norm in str(p.get("asset_class", "")).lower()
+        ]
+
+    # v1.31.s194 — --env-set-only: drop providers whose key is unset.
+    if env_set_only:
+        providers_state = [
+            p for p in providers_state
+            if p.get("env_var") is None or p.get("env_set") is True
         ]
 
     # v1.26.s176 — --sort applies after the provider filter.
