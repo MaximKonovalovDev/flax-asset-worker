@@ -100,6 +100,17 @@ def list_recipes_cmd(
             ),
         ),
     ] = "",
+    compact: Annotated[
+        bool,
+        typer.Option(
+            "--compact",
+            help=(
+                "v1.34.s200: emit single-line JSON (no indentation)."
+                " Useful for piping to jq / shell tools. No effect"
+                " without --json."
+            ),
+        ),
+    ] = False,
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -302,7 +313,8 @@ def list_recipes_cmd(
             "sort": sort_norm or "path",
             "reverse": reverse,
         }
-        json.dump(out, sys.stdout, indent=2)
+        # v1.34.s200 — --compact emits single-line JSON.
+        json.dump(out, sys.stdout, indent=None if compact else 2)
         sys.stdout.write("\n")
     else:
         print(f"pack_list_recipes_count={len(entries)}")

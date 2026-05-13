@@ -364,6 +364,22 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["recipes"][0]["recipe_id"], "r1")
         self.assertEqual(data["recipes"][0]["platform"], "flax")
 
+    def test_pack_list_recipes_compact_emits_single_line(self) -> None:
+        """v1.34.s200: --compact JSON has no indent (one logical line)."""
+        result = self.runner.invoke(
+            self.app, ["pack", "list-recipes", "--compact", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0)
+        # Pretty JSON would have newlines inside; compact has just one.
+        body = result.stdout.strip()
+        self.assertEqual(body.count("\n"), 0,
+                         msg=f"unexpected newlines in compact JSON: {body[:200]}")
+        # Should still parse cleanly.
+        import json as _json
+        data = _json.loads(body)
+        self.assertIn("recipes", data)
+        self.assertIn("count", data)
+
     def test_pack_list_recipes_filter_has_author_true(self) -> None:
         """v1.33.s199: --filter has-author:true keeps recipes with an author."""
         import tempfile, json as _json, yaml as _yaml
