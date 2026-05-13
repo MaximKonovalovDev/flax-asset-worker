@@ -2583,6 +2583,16 @@ def all_key_cmd(
             ),
         ),
     ] = "",
+    bail_on_error: Annotated[
+        bool,
+        typer.Option(
+            "--bail-on-error",
+            help=(
+                "v1.28.s182: stop on first provider that fails (sequential"
+                " only; no effect with --parallel). Mirrors all-no-key flag."
+            ),
+        ),
+    ] = False,
     json_out: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Fan out one query across key-required R1A providers (Path B v1.11.s38).
@@ -2746,6 +2756,7 @@ def all_key_cmd(
         for i in range(len(tasks)):
             providers_run.append(results_by_idx[i])
     else:
+        bailed = False  # v1.28.s182
         for pid, key_getter, fn, kwargs in tasks:
             key = key_getter()
             if not key:
@@ -2753,9 +2764,14 @@ def all_key_cmd(
                 continue
             try:
                 r = fn(**kwargs)
-                providers_run.append(_ok_record(pid, r))
+                rec = _ok_record(pid, r)
             except Exception as exc:
-                providers_run.append(_crashed_record(pid, exc))
+                rec = _crashed_record(pid, exc)
+            providers_run.append(rec)
+            # v1.28.s182 — bail on first failure (sequential only).
+            if bail_on_error and not rec.get("ok", False) and not rec.get("skipped", False):
+                bailed = True
+                break
 
     providers_ok = sum(1 for p in providers_run if p["ok"])
     providers_skipped = sum(1 for p in providers_run if p["skipped"])
@@ -2767,6 +2783,8 @@ def all_key_cmd(
         "query": query,
         "count_per_provider": count,
         "dry_run": dry_run,
+        "bail_on_error": bail_on_error,
+        "bailed": locals().get("bailed", False),
         "include_video": include_video,
         "parallel": parallel,
         "providers_run": len(providers_run),

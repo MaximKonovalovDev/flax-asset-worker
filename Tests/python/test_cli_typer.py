@@ -2965,6 +2965,32 @@ class TyperCliSmokeTests(unittest.TestCase):
         names = {p["provider"] for p in data["providers"]}
         self.assertEqual(names, {"unsplash", "jamendo"})
 
+    def test_all_key_bail_on_error_help_lists_flag(self) -> None:
+        """v1.28.s182: --bail-on-error visible in help."""
+        result = self.runner.invoke(self.app, ["gen", "all-key", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("--bail-on-error", result.stdout)
+
+    def test_all_key_bail_on_error_summary_has_flag_fields(self) -> None:
+        """JSON summary always carries bail_on_error + bailed (even when not set)."""
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {}, clear=False):
+            for k in ("PEXELS_API_KEY", "PIXABAY_API_KEY",
+                      "UNSPLASH_ACCESS_KEY", "RAWG_API_KEY", "JAMENDO_CLIENT_ID"):
+                os.environ.pop(k, None)
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "all-key", "--query", "q",
+                 "--bail-on-error", "--dry-run", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertTrue(data["bail_on_error"])
+        # All providers skipped (no env keys) -> bailed stays False.
+        self.assertFalse(data["bailed"])
+
     def test_all_key_provider_filter_no_match_exits_1(self) -> None:
         """--provider unknown_keyed -> exit 1."""
         result = self.runner.invoke(
