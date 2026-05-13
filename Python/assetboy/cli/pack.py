@@ -288,12 +288,27 @@ def list_recipes_cmd(
             -_ts_to_epoch(e.get(ts_key)),
             e["path"],
         ))
+    elif sort_norm == "cost_minutes":
+        # v1.38.s211 — cheapest first; entries without cost_minutes
+        # or with non-int values sort last.
+        def _cost(e: dict) -> int:
+            v = e.get("cost_minutes")
+            if isinstance(v, int) and not isinstance(v, bool):
+                return v
+            return -1  # used in tuple below
+        entries.sort(key=lambda e: (
+            e.get("cost_minutes") is None
+            or not isinstance(e.get("cost_minutes"), int)
+            or isinstance(e.get("cost_minutes"), bool),
+            _cost(e),
+            e["path"],
+        ))
     elif sort_norm not in ("", "path"):
         # Unknown sort key -> error.
         msg = (
             f"unknown_sort_key: {sort_norm!r}"
             " (valid: 'path', 'tier', 'name', 'platform',"
-            " 'updated_utc', 'created_utc')"
+            " 'updated_utc', 'created_utc', 'cost_minutes')"
         )
         if json_out:
             json.dump({"error": msg}, sys.stdout, indent=2)

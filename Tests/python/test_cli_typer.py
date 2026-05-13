@@ -276,6 +276,35 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("historical", entry["theme"])
         self.assertIn("smoke-test", entry["tags"])
 
+    def test_pack_list_recipes_sort_cost_minutes_cheapest_first(self) -> None:
+        """v1.38.s211: --sort cost_minutes orders cheapest-first; untagged last."""
+        import tempfile, json as _json, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, cm in [
+                ("r_60", 60),
+                ("r_10", 10),
+                ("r_30", 30),
+                ("r_none", None),
+            ]:
+                recipe = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if cm is not None:
+                    recipe["recipe"]["cost_minutes"] = cm
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(recipe), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--sort", "cost_minutes", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = [r["recipe_id"] for r in data["recipes"]]
+        # Cheapest first: r_10, r_30, r_60, then r_none last.
+        self.assertEqual(ids, ["r_10", "r_30", "r_60", "r_none"])
+
     def test_pack_list_recipes_sort_updated_utc_newest_first(self) -> None:
         """v1.32.s195: --sort updated_utc orders newest-first."""
         import tempfile, json as _json, yaml as _yaml
