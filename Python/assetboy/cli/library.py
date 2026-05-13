@@ -831,8 +831,16 @@ def r1a_status_cmd(
             src = str(doc.get("source", "unknown"))
             bucket = on_disk_by_source.setdefault(src, {
                 "manifests": 0, "downloaded": 0, "bytes": 0,
+                "last_manifest_mtime": 0.0,  # v1.27.s179
             })
             bucket["manifests"] += 1
+            # v1.27.s179 — track most-recent manifest mtime per source.
+            try:
+                this_mtime = mf.stat().st_mtime
+                if this_mtime > bucket["last_manifest_mtime"]:
+                    bucket["last_manifest_mtime"] = this_mtime
+            except OSError:
+                pass
             for k in ("objects_downloaded", "files_downloaded",
                       "items_downloaded", "cards_downloaded",
                       "icons_downloaded", "tracks_downloaded",
@@ -847,12 +855,22 @@ def r1a_status_cmd(
                         bucket["bytes"] += b
 
     # --- merge: annotate each provider with its on-disk row ---
+    from datetime import datetime as _dt_datetime, timezone as _dt_timezone
     for prov in providers_state:
         src_key = prov["manifest_source"]
         disk = on_disk_by_source.get(src_key, {})
         prov["manifests_on_disk"] = disk.get("manifests", 0)
         prov["downloaded_on_disk"] = disk.get("downloaded", 0)
         prov["bytes_on_disk"] = disk.get("bytes", 0)
+        # v1.27.s179 — most recent manifest mtime as ISO 8601 UTC (or None).
+        mt = disk.get("last_manifest_mtime")
+        if mt:
+            prov["last_manifest_utc"] = (
+                _dt_datetime.fromtimestamp(mt, tz=_dt_timezone.utc)
+                .isoformat(timespec="seconds")
+            )
+        else:
+            prov["last_manifest_utc"] = None
         # v1.13.s80 default: live_ok=None (not probed). Filled below if check_live.
         prov["live_ok"] = None
         prov["live_error"] = None

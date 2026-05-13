@@ -3810,6 +3810,20 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertNotIn("Bytes-on-disk proportion", result.stdout)
 
+    def test_library_r1a_status_last_manifest_utc_present(self) -> None:
+        """v1.27.s179: every provider row has last_manifest_utc (None or ISO)."""
+        import json as _json
+        result = self.runner.invoke(
+            self.app, ["library", "r1a-status", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout.strip())
+        for p in data["providers"]:
+            self.assertIn("last_manifest_utc", p)
+            val = p["last_manifest_utc"]
+            self.assertTrue(val is None or isinstance(val, str),
+                            f"unexpected type for {p['id']}: {type(val).__name__}")
+
     def test_library_r1a_status_sort_id_alpha_order(self) -> None:
         """v1.26.s176: --sort id orders providers alphabetically."""
         import json as _json
