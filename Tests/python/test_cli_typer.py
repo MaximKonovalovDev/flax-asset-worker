@@ -2459,6 +2459,36 @@ class TyperCliSmokeTests(unittest.TestCase):
         # Aggregate totals stay full (not truncated).
         self.assertEqual(data["total_bytes"], 9100)
 
+    def test_pack_manifest_stats_csv_writes_file(self) -> None:
+        """v1.29.s186: --csv writes per-source rows with correct header."""
+        import tempfile, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "a").mkdir()
+            (tmp_p / "a" / "a_manifest.json").write_text(
+                _json.dumps({
+                    "source": "src_a", "objects_downloaded": 4,
+                    "objects_skipped_non_pd": 1, "objects_failed": 0,
+                    "entries": [{"bytes": 500}, {"bytes": 1000}],
+                }), encoding="utf-8",
+            )
+            csv_path = tmp_p / "stats.csv"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "manifest-stats", "--root", str(tmp_p),
+                 "--csv", str(csv_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertIn("pack_manifest_stats_csv_path=", result.stdout)
+            self.assertTrue(csv_path.exists())
+            contents = csv_path.read_text(encoding="utf-8")
+            # Header + 1 data row.
+            lines = [l for l in contents.splitlines() if l.strip()]
+            self.assertEqual(len(lines), 2)
+            self.assertIn("source,manifests,downloaded", lines[0])
+            self.assertIn("src_a", lines[1])
+            self.assertIn("1500", lines[1])  # bytes sum
+
     def test_pack_manifest_stats_min_bytes_filters_low_providers(self) -> None:
         """v1.25.s169: --min-bytes N drops providers below N bytes."""
         import tempfile, json as _json

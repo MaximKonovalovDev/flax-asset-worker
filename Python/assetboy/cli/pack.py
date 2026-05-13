@@ -1823,6 +1823,17 @@ def manifest_stats_cmd(
             ),
         ),
     ] = 0,
+    csv_out: Annotated[
+        Path,
+        typer.Option(
+            "--csv",
+            help=(
+                "v1.29.s186: write per-source rows as CSV to this path."
+                " Mutually exclusive with --json. Header:"
+                " source,manifests,downloaded,skipped,failed,bytes."
+            ),
+        ),
+    ] = Path(""),
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -2068,6 +2079,37 @@ def manifest_stats_cmd(
         "min_bytes_filtered_count": min_bytes_filtered,
         "by_source": per_source_view,
     }
+
+    # v1.29.s186 — CSV preempts JSON / text (mutually exclusive).
+    csv_str = str(csv_out)
+    if csv_str and csv_str != ".":
+        import csv as _csv
+        out_path = Path(csv_str)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w", encoding="utf-8", newline="") as fh:
+            w = _csv.writer(fh)
+            w.writerow(["source", "manifests", "downloaded",
+                        "skipped", "failed", "bytes"])
+            for src, b in sorted(per_source_view.items()):
+                w.writerow([
+                    src,
+                    int(b.get("manifests", 0)),
+                    int(b.get("downloaded", 0)),
+                    int(b.get("skipped", 0)),
+                    int(b.get("failed", 0)),
+                    int(b.get("bytes", 0)),
+                ])
+        if json_out:
+            # Also emit JSON path note for tooling.
+            json.dump(
+                {"csv_path": str(out_path), "rows": len(per_source_view)},
+                sys.stdout, indent=2,
+            )
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_manifest_stats_csv_path={out_path}")
+            print(f"pack_manifest_stats_csv_rows={len(per_source_view)}")
+        return
 
     if json_out:
         json.dump(summary, sys.stdout, indent=2)
