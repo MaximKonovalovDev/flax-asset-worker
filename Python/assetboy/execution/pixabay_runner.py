@@ -101,6 +101,9 @@ def _download_binary(url: str, dest: Path, *, timeout: float = 60.0) -> int:
 # Public API
 # --------------------------------------------------------------------------- #
 
+_VALID_ORIENTATIONS = {"all", "horizontal", "vertical"}
+
+
 def search_pixabay_photos(
     query: str,
     *,
@@ -109,11 +112,19 @@ def search_pixabay_photos(
     per_page: int = 20,
     page: int = 1,
     safesearch: bool = True,
+    orientation: str | None = None,
     timeout: float = 20.0,
 ) -> list[dict]:
-    """Hit /api?image_type=...; return hits list."""
+    """Hit /api?image_type=...; return hits list.
+
+    v1.24.s165: orientation = 'horizontal' | 'vertical' | 'all' (Pixabay native).
+    """
     if image_type not in _VALID_IMAGE_TYPES:
         raise ValueError(f"invalid image_type {image_type!r}; valid: {sorted(_VALID_IMAGE_TYPES)}")
+    if orientation and orientation not in _VALID_ORIENTATIONS:
+        raise ValueError(
+            f"invalid orientation {orientation!r}; valid: {sorted(_VALID_ORIENTATIONS)}"
+        )
     params = {
         "key": api_key,
         "q": query,
@@ -122,6 +133,8 @@ def search_pixabay_photos(
         "page": str(page),
         "safesearch": "true" if safesearch else "false",
     }
+    if orientation:
+        params["orientation"] = orientation
     url = f"{PIXABAY_API}/?{urllib.parse.urlencode(params)}"
     payload = _get_json(url, timeout=timeout)
     return list(payload.get("hits", []))
@@ -175,6 +188,7 @@ def run_pixabay_photo_batch(
     count: int = 6,
     image_type: str = "photo",
     variant: str = "largeImageURL",
+    orientation: str | None = None,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.1,
     dry_run: bool = False,
@@ -218,7 +232,9 @@ def run_pixabay_photo_batch(
 
     try:
         hits = search_pixabay_photos(
-            query, api_key=key, image_type=image_type, per_page=min(count * 2, 200),
+            query, api_key=key, image_type=image_type,
+            per_page=min(count * 2, 200),
+            orientation=orientation,
         )
     except urllib.error.HTTPError as exc:
         result.ok = False

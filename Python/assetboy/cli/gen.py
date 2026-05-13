@@ -1749,6 +1749,16 @@ def pixabay_photos_cmd(
             help="URL key: largeImageURL | fullHDURL | imageURL | webformatURL | previewURL.",
         ),
     ] = "largeImageURL",
+    orientation: Annotated[
+        str,
+        typer.Option(
+            "--orientation",
+            help=(
+                "v1.24.s165: filter by aspect: 'horizontal' | 'vertical'"
+                " | 'all' (default empty = unset, no filter)."
+            ),
+        ),
+    ] = "",
     pack_id: Annotated[str, typer.Option("--pack-id")] = "",
     output_dir: Annotated[Path, typer.Option("--output-dir")] = Path(""),
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
@@ -1769,10 +1779,13 @@ def pixabay_photos_cmd(
     out_dir_arg: Path | None = output_dir if str(output_dir) else None
     pack_id_arg: str | None = pack_id if pack_id else None
 
+    orientation_arg: str | None = orientation.strip().lower() or None  # v1.24.s165
+
     try:
         result = run_pixabay_photo_batch(
             query=query, pack_id=pack_id_arg, count=count,
             image_type=image_type, variant=variant,
+            orientation=orientation_arg,
             output_dir=out_dir_arg, dry_run=dry_run,
         )
     except Exception as exc:

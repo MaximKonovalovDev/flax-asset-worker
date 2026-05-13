@@ -65,6 +65,48 @@ class PixabaySearchTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.mod.search_pixabay_photos("x", api_key="k", image_type="bogus")
 
+    def test_search_photos_orientation_added_to_url(self) -> None:
+        """v1.24.s165: orientation='horizontal' adds to URL params."""
+        captured_urls: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured_urls.append(str(req.full_url))
+            return _json_response({"hits": []})
+
+        with patch.object(
+            self.mod.urllib.request, "urlopen", side_effect=capture
+        ):
+            self.mod.search_pixabay_photos(
+                "x", api_key="k", orientation="horizontal",
+            )
+        self.assertTrue(
+            any("orientation=horizontal" in u for u in captured_urls),
+            f"missing orientation; got {captured_urls}",
+        )
+
+    def test_search_photos_invalid_orientation_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            self.mod.search_pixabay_photos(
+                "x", api_key="k", orientation="diagonal",
+            )
+
+    def test_search_photos_no_orientation_omits_param(self) -> None:
+        """When orientation is None, the URL must not contain 'orientation='."""
+        captured_urls: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured_urls.append(str(req.full_url))
+            return _json_response({"hits": []})
+
+        with patch.object(
+            self.mod.urllib.request, "urlopen", side_effect=capture
+        ):
+            self.mod.search_pixabay_photos("x", api_key="k")
+        self.assertFalse(
+            any("orientation=" in u for u in captured_urls),
+            f"unexpected orientation; got {captured_urls}",
+        )
+
     def test_search_videos_returns_hits(self) -> None:
         payload = {"hits": [{"id": 99}]}
         with patch.object(
