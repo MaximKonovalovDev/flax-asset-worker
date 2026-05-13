@@ -1898,6 +1898,15 @@ def manifest_stats_cmd(
             ),
         ),
     ] = Path(""),
+    compact: Annotated[
+        bool,
+        typer.Option(
+            "--compact",
+            help=(
+                "v1.36.s206: single-line JSON output. No effect without --json."
+            ),
+        ),
+    ] = False,
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -2181,7 +2190,8 @@ def manifest_stats_cmd(
         return
 
     if json_out:
-        json.dump(summary, sys.stdout, indent=2)
+        # v1.36.s206 — --compact emits single-line JSON.
+        json.dump(summary, sys.stdout, indent=None if compact else 2)
         sys.stdout.write("\n")
     else:
         print(f"pack_manifest_stats_root={scan_root}")

@@ -2691,6 +2691,31 @@ class TyperCliSmokeTests(unittest.TestCase):
         # Aggregate totals stay full (not truncated).
         self.assertEqual(data["total_bytes"], 9100)
 
+    def test_pack_manifest_stats_compact_emits_single_line(self) -> None:
+        """v1.36.s206: --compact single-line JSON for manifest-stats."""
+        import tempfile, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "src").mkdir()
+            (tmp_p / "src" / "src_manifest.json").write_text(
+                _json.dumps({
+                    "source": "src", "objects_downloaded": 1,
+                    "objects_skipped_non_pd": 0, "objects_failed": 0,
+                    "entries": [{"bytes": 100}],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "manifest-stats", "--root", str(tmp_p),
+                 "--compact", "--json"],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            body = result.stdout.strip()
+            self.assertEqual(body.count("\n"), 0,
+                             msg=f"unexpected newlines: {body[:200]}")
+            data = _json.loads(body)
+            self.assertIn("by_source", data)
+
     def test_pack_manifest_stats_since_days_includes_recent(self) -> None:
         """v1.33.s198: --since-days 365 includes manifests from last year."""
         import tempfile, json as _json
