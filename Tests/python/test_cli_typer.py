@@ -3484,6 +3484,21 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn("bad_filter_shape", result.stdout)
 
+    def test_list_providers_compact_emits_single_line(self) -> None:
+        """v1.34.s201: --compact JSON for list-providers (no indent)."""
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "list-providers", "--compact", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0)
+        body = result.stdout.strip()
+        self.assertEqual(body.count("\n"), 0,
+                         msg=f"unexpected newlines: {body[:200]}")
+        import json as _json
+        data = _json.loads(body)
+        self.assertIn("providers", data)
+        self.assertIn("total", data)
+
     def test_list_providers_filter_kind_audio(self) -> None:
         """v1.25.s170: --filter kind:audio narrows to audio providers (Jamendo)."""
         import json as _json

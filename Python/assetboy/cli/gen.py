@@ -2891,6 +2891,16 @@ def list_providers_cmd(
             ),
         ),
     ] = None,
+    compact: Annotated[
+        bool,
+        typer.Option(
+            "--compact",
+            help=(
+                "v1.34.s201: emit single-line JSON (no indent)."
+                " No effect without --json."
+            ),
+        ),
+    ] = False,
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -3078,7 +3088,8 @@ def list_providers_cmd(
     }
 
     if json_out:
-        json.dump(summary, sys.stdout, indent=2)
+        # v1.34.s201 — --compact emits single-line JSON.
+        json.dump(summary, sys.stdout, indent=None if compact else 2)
         sys.stdout.write("\n")
         return
 
