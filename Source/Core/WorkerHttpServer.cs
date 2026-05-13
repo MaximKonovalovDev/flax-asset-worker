@@ -142,6 +142,12 @@ namespace FAW.Core
                     // Body: {"check_live": true} adds live API probes.
                     result = await LibraryRoutes.HandleHealthAsync(ctx);
                 }
+                else if (path == "/api/v1/gen/history-tail" && method == "GET")
+                {
+                    // v1.24.s163 — read-only aggregation over state/r1a_history.
+                    // Query: ?last=N&kind=all_no_key|all_key
+                    result = await LibraryRoutes.HandleHistoryTailAsync(ctx);
+                }
                 else if (path.StartsWith("/api/v1/library/asset/") && method == "GET")
                 {
                     // v1.6.s2: single-asset metadata lookup

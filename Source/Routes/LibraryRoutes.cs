@@ -397,6 +397,64 @@ namespace FAW.Routes
             }
         }
 
+        /// <summary>
+        /// v1.24.s163 — gen history-tail via subprocess. Query params:
+        ///   ?last=N (default 10, 0=all)
+        ///   ?kind=all_no_key|all_key|<empty>
+        /// </summary>
+        public static async Task<JObject> HandleHistoryTailAsync(HttpListenerContext ctx)
+        {
+            try
+            {
+                var last = ctx.Request.QueryString["last"];
+                var kind = ctx.Request.QueryString["kind"] ?? "";
+                int lastN = 10;
+                if (!string.IsNullOrWhiteSpace(last))
+                {
+                    if (!int.TryParse(last, out lastN) || lastN < 0)
+                        return Error($"bad_last: '{last}' (expected non-negative int)");
+                }
+
+                var args = $"-m assetboy.cli gen history-tail --last {lastN} --json";
+                if (!string.IsNullOrWhiteSpace(kind))
+                    args += $" --kind {kind}";
+
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "python",
+                    Arguments = args,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8,
+                };
+                var proc = new Process { StartInfo = psi };
+                proc.Start();
+                var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+                var stderrTask = proc.StandardError.ReadToEndAsync();
+                if (!proc.WaitForExit(15000))
+                {
+                    try { proc.Kill(); } catch { }
+                    return Error("timeout: history-tail took > 15s");
+                }
+                var stdout = await stdoutTask;
+                var stderr = await stderrTask;
+                if (proc.ExitCode != 0)
+                    return Error($"history_tail_failed: exit={proc.ExitCode} stderr={stderr}");
+                JObject parsed;
+                try { parsed = JObject.Parse(stdout); }
+                catch (Exception jx) { return Error($"history_tail_unparseable: {jx.Message}"); }
+                parsed["success"] = true;
+                return parsed;
+            }
+            catch (Exception exc)
+            {
+                return Error($"history_tail_crashed: {exc.Message}");
+            }
+        }
+
         private static JObject Error(string msg) => new JObject { ["success"] = false, ["error"] = msg };
     }
 }
