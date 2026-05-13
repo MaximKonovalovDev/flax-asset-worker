@@ -196,6 +196,20 @@ def validate_recipe_doc(doc: Any, source_label: str = "<recipe>") -> ValidationR
                         f" in known set {sorted(known_platforms)};"
                         " custom values allowed but tooling may not pick them up"
                     )
+        # v1.38.s210 — optional cost_minutes: integer estimate of
+        # build/scout time. Warns on non-int or negative.
+        if "cost_minutes" in recipe and recipe["cost_minutes"] is not None:
+            cm = recipe["cost_minutes"]
+            if not isinstance(cm, int) or isinstance(cm, bool):
+                result.warnings.append(
+                    f"{source_label}: recipe.cost_minutes should be an"
+                    f" integer; got {type(cm).__name__}"
+                )
+            elif cm < 0:
+                result.warnings.append(
+                    f"{source_label}: recipe.cost_minutes is negative"
+                    f" ({cm}); should be >= 0"
+                )
         # v1.18.s130 — optional integer expected_min_assets field.
         if "expected_min_assets" in recipe and recipe["expected_min_assets"] is not None:
             ema = recipe["expected_min_assets"]

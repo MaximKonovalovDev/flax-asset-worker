@@ -918,6 +918,44 @@ class CreatedUpdatedUtcMetadataTests(unittest.TestCase):
         self.assertFalse(any("created_utc" in w for w in r.warnings))
 
 
+class CostMinutesMetadataTests(unittest.TestCase):
+    """v1.38.s210 — optional cost_minutes field."""
+
+    def _recipe_with(self, **meta: object) -> dict:
+        doc = _ok_recipe()
+        doc["recipe"].update(meta)
+        return doc
+
+    def test_positive_int_silent(self) -> None:
+        r = validate_recipe_doc(self._recipe_with(cost_minutes=30), "c.yaml")
+        self.assertTrue(r.ok)
+        self.assertFalse(any("cost_minutes" in w for w in r.warnings))
+
+    def test_zero_silent(self) -> None:
+        r = validate_recipe_doc(self._recipe_with(cost_minutes=0), "c.yaml")
+        self.assertTrue(r.ok)
+        self.assertFalse(any("cost_minutes" in w for w in r.warnings))
+
+    def test_negative_warns(self) -> None:
+        r = validate_recipe_doc(self._recipe_with(cost_minutes=-5), "c.yaml")
+        self.assertTrue(r.ok)
+        self.assertTrue(any("cost_minutes" in w and "negative" in w
+                            for w in r.warnings))
+
+    def test_non_int_warns(self) -> None:
+        r = validate_recipe_doc(
+            self._recipe_with(cost_minutes="thirty"), "c.yaml",
+        )
+        self.assertTrue(r.ok)
+        self.assertTrue(any("cost_minutes" in w and "integer" in w
+                            for w in r.warnings))
+
+    def test_missing_silent(self) -> None:
+        r = validate_recipe_doc(_ok_recipe(), "c.yaml")
+        self.assertTrue(r.ok)
+        self.assertFalse(any("cost_minutes" in w for w in r.warnings))
+
+
 class PlatformMetadataTests(unittest.TestCase):
     """v1.30.s189 — optional platform field; known set warns on unknown."""
 
