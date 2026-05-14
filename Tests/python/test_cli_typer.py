@@ -699,6 +699,134 @@ class TyperCliSmokeTests(unittest.TestCase):
     # v1.65.s295 BIG-SLICE — 7 atomics (mermaid + validate-all graph hooks)
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # v1.65.s296 BIG-SLICE — 6 atomics (graph stats summary + close v1.65)
+    # ------------------------------------------------------------------ #
+
+    def test_recipe_graph_stats_has_all_expected_keys(self) -> None:
+        """s296 atomic-1: stats() returns all 11 expected metrics."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "a.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "a", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            g = build_graph(tmp_p)
+        s = g.stats()
+        for key in (
+            "total_recipes", "total_edges", "dangling_count",
+            "orphan_count", "entry_point_count", "leaf_count",
+            "is_acyclic", "max_depth", "mean_in_degree",
+            "mean_out_degree", "density",
+        ):
+            self.assertIn(key, s, msg=f"missing stat: {key}")
+
+    def test_recipe_graph_stats_empty_graph(self) -> None:
+        """s296 atomic-2: empty graph -> all counts 0, density 0.0, acyclic."""
+        import tempfile
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            g = build_graph(tmp_p)
+        s = g.stats()
+        self.assertEqual(s["total_recipes"], 0)
+        self.assertEqual(s["total_edges"], 0)
+        self.assertEqual(s["density"], 0.0)
+        self.assertEqual(s["mean_in_degree"], 0.0)
+        self.assertTrue(s["is_acyclic"])  # vacuously true
+
+    def test_recipe_graph_stats_density_calc(self) -> None:
+        """s296 atomic-3: density = total_edges / (n*(n-1)) for n>=2."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            # 3 recipes, 2 edges (a->b, a->c) -> density = 2 / (3*2) = 0.3333
+            for rid, rel in [
+                ("a", ["b", "c"]), ("b", []), ("c", []),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            g = build_graph(tmp_p)
+        s = g.stats()
+        self.assertEqual(s["total_recipes"], 3)
+        self.assertEqual(s["total_edges"], 2)
+        # 2 / 6 = 0.3333...
+        self.assertAlmostEqual(s["density"], 0.3333, places=3)
+        # Mean in-degree = 2/3 (b + c each have 1, a has 0)
+        self.assertAlmostEqual(s["mean_in_degree"], 0.6667, places=3)
+
+    def test_list_recipes_graph_stats_flag(self) -> None:
+        """s296 atomic-4: --graph --stats emits stats-only JSON (no edges)."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [("a", ["b"]), ("b", [])]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--graph", "--stats"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        # Stats shape: no out_edges / in_edges / all_ids in the response.
+        self.assertNotIn("out_edges", data)
+        self.assertNotIn("in_edges", data)
+        # But stats keys present.
+        self.assertEqual(data["total_recipes"], 2)
+        self.assertEqual(data["total_edges"], 1)
+
+    def test_recipe_graph_stats_with_dangling(self) -> None:
+        """s296 atomic-5: dangling_count reflects missing-id refs."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "ref.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "ref", "game": "g1",
+                                              "related_recipes": [
+                                                  "ghost_a", "ghost_b"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            g = build_graph(tmp_p)
+        s = g.stats()
+        self.assertEqual(s["dangling_count"], 2)
+        self.assertEqual(s["total_edges"], 0)  # no real edges
+
+    def test_list_recipes_graph_stats_compact_single_line(self) -> None:
+        """s296 atomic-6: --graph --stats --compact is single line."""
+        import tempfile, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--graph", "--stats", "--compact"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        stripped = result.stdout.strip()
+        self.assertNotIn("\n", stripped)
+        data = _json.loads(stripped)
+        self.assertIn("density", data)
+
     def test_recipe_graph_to_mermaid_linear_chain(self) -> None:
         """s295 atomic-1: to_mermaid on a->b->c emits valid syntax."""
         import tempfile, yaml as _yaml

@@ -176,6 +176,17 @@ def list_recipes_cmd(
             ),
         ),
     ] = Path(""),
+    graph_stats: Annotated[
+        bool,
+        typer.Option(
+            "--stats",
+            help=(
+                "v1.65.s296: with --graph, emit stats-only summary"
+                " (no edge maps). Includes density, mean degrees,"
+                " entry/leaf/orphan counts, is_acyclic, max_depth."
+            ),
+        ),
+    ] = False,
     html_out: Annotated[
         Path,
         typer.Option(
@@ -982,6 +993,16 @@ def list_recipes_cmd(
                 print(f"pack_list_recipes_error=html_write_failed: {exc}")
                 raise typer.Exit(code=1)
             print(f"pack_list_recipes_graph_html_path={html_path}")
+            return
+
+        # v1.65.s296 — --stats emits compact summary (no edge maps).
+        if graph_stats:
+            json.dump(
+                _graph.stats(),
+                sys.stdout,
+                indent=None if compact else 2,
+            )
+            sys.stdout.write("\n")
             return
 
         json.dump(gdict, sys.stdout, indent=None if compact else 2)

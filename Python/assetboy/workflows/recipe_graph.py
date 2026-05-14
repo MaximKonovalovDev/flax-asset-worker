@@ -170,6 +170,45 @@ class RecipeGraph:
             and self.in_edges.get(rid)
         }
 
+    def stats(self) -> dict[str, Any]:
+        """v1.65.s296: compact statistics summary (no edge maps).
+
+        Returns:
+            dict with:
+              total_recipes, total_edges, dangling_count, orphan_count,
+              entry_point_count, leaf_count, is_acyclic, max_depth,
+              mean_in_degree, mean_out_degree, density.
+
+        density = total_edges / (n * (n - 1)) when n >= 2, else 0.0.
+        """
+        n = len(self.all_ids)
+        total_edges = sum(len(v) for v in self.out_edges.values())
+        # Density excludes dangling edges (those don't land in graph).
+        density = (
+            total_edges / (n * (n - 1)) if n >= 2 else 0.0
+        )
+        mean_in = (
+            sum(len(v) for v in self.in_edges.values()) / n
+            if n else 0.0
+        )
+        mean_out = (
+            sum(len(v) for v in self.out_edges.values()) / n
+            if n else 0.0
+        )
+        return {
+            "total_recipes": n,
+            "total_edges": total_edges,
+            "dangling_count": sum(len(v) for v in self.dangling.values()),
+            "orphan_count": len(self.orphans),
+            "entry_point_count": len(self.entry_points()),
+            "leaf_count": len(self.leaves()),
+            "is_acyclic": self.is_acyclic(),
+            "max_depth": self.max_depth(),
+            "mean_in_degree": round(mean_in, 4),
+            "mean_out_degree": round(mean_out, 4),
+            "density": round(density, 4),
+        }
+
     def to_mermaid(self, direction: str = "LR") -> str:
         """v1.65.s295: emit Mermaid graph syntax.
 
