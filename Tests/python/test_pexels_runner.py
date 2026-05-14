@@ -411,6 +411,52 @@ class PexelsVideoMinDurationTests(unittest.TestCase):
         self.assertEqual(result.items_downloaded, 1)
 
 
+class PexelsVideoMinDimsTests(unittest.TestCase):
+    """v1.42.s241 — min_width / min_height filter on picked video file."""
+
+    def setUp(self) -> None:
+        from assetboy.execution import pexels_runner
+        self.mod = pexels_runner
+
+    def test_min_width_skips_low_res_pick(self) -> None:
+        """pick_video_file may pick a 480p variant; min_width=900 rejects it."""
+        search = _json_response({
+            "videos": [
+                {"id": 1, "duration": 10,
+                 "url": "u", "user": {"name": "p"},
+                 "video_files": [
+                     {"link": "https://v/sd.mp4", "height": 480,
+                      "width": 854, "quality": "sd",
+                      "file_type": "video/mp4"},
+                 ]},
+                {"id": 2, "duration": 10,
+                 "url": "u", "user": {"name": "p"},
+                 "video_files": [
+                     {"link": "https://v/hd.mp4", "height": 1080,
+                      "width": 1920, "quality": "hd",
+                      "file_type": "video/mp4"},
+                 ]},
+            ],
+        })
+        blob = _binary_response(b"fake")
+        responses = iter([search, blob])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(
+                self.mod.urllib.request, "urlopen",
+                side_effect=lambda *a, **kw: next(responses),
+            ):
+                with patch.object(self.mod.time, "sleep"):
+                    result = self.mod.run_pexels_video_batch(
+                        query="x", api_key="k", pack_id="V",
+                        count=5, max_height=1080,
+                        min_width=900,
+                        output_dir=Path(tmp),
+                    )
+        self.assertTrue(result.ok)
+        self.assertEqual(result.items_downloaded, 1)
+
+
 class PexelsPhotoMinDimsTests(unittest.TestCase):
     """v1.40.s226 — min_width / min_height post-filter."""
 

@@ -331,6 +331,8 @@ def run_pexels_video_batch(
     count: int = 3,
     max_height: int = 1080,
     min_duration_s: float = 0.0,
+    min_width: int = 0,
+    min_height: int = 0,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.2,
     dry_run: bool = False,
@@ -394,6 +396,13 @@ def run_pexels_video_batch(
         if not file_info:
             result.items_failed += 1
             continue
+        # v1.42.s241 — min_width / min_height filter on picked file dims.
+        if min_width > 0 or min_height > 0:
+            fw = int(file_info.get("width", 0) or 0)
+            fh = int(file_info.get("height", 0) or 0)
+            if (min_width > 0 and fw < min_width) or \
+               (min_height > 0 and fh < min_height):
+                continue
         link = str(file_info.get("link", ""))
         if not link:
             result.items_failed += 1
