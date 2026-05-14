@@ -4717,6 +4717,43 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("providers", data)
         self.assertIn("total", data)
 
+    def test_list_providers_csv_writes_catalog(self) -> None:
+        """v1.53.s271: --csv writes provider catalog with header + rows."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "providers.csv"
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "list-providers", "--csv", str(csv_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertIn("gen_list_providers_csv_path=", result.stdout)
+            self.assertTrue(csv_path.exists())
+            body = csv_path.read_text(encoding="utf-8")
+            lines = [l for l in body.splitlines() if l.strip()]
+            # Header + at least 12 providers.
+            self.assertGreaterEqual(len(lines), 13)
+            self.assertIn("id,license,asset_class", lines[0])
+            # met-museum should be present in at least one data row.
+            self.assertTrue(any("met-museum" in l for l in lines[1:]))
+
+    def test_list_providers_csv_with_filter_narrows(self) -> None:
+        """--csv composes with --filter."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "audio_providers.csv"
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "list-providers", "--filter", "kind:audio",
+                 "--csv", str(csv_path)],
+            )
+            self.assertEqual(result.exit_code, 0)
+            self.assertTrue(csv_path.exists())
+            body = csv_path.read_text(encoding="utf-8")
+            self.assertIn("jamendo", body)
+            # Non-audio providers should NOT appear.
+            self.assertNotIn("met-museum", body)
+
     def test_list_providers_limit_caps_output(self) -> None:
         """v1.53.s268: --limit 3 caps to first 3 providers (after sort)."""
         import json as _json

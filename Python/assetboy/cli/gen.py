@@ -3638,6 +3638,17 @@ def list_providers_cmd(
             ),
         ),
     ] = 0,
+    csv_out: Annotated[
+        Path,
+        typer.Option(
+            "--csv",
+            help=(
+                "v1.53.s271: write provider catalog as CSV to this path"
+                " (header: id,license,asset_class,env_var,env_set,cli)."
+                " Mutex with --json / --html."
+            ),
+        ),
+    ] = Path(""),
     compact: Annotated[
         bool,
         typer.Option(
@@ -3874,6 +3885,36 @@ def list_providers_cmd(
         "key_unset_count": key_unset,
         "filters_applied": [f"{fn}:{fv}" for fn, fv in parsed_filters],
     }
+
+    # v1.53.s271 — CSV preempts HTML/JSON/text.
+    csv_str = str(csv_out)
+    if csv_str and csv_str != ".":
+        import csv as _csv
+        csv_path = Path(csv_str)
+        try:
+            csv_path.parent.mkdir(parents=True, exist_ok=True)
+            with csv_path.open("w", encoding="utf-8", newline="") as fh:
+                w = _csv.writer(fh)
+                w.writerow(["id", "license", "asset_class", "env_var",
+                             "env_set", "cli"])
+                for p in providers:
+                    ev = p.get("env_var")
+                    es = p.get("env_set")
+                    w.writerow([
+                        str(p.get("id", "")),
+                        str(p.get("license", "")),
+                        str(p.get("asset_class", "")),
+                        str(ev) if ev is not None else "",
+                        ("true" if es is True else
+                         "false" if es is False else ""),
+                        str(p.get("cli", "")),
+                    ])
+        except Exception as exc:
+            print(f"gen_list_providers_error=csv_write_failed: {exc}")
+            raise typer.Exit(code=1)
+        print(f"gen_list_providers_csv_path={csv_path}")
+        print(f"gen_list_providers_csv_rows={len(providers)}")
+        return
 
     # v1.40.s224 — HTML preempts JSON/text.
     html_str = str(html_out)
