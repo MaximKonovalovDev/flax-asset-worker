@@ -778,6 +778,17 @@ def r1a_status_cmd(
             ),
         ),
     ] = False,
+    since_days: Annotated[
+        int,
+        typer.Option(
+            "--since-days",
+            help=(
+                "v1.42.s239: keep only providers whose last_manifest_utc"
+                " is within the last N days. 0 (default) disables."
+                " Providers without last_manifest_utc are dropped when active."
+            ),
+        ),
+    ] = 0,
     compact: Annotated[
         bool,
         typer.Option(
@@ -1037,6 +1048,22 @@ def r1a_status_cmd(
             p for p in providers_state
             if p.get("env_var") is None or p.get("env_set") is True
         ]
+
+    # v1.42.s239 — --since-days: keep providers whose last_manifest_utc is
+    # within the last N days. Providers without last_manifest_utc are dropped.
+    if since_days > 0:
+        import time as _t
+        from datetime import datetime as _dt_now
+        cutoff = _t.time() - (since_days * 86400.0)
+        def _is_fresh(p: dict) -> bool:
+            lmu = p.get("last_manifest_utc")
+            if not isinstance(lmu, str):
+                return False
+            try:
+                return _dt_now.fromisoformat(lmu).timestamp() >= cutoff
+            except (ValueError, TypeError):
+                return False
+        providers_state = [p for p in providers_state if _is_fresh(p)]
 
     # v1.26.s176 — --sort applies after the provider filter.
     sort_norm = sort.strip().lower()

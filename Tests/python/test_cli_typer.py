@@ -5115,6 +5115,38 @@ class TyperCliSmokeTests(unittest.TestCase):
         data = _json.loads(body)
         self.assertIn("providers", data)
 
+    def test_library_r1a_status_since_days_drops_stale_or_undated(self) -> None:
+        """v1.42.s239: --since-days N drops providers w/o recent last_manifest_utc."""
+        # Patch manual_drop_dir() to an empty temp dir so every provider
+        # has last_manifest_utc=None → all dropped by --since-days.
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch(
+                "assetboy.execution.comfyui_runner.manual_drop_dir",
+                return_value=Path(tmp),
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["library", "r1a-status", "--since-days", "1", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        # Providers without timestamps should all be dropped.
+        self.assertEqual(data["providers_total"], 0)
+
+    def test_library_r1a_status_since_days_zero_keeps_all(self) -> None:
+        """--since-days 0 (default) disables filter."""
+        result = self.runner.invoke(
+            self.app,
+            ["library", "r1a-status", "--since-days", "0", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertGreater(data["providers_total"], 0)
+
     def test_library_r1a_status_env_set_only_drops_unset_keys(self) -> None:
         """v1.31.s194: --env-set-only keeps no-key + env_set=True only."""
         import os
