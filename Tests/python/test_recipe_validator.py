@@ -558,6 +558,19 @@ class RecipeMetadataFieldTests(unittest.TestCase):
         self.assertFalse(r.ok)
         self.assertTrue(any("tags[1]" in e for e in r.errors))
 
+    def test_empty_list_metadata_is_warning(self) -> None:
+        """v1.52.s263: tags=[] -> WARNING not error (auto_fix path)."""
+        r = self.validate(self._doc(tags=[]))
+        self.assertTrue(r.ok)
+        self.assertTrue(any("tags" in w and "empty list" in w
+                            for w in r.warnings))
+
+    def test_empty_genre_list_is_warning(self) -> None:
+        r = self.validate(self._doc(genre=[]))
+        self.assertTrue(r.ok)
+        self.assertTrue(any("genre" in w and "empty list" in w
+                            for w in r.warnings))
+
     def test_metadata_fields_absent_no_complaint(self) -> None:
         r = self.validate(self._doc())  # no metadata fields
         self.assertTrue(r.ok)

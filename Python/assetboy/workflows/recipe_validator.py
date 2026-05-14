@@ -525,6 +525,14 @@ def _validate_recipe_metadata_field(
             )
         return
     if isinstance(value, list):
+        # v1.52.s263 — empty list -> warning (operator declared field but
+        # populated nothing; auto_fix can substitute defaults).
+        if not value:
+            result.warnings.append(
+                f"{source_label}: recipe.{field_name} is an empty list; "
+                "consider removing or populating (auto_fix may default-fill)"
+            )
+            return
         for i, entry in enumerate(value):
             if not isinstance(entry, str):
                 result.ok = False
