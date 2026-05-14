@@ -1718,6 +1718,26 @@ def diff_cmd(
         Path,
         typer.Argument(help="Path to the NEW recipe YAML (compared against old)."),
     ],
+    html_out: Annotated[
+        Path,
+        typer.Option(
+            "--html",
+            help=(
+                "v1.52.s261: write standalone HTML diff dashboard"
+                " (added/removed/modified packs with field-level changes)."
+                " Preempts JSON/text."
+            ),
+        ),
+    ] = Path(""),
+    open_html: Annotated[
+        bool,
+        typer.Option(
+            "--open",
+            help=(
+                "v1.52.s261: with --html, auto-open in system browser."
+            ),
+        ),
+    ] = False,
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -1781,6 +1801,115 @@ def diff_cmd(
     from assetboy.workflows.recipe_diff import diff_recipes, diff_result_to_dict
 
     diff = diff_recipes(old_doc, new_doc)
+
+    # v1.52.s261 — HTML preempts JSON/text.
+    html_str = str(html_out)
+    if html_str and html_str != ".":
+        html_path = Path(html_str)
+        try:
+            html_path.parent.mkdir(parents=True, exist_ok=True)
+            added_html = "".join(
+                f"<li><code>{html_escape(str(p))}</code></li>"
+                for p in diff.added_packs
+            )
+            removed_html = "".join(
+                f"<li><code>{html_escape(str(p))}</code></li>"
+                for p in diff.removed_packs
+            )
+            mod_rows: list[str] = []
+            for mod in diff.modified_packs:
+                changes = "".join(
+                    f"<li><code>{html_escape(c.field)}</code>: "
+                    f"{html_escape(str(c.old))} &rarr; {html_escape(str(c.new))}</li>"
+                    for c in mod.changed_fields
+                )
+                mod_rows.append(
+                    "<tr>"
+                    f"<td><code>{html_escape(str(mod.pack_id))}</code></td>"
+                    f"<td class='num'>{len(mod.changed_fields)}</td>"
+                    f"<td><ul class='changes'>{changes}</ul></td>"
+                    "</tr>"
+                )
+            recipe_changes = ""
+            if diff.recipe_field_changes:
+                rcs = "".join(
+                    f"<li><code>{html_escape(c.field)}</code>: "
+                    f"{html_escape(str(c.old))} &rarr; {html_escape(str(c.new))}</li>"
+                    for c in diff.recipe_field_changes
+                )
+                recipe_changes = (
+                    f"<h2>Recipe-level changes ({len(diff.recipe_field_changes)})</h2>"
+                    f"<ul class='changes'>{rcs}</ul>"
+                )
+            verdict_class = "b-yellow" if diff.has_changes else "b-green"
+            verdict_text = "CHANGES" if diff.has_changes else "NO CHANGES"
+            html = (
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                "<title>FAW Recipe Diff</title>"
+                "<style>"
+                "body{font-family:system-ui,sans-serif;max-width:1100px;margin:2em auto;}"
+                "h1{margin-bottom:.2em}"
+                "h2{margin-top:1.5em}"
+                ".summary{color:#666;margin-bottom:1em}"
+                "table{border-collapse:collapse;width:100%}"
+                "th,td{padding:.4em .6em;border-bottom:1px solid #eee;text-align:left;vertical-align:top}"
+                "td.num{text-align:right;font-variant-numeric:tabular-nums}"
+                "ul.changes{margin:0;padding-left:1.2em;font-size:.9em}"
+                "code{background:#f5f5f5;padding:1px 4px;border-radius:2px;font-size:.9em}"
+                ".b-green,.b-yellow{color:#fff;padding:2px 8px;border-radius:3px;font-size:.8em}"
+                ".b-green{background:#2e7d32}"
+                ".b-yellow{background:#f9a825;color:#000}"
+                "</style></head><body>"
+                "<h1>FAW Recipe Diff</h1>"
+                "<p class='summary'>"
+                f"Old: <code>{html_escape(str(old_resolved))}</code><br>"
+                f"New: <code>{html_escape(str(new_resolved))}</code><br>"
+                f"Verdict: <span class='{verdict_class}'>{verdict_text}</span> &middot; "
+                f"added: {len(diff.added_packs)} &middot; "
+                f"removed: {len(diff.removed_packs)} &middot; "
+                f"modified: {len(diff.modified_packs)}"
+                "</p>"
+                + (
+                    f"<h2>Added packs ({len(diff.added_packs)})</h2><ul>{added_html}</ul>"
+                    if diff.added_packs else ""
+                )
+                + (
+                    f"<h2>Removed packs ({len(diff.removed_packs)})</h2><ul>{removed_html}</ul>"
+                    if diff.removed_packs else ""
+                )
+                + (
+                    f"<h2>Modified packs ({len(diff.modified_packs)})</h2>"
+                    "<table><thead><tr><th>Pack id</th><th># changes</th>"
+                    "<th>Field changes</th></tr></thead>"
+                    f"<tbody>{''.join(mod_rows)}</tbody></table>"
+                    if diff.modified_packs else ""
+                )
+                + recipe_changes
+                + "</body></html>"
+            )
+            html_path.write_text(html, encoding="utf-8")
+        except Exception as exc:
+            print(f"pack_diff_error=html_write_failed: {exc}")
+            raise typer.Exit(code=1)
+        print(f"pack_diff_html_path={html_path}")
+        if open_html:
+            import platform
+            import subprocess
+            sys_name = platform.system().lower()
+            try:
+                if sys_name == "windows":
+                    import os
+                    os.startfile(str(html_path.resolve()))  # type: ignore[attr-defined]
+                elif sys_name == "darwin":
+                    subprocess.run(["open", str(html_path.resolve())], check=False)
+                else:
+                    subprocess.run(["xdg-open", str(html_path.resolve())], check=False)
+                print("pack_diff_html_opened=true")
+            except Exception as exc:
+                print(f"pack_diff_html_open_failed={exc}")
+        if diff.has_changes:
+            raise typer.Exit(code=1)
+        return
 
     if json_out:
         payload = diff_result_to_dict(diff)

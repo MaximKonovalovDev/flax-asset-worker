@@ -220,6 +220,45 @@ class CliDiffTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn("recipe_not_found", result.stdout)
 
+    def test_diff_html_no_changes(self) -> None:
+        """v1.52.s261: --html writes report; identical recipes exit 0."""
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            html_path = Path(tmp) / "diff.html"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "diff",
+                 "sandbox/one_pack_smoke.yaml",
+                 "sandbox/one_pack_smoke.yaml",
+                 "--html", str(html_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertIn("pack_diff_html_path=", result.stdout)
+            self.assertTrue(html_path.exists())
+            body = html_path.read_text(encoding="utf-8")
+            self.assertIn("<!doctype html>", body)
+            self.assertIn("FAW Recipe Diff", body)
+            self.assertIn("NO CHANGES", body)
+
+    def test_diff_html_with_changes_exits_1(self) -> None:
+        """--html with detected changes exits 1 and writes file."""
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            html_path = Path(tmp) / "diff.html"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "diff",
+                 "sandbox/one_pack_smoke.yaml",
+                 "primitive_tech/first_playable.yaml",
+                 "--html", str(html_path)],
+            )
+            self.assertEqual(result.exit_code, 1)
+            self.assertTrue(html_path.exists())
+            body = html_path.read_text(encoding="utf-8")
+            self.assertIn("CHANGES", body)
+
 
 if __name__ == "__main__":
     unittest.main()
