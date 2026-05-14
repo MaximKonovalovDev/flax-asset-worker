@@ -735,6 +735,16 @@ def from_recipe_cmd(
             ),
         ),
     ] = Path(""),
+    csv_out: Annotated[
+        Path,
+        typer.Option(
+            "--csv",
+            help=(
+                "v1.56.s278: write pack-execution results as CSV (header:"
+                " pack_id,status,provider,required,notes_truncated)."
+            ),
+        ),
+    ] = Path(""),
     open_html: Annotated[
         bool,
         typer.Option(
@@ -1025,6 +1035,39 @@ def from_recipe_cmd(
             "completed_seen": completed_count,
             "meets_min_passes": completed_count >= min_passes,
         }
+
+    # v1.56.s278 — --csv preempts HTML/JSON/text.
+    csv_str = str(csv_out)
+    if csv_str and csv_str != ".":
+        import csv as _csv
+        csv_path = Path(csv_str)
+        try:
+            csv_path.parent.mkdir(parents=True, exist_ok=True)
+            with csv_path.open("w", encoding="utf-8", newline="") as fh:
+                w = _csv.writer(fh)
+                w.writerow(["pack_id", "status", "provider", "required",
+                             "notes_truncated"])
+                for r in results:
+                    pid = str(r.get("pack_id", "?"))
+                    notes = str(r.get("notes", "") or "")
+                    notes_csv = notes.replace("\n", " ").replace("\r", " ")
+                    if len(notes_csv) > 80:
+                        notes_csv = notes_csv[:77] + "..."
+                    w.writerow([
+                        pid,
+                        str(r.get("status", "?")),
+                        str(r.get("provider", "?")),
+                        "true" if pid in required_ids else "false",
+                        notes_csv,
+                    ])
+        except Exception as exc:
+            print(f"pack_from_recipe_error=csv_write_failed: {exc}")
+            raise typer.Exit(code=1)
+        print(f"pack_from_recipe_csv_path={csv_path}")
+        print(f"pack_from_recipe_csv_rows={len(results)}")
+        if required_fail and block_on_missing:
+            raise typer.Exit(code=1)
+        return
 
     # v1.50.s257 — HTML preempts JSON/text.
     html_str = str(html_out)
@@ -1577,6 +1620,16 @@ def validate_all_cmd(
             ),
         ),
     ] = False,
+    csv_out: Annotated[
+        Path,
+        typer.Option(
+            "--csv",
+            help=(
+                "v1.56.s278: write validation results as CSV (header:"
+                " path,status,error_count,warning_count)."
+            ),
+        ),
+    ] = Path(""),
     json_out: Annotated[
         bool, typer.Option("--json", help="Emit JSON output."),
     ] = False,
@@ -1632,6 +1685,32 @@ def validate_all_cmd(
                 "errors": result.errors,
                 "warnings": result.warnings,
             })
+
+    # v1.56.s278 — --csv preempts HTML/JSON/text.
+    csv_str = str(csv_out)
+    if csv_str and csv_str != ".":
+        import csv as _csv
+        csv_path = Path(csv_str)
+        try:
+            csv_path.parent.mkdir(parents=True, exist_ok=True)
+            with csv_path.open("w", encoding="utf-8", newline="") as fh:
+                w = _csv.writer(fh)
+                w.writerow(["path", "status", "error_count", "warning_count"])
+                for entry in per_recipe:
+                    w.writerow([
+                        str(entry.get("path", "")),
+                        str(entry.get("status", "?")),
+                        len(entry.get("errors") or []),
+                        len(entry.get("warnings") or []),
+                    ])
+        except Exception as exc:
+            print(f"pack_validate_all_error=csv_write_failed: {exc}")
+            raise typer.Exit(code=1)
+        print(f"pack_validate_all_csv_path={csv_path}")
+        print(f"pack_validate_all_csv_rows={len(per_recipe)}")
+        if not aggregate_ok:
+            raise typer.Exit(code=1)
+        return
 
     # v1.41.s234 — HTML dashboard preempts JSON/text.
     html_str = str(html_out)
@@ -2067,6 +2146,16 @@ def rerun_failed_cmd(
             ),
         ),
     ] = Path(""),
+    csv_out: Annotated[
+        Path,
+        typer.Option(
+            "--csv",
+            help=(
+                "v1.56.s278: write rerun results as CSV (header:"
+                " pack_id,status,state)."
+            ),
+        ),
+    ] = Path(""),
     open_html: Annotated[
         bool,
         typer.Option(
@@ -2275,6 +2364,33 @@ def rerun_failed_cmd(
         summary["expected_min_check"] = expected_status_r
     if min_passes_status_r is not None:
         summary["min_required_passes_check"] = min_passes_status_r
+
+    # v1.56.s278 — --csv preempts HTML/JSON/text.
+    csv_str = str(csv_out)
+    if csv_str and csv_str != ".":
+        import csv as _csv
+        csv_path = Path(csv_str)
+        try:
+            csv_path.parent.mkdir(parents=True, exist_ok=True)
+            with csv_path.open("w", encoding="utf-8", newline="") as fh:
+                w = _csv.writer(fh)
+                w.writerow(["pack_id", "status", "state"])
+                for r in results:
+                    w.writerow([
+                        str(r.get("pack_id", "?")),
+                        str(r.get("status", "?")),
+                        str(r.get("current_state", "") or ""),
+                    ])
+                for pid in deferred_ids:
+                    w.writerow([str(pid), "deferred", ""])
+        except Exception as exc:
+            print(f"pack_rerun_failed_error=csv_write_failed: {exc}")
+            raise typer.Exit(code=1)
+        print(f"pack_rerun_failed_csv_path={csv_path}")
+        print(f"pack_rerun_failed_csv_rows={len(results) + len(deferred_ids)}")
+        if re_fail > 0:
+            raise typer.Exit(code=1)
+        return
 
     # v1.50.s258 — HTML preempts JSON/text.
     html_str = str(html_out)

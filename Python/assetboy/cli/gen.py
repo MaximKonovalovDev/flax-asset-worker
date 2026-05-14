@@ -3227,6 +3227,16 @@ def all_key_cmd(
             ),
         ),
     ] = Path(""),
+    csv_out: Annotated[
+        Path,
+        typer.Option(
+            "--csv",
+            help=(
+                "v1.56.s278: write keyed-fan-out summary as CSV"
+                " (header: provider,ok,skipped,matched,downloaded,error)."
+            ),
+        ),
+    ] = Path(""),
     open_html: Annotated[
         bool,
         typer.Option(
@@ -3500,6 +3510,33 @@ def all_key_cmd(
             json.dumps(history_record, indent=2), encoding="utf-8"
         )
         summary["history_path"] = str(history_path)
+
+    # v1.56.s278 — --csv preempts HTML/JSON/text.
+    csv_str = str(csv_out)
+    if csv_str and csv_str != ".":
+        import csv as _csv
+        csv_path = Path(csv_str)
+        try:
+            csv_path.parent.mkdir(parents=True, exist_ok=True)
+            with csv_path.open("w", encoding="utf-8", newline="") as fh:
+                w = _csv.writer(fh)
+                w.writerow(["provider", "ok", "skipped", "matched",
+                             "downloaded", "error"])
+                for p in providers_run:
+                    w.writerow([
+                        str(p.get("provider", "")),
+                        "true" if p.get("ok") else "false",
+                        "true" if p.get("skipped") else "false",
+                        int(p.get("matched", 0) or 0),
+                        int(p.get("downloaded", 0) or 0),
+                        str(p.get("error", "") or "")[:200],
+                    ])
+        except Exception as exc:
+            print(f"gen_all_key_error=csv_write_failed: {exc}")
+            raise typer.Exit(code=1)
+        print(f"gen_all_key_csv_path={csv_path}")
+        print(f"gen_all_key_csv_rows={len(providers_run)}")
+        return
 
     # v1.49.s256 — HTML preempts JSON/text.
     html_str = str(html_out)
