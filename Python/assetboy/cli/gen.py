@@ -3781,6 +3781,12 @@ def list_providers_cmd(
             # 'fantasy', 'nature', etc.
             ac = str(provider.get("asset_class", "")).lower()
             return value.strip().lower() in ac
+        if field_name == "license":
+            # v1.52.s265 — substring match on license string (case-insensitive).
+            # Supports 'cc0', 'cc-by', 'cc-by-sa', 'mit', 'apache', 'pd',
+            # 'public domain', 'unsplash', 'pexels', etc.
+            lic = str(provider.get("license", "")).lower()
+            return value.strip().lower() in lic
         return False  # unknown field -> never matches
 
     if parsed_filters:

@@ -4693,6 +4693,33 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("providers", data)
         self.assertIn("total", data)
 
+    def test_list_providers_filter_license_cc0_narrows(self) -> None:
+        """v1.52.s265: --filter license:cc0 narrows to CC0-license providers."""
+        import json as _json
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "list-providers", "--filter", "license:cc0", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        # met-museum, pixabay, inaturalist all carry CC0 string in license.
+        ids = {p["id"] for p in data["providers"]}
+        self.assertIn("met-museum", ids)
+        self.assertIn("pixabay", ids)
+        # Scryfall (CC-BY-SA only) should NOT match.
+        self.assertNotIn("scryfall", ids)
+
+    def test_list_providers_filter_license_unknown_returns_empty(self) -> None:
+        import json as _json
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "list-providers",
+             "--filter", "license:nonexistent-license", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout)
+        self.assertEqual(data["total"], 0)
+
     def test_list_providers_filter_kind_audio(self) -> None:
         """v1.25.s170: --filter kind:audio narrows to audio providers (Jamendo)."""
         import json as _json
