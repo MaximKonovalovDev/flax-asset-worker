@@ -276,6 +276,55 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("historical", entry["theme"])
         self.assertIn("smoke-test", entry["tags"])
 
+    def test_pack_list_recipes_since_days_keeps_recent_only(self) -> None:
+        """v1.41.s232: --since-days N drops recipes older than N days or undated."""
+        import tempfile, json as _json, yaml as _yaml
+        from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+        now = _dt.now(_tz.utc)
+        fresh = (now - _td(hours=1)).isoformat(timespec="seconds")
+        stale = (now - _td(days=30)).isoformat(timespec="seconds")
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, ts in [("r_fresh", fresh), ("r_stale", stale),
+                             ("r_undated", None)]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if ts:
+                    doc["recipe"]["updated_utc"] = ts
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--since-days", "7", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = {r["recipe_id"] for r in data["recipes"]}
+        # Only fresh recipe within last 7 days.
+        self.assertEqual(ids, {"r_fresh"})
+
+    def test_pack_list_recipes_since_days_zero_keeps_all(self) -> None:
+        """--since-days 0 disables filter (default)."""
+        import tempfile, json as _json, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "x.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "x", "game": "g1"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--json"],
+            )
+            data = _json.loads(result.stdout)
+            self.assertEqual(data["count"], 1)
+
     def test_pack_list_recipes_sort_last_run_utc(self) -> None:
         """v1.40.s231: --sort last_run_utc accepts the new key (recipes with no run sort last)."""
         result = self.runner.invoke(

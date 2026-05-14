@@ -100,6 +100,17 @@ def list_recipes_cmd(
             ),
         ),
     ] = "",
+    since_days: Annotated[
+        int,
+        typer.Option(
+            "--since-days",
+            help=(
+                "v1.41.s232: keep only recipes whose updated_utc is within"
+                " the last N days. 0 (default) disables. Recipes without"
+                " updated_utc are dropped when this filter is active."
+            ),
+        ),
+    ] = 0,
     compact: Annotated[
         bool,
         typer.Option(
@@ -348,6 +359,21 @@ def list_recipes_cmd(
         else:
             print(f"pack_list_recipes_error={msg}")
         raise typer.Exit(code=1)
+
+    # v1.41.s232 — --since-days filter (recipes updated within last N days).
+    if since_days > 0:
+        import time as _t
+        from datetime import datetime as _dt2
+        cutoff = _t.time() - (since_days * 86400.0)
+        def _is_recent(e: dict) -> bool:
+            uv = e.get("updated_utc")
+            if not isinstance(uv, str):
+                return False
+            try:
+                return _dt2.fromisoformat(uv.strip()).timestamp() >= cutoff
+            except (ValueError, TypeError):
+                return False
+        entries = [e for e in entries if _is_recent(e)]
 
     # v1.17.s121 — reverse after sort.
     if reverse:
