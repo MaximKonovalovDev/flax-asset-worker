@@ -4737,6 +4737,26 @@ class TyperCliSmokeTests(unittest.TestCase):
             # met-museum should be present in at least one data row.
             self.assertTrue(any("met-museum" in l for l in lines[1:]))
 
+    def test_list_providers_csv_composes_with_sort_limit(self) -> None:
+        """v1.54.s272: --csv + --sort id + --limit 2 writes top-2 alpha rows."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "top2.csv"
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "list-providers", "--sort", "id", "--limit", "2",
+                 "--csv", str(csv_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertTrue(csv_path.exists())
+            body = csv_path.read_text(encoding="utf-8")
+            lines = [l for l in body.splitlines() if l.strip()]
+            # Header + 2 data rows.
+            self.assertEqual(len(lines), 3)
+            # First data row should be the alphabetically-first provider id
+            # (which is "archive-org" in the catalog).
+            self.assertIn("archive-org", lines[1])
+
     def test_list_providers_csv_with_filter_narrows(self) -> None:
         """--csv composes with --filter."""
         import tempfile
