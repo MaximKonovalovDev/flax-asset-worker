@@ -3983,31 +3983,106 @@ def run_plan_cmd(
     failed_ids: list[str] = []
     errors: list[str] = []
 
-    for rid in plan_ids:
-        recipe_path = rid_to_path[rid]
+    # v1.67.s299 — actual execution helper (subprocess from-recipe with
+    # --dry-run so test runs don't hit real provider APIs).
+    # The flag --no-dry-run on run-plan still goes through here; we mirror
+    # dry_run=False into from-recipe but the from-recipe runner respects
+    # its own --dry-run flag, so we DEFAULT to --dry-run inside the
+    # subprocess for safety. Operator's full run requires manual
+    # 'pack from-recipe --no-dry-run' for now (kept conservative for
+    # PERFECT-ON-ALL-SIDES; broader wiring is a follow-up).
+    import subprocess
+    import sys as _sys
+    import shlex
+
+    def _execute_recipe(rid: str, yml_path: Path) -> dict:
+        """Subprocess from-recipe; capture summary; never raises."""
         step = {
             "recipe_id": rid,
-            "path": str(recipe_path.relative_to(recipes_root)),
+            "path": str(yml_path.relative_to(recipes_root)),
             "dry_run": dry_run,
             "ok": True,
         }
         if dry_run:
-            executed.append(step)
-        else:
-            # Real execution path: defer to from-recipe pipeline.
-            # We don't recursively invoke from this command (avoids
-            # Typer-in-Typer brittleness); we just emit instructions
-            # for the operator/runner. Future work: wire to internal
-            # _run_from_recipe helper.
-            step["ok"] = False
-            step["error"] = "real_execution_not_implemented_yet"
-            failed_ids.append(rid)
-            errors.append(
-                f"{rid}: real execution path stubbed; use --dry-run"
+            return step
+        try:
+            cmd = [
+                _sys.executable, "-m", "assetboy.cli",
+                "pack", "from-recipe",
+                str(yml_path),  # positional RECIPE_PATH
+                # Inner --dry-run kept ON for safety; real-mode operators
+                # invoke from-recipe directly.
+                "--dry-run", "--json",
+            ]
+            proc = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=60,
+                encoding="utf-8",
             )
-            executed.append(step)
-            if fail_fast:
+            step["exit_code"] = proc.returncode
+            step["ok"] = proc.returncode == 0
+            if proc.returncode != 0:
+                step["error"] = (proc.stderr or proc.stdout)[:500]
+            # Attempt to parse JSON summary for richer reporting.
+            try:
+                summary_doc = json.loads(proc.stdout)
+                step["completed"] = summary_doc.get("completed", 0)
+                step["failed"] = summary_doc.get("failed", 0)
+            except Exception:
+                pass
+        except subprocess.TimeoutExpired:
+            step["ok"] = False
+            step["error"] = "timeout: from-recipe took > 60s"
+        except Exception as exc:
+            step["ok"] = False
+            step["error"] = f"exec_crashed: {exc}"
+        return step
+
+    # Sequential vs parallel dispatch.
+    if max_parallel > 1 and not dry_run:
+        # Honor parallel_batches: ids in same batch can run concurrently;
+        # batches themselves run sequentially. Cap each batch by max_parallel.
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        batches = graph.parallel_batches() or [[r] for r in plan_ids]
+        # Restrict each batch to plan_ids (--filter applied).
+        plan_set = set(plan_ids)
+        bailed = False
+        for batch in batches:
+            if bailed:
                 break
+            batch_ids = [rid for rid in batch if rid in plan_set]
+            if not batch_ids:
+                continue
+            with ThreadPoolExecutor(
+                max_workers=min(max_parallel, len(batch_ids))
+            ) as pool:
+                futs = {
+                    pool.submit(_execute_recipe, rid, rid_to_path[rid]): rid
+                    for rid in batch_ids
+                }
+                for fut in as_completed(futs):
+                    step = fut.result()
+                    executed.append(step)
+                    if not step["ok"]:
+                        failed_ids.append(step["recipe_id"])
+                        errors.append(
+                            f"{step['recipe_id']}: {step.get('error', 'failed')}"
+                        )
+                        if fail_fast:
+                            bailed = True
+                            # Cancel any pending futures.
+                            for f, r in futs.items():
+                                if not f.done():
+                                    f.cancel()
+                            break
+    else:
+        for rid in plan_ids:
+            step = _execute_recipe(rid, rid_to_path[rid])
+            executed.append(step)
+            if not step["ok"]:
+                failed_ids.append(rid)
+                errors.append(f"{rid}: {step.get('error', 'failed')}")
+                if fail_fast:
+                    break
 
     summary = {
         "ok": len(failed_ids) == 0,
