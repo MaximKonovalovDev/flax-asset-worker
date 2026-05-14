@@ -2050,6 +2050,42 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn("history_root_not_found", result.stdout)
 
+    def test_history_tail_html_writes_file(self) -> None:
+        """v1.40.s223: --html writes standalone HTML report with ok_rate bars."""
+        import tempfile, os, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            hist_dir = tmp_p / "state" / "r1a_history"
+            hist_dir.mkdir(parents=True)
+            (hist_dir / "all_no_key_001.json").write_text(_json.dumps({
+                "kind": "all_no_key",
+                "providers": [
+                    {"provider": "met", "matched": 5, "downloaded": 4,
+                     "ok": True, "skipped": False},
+                    {"provider": "wiki", "matched": 2, "downloaded": 1,
+                     "ok": False, "skipped": False},
+                ],
+            }), encoding="utf-8")
+            html_path = tmp_p / "report.html"
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "history-tail", "--html", str(html_path)],
+                )
+            finally:
+                os.chdir(old_cwd)
+            # Assertions inside the with-block so the temp dir still exists.
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertIn("gen_history_tail_html_path=", result.stdout)
+            self.assertTrue(html_path.exists())
+            body = html_path.read_text(encoding="utf-8")
+            self.assertIn("<!doctype html>", body)
+            self.assertIn("met", body)
+            self.assertIn("wiki", body)
+            self.assertIn("FAW Scout History Tail", body)
+
     def test_history_tail_compact_emits_single_line(self) -> None:
         """v1.37.s207: --compact single-line JSON for history-tail."""
         import tempfile, os, json as _json

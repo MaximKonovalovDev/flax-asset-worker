@@ -3714,6 +3714,26 @@ def history_tail_cmd(
             ),
         ),
     ] = "",
+    html_out: Annotated[
+        Path,
+        typer.Option(
+            "--html",
+            help=(
+                "v1.40.s223: write standalone HTML report (CSS bars per"
+                " provider showing ok_rate). Preempts JSON/text."
+            ),
+        ),
+    ] = Path(""),
+    open_html: Annotated[
+        bool,
+        typer.Option(
+            "--open",
+            help=(
+                "v1.40.s223: when used with --html, auto-open in system"
+                " browser. No-op without --html."
+            ),
+        ),
+    ] = False,
     compact: Annotated[
         bool,
         typer.Option(
@@ -3817,6 +3837,86 @@ def history_tail_cmd(
         "providers_seen": len(summary),
         "providers": summary,
     }
+
+    # v1.40.s223 — HTML preempts JSON/text.
+    html_str = str(html_out)
+    if html_str and html_str != ".":
+        html_path = Path(html_str)
+        try:
+            html_path.parent.mkdir(parents=True, exist_ok=True)
+            rows_html: list[str] = []
+            for row in summary:
+                ok_pct = 100.0 * float(row["ok_rate"])
+                # Color-code ok_rate: green >=0.9, yellow 0.5-0.9, red <0.5.
+                if row["ok_rate"] >= 0.9:
+                    bar_color = "#2e7d32"
+                elif row["ok_rate"] >= 0.5:
+                    bar_color = "#f9a825"
+                else:
+                    bar_color = "#c62828"
+                rows_html.append(
+                    "<tr>"
+                    f"<td>{row['provider']}</td>"
+                    f"<td class='num'>{row['runs']}</td>"
+                    f"<td class='num'>{row['avg_matched']}</td>"
+                    f"<td class='num'>{row['avg_downloaded']}</td>"
+                    f"<td class='num'>{row['ok_rate']:.3f}</td>"
+                    f"<td><div class='bar' style='width:{ok_pct:.1f}%;"
+                    f"background:{bar_color}'></div></td>"
+                    f"<td class='num'>{row['skipped_count']}</td>"
+                    "</tr>"
+                )
+            html = (
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                "<title>FAW History Tail</title>"
+                "<style>"
+                "body{font-family:system-ui,sans-serif;max-width:1100px;margin:2em auto;}"
+                "h1{margin-bottom:.2em}"
+                ".summary{color:#666;margin-bottom:1em}"
+                "table{border-collapse:collapse;width:100%}"
+                "th,td{padding:.4em .6em;border-bottom:1px solid #eee;text-align:left}"
+                "td.num{text-align:right;font-variant-numeric:tabular-nums}"
+                ".bar{height:14px;border-radius:2px}"
+                "</style></head><body>"
+                "<h1>FAW Scout History Tail</h1>"
+                "<p class='summary'>"
+                f"Runs aggregated: {runs_seen}"
+                + (f" (kind={kind_norm})" if kind_norm else "")
+                + (f" &middot; last {n}" if n > 0 else "")
+                + f" &middot; providers seen: {len(summary)}"
+                + "</p>"
+                "<table>"
+                "<thead><tr>"
+                "<th>Provider</th><th>Runs</th><th>Avg matched</th>"
+                "<th>Avg downloaded</th><th>OK rate</th>"
+                "<th>OK rate bar</th><th>Skipped</th>"
+                "</tr></thead><tbody>"
+                + "".join(rows_html)
+                + "</tbody></table>"
+                f"<p class='summary'>History root: <code>{history_root}</code></p>"
+                "</body></html>"
+            )
+            html_path.write_text(html, encoding="utf-8")
+        except Exception as exc:
+            print(f"gen_history_tail_error=html_write_failed: {exc}")
+            raise typer.Exit(code=1)
+        print(f"gen_history_tail_html_path={html_path}")
+        if open_html:
+            import platform
+            import subprocess
+            sys_name = platform.system().lower()
+            try:
+                if sys_name == "windows":
+                    import os
+                    os.startfile(str(html_path.resolve()))  # type: ignore[attr-defined]
+                elif sys_name == "darwin":
+                    subprocess.run(["open", str(html_path.resolve())], check=False)
+                else:
+                    subprocess.run(["xdg-open", str(html_path.resolve())], check=False)
+                print("gen_history_tail_html_opened=true")
+            except Exception as exc:
+                print(f"gen_history_tail_html_open_failed={exc}")
+        return
 
     if json_out:
         # v1.37.s207 — --compact emits single-line JSON.
