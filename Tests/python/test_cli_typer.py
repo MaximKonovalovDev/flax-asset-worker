@@ -641,6 +641,117 @@ class TyperCliSmokeTests(unittest.TestCase):
     # v1.58.s281 BIG-SLICE — 7 atomics (recipe.related_recipes + filters)
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # v1.58.s282 BIG-SLICE — 5 atomics (has-FIELD generic for providers)
+    # ------------------------------------------------------------------ #
+
+    def test_list_providers_filter_has_cli_true(self) -> None:
+        """s282 atomic-1: --filter has-cli:true matches all providers (all
+        carry cli column)."""
+        import json as _json
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "list-providers",
+             "--filter", "has-cli:true", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        # Every provider has a cli string -> all match.
+        self.assertGreaterEqual(data["total"], 12)
+        for p in data["providers"]:
+            self.assertTrue(p["cli"])
+
+    def test_list_providers_filter_has_license_true(self) -> None:
+        """s282 atomic-2: --filter has-license:true narrows to providers
+        with non-empty license."""
+        import json as _json
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "list-providers",
+             "--filter", "has-license:true", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        # All catalog providers have a license string; all should match.
+        for p in data["providers"]:
+            self.assertTrue(p["license"])
+            self.assertNotEqual(p["license"].strip(), "")
+
+    def test_list_providers_filter_has_env_var_true_keyed_only(self) -> None:
+        """s282 atomic-3: --filter has-env_var:true narrows to keyed providers."""
+        import json as _json
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "list-providers",
+             "--filter", "has-env_var:true", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        # Every keyed provider has env_var set; no-key providers (env_var=None)
+        # should not match.
+        for p in data["providers"]:
+            self.assertIsNotNone(p["env_var"])
+            self.assertTrue(p["env_var"].strip())
+
+    def test_list_recipes_filter_has_related_recipes_true(self) -> None:
+        """s282 atomic-4: --filter has-related_recipes:true narrows to recipes
+        with the field present."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "linked.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "linked", "game": "g1",
+                                "related_recipes": ["other"]},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "lonely.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "lonely", "game": "g1"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "has-related_recipes:true", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = {r["recipe_id"] for r in data["recipes"]}
+        self.assertEqual(ids, {"linked"})
+
+    def test_list_recipes_filter_has_related_recipes_false(self) -> None:
+        """s282 atomic-5: inverse — --filter has-related_recipes:false."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "linked.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "linked", "game": "g1",
+                                "related_recipes": ["other"]},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "lonely.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "lonely", "game": "g1"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "has-related_recipes:false", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = {r["recipe_id"] for r in data["recipes"]}
+        self.assertEqual(ids, {"lonely"})
+
     def test_recipe_related_recipes_surfaces_in_json(self) -> None:
         """s281 atomic-1: related_recipes list surfaces in list-recipes JSON +
         derived related_count == len of valid entries."""

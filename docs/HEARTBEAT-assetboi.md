@@ -1,10 +1,15 @@
 # HEARTBEAT — assetboi (operator hibernation read-back)
 
-> **Last update:** 2026-05-14 (continuous loop, **334 commits + 322 tags
-> shipped this run** (origin), **1022 tests**; latest tag
-> v1.55.2-bigslice-bulk-hardening)
+> **Last update:** 2026-05-14 (continuous loop, **340 commits + 330 tags
+> shipped this run** (origin), **1053 tests**; latest tag
+> v1.58.2-bigslice-provider-has-field-filter)
 > **Repo:** `flax-asset-worker` (this repo; assetboi commits freely here)
 > **Loop status:** ETERNAL + lane-E BIG-SLICE-MANDATE active
+>
+> v1.58 ships in flight: recipe.related_recipes cross-recipe discovery
+> graph (s281) + generic has-FIELD filter for gen list-providers (s282).
+> RELEASE_NOTES_v1.40_v1.57.md covers the 18-wave HTML/CSV/filter polish
+> block. v2.3 scope (FMOD+DLSS) acknowledged separate-repo per ADR-024.
 
 ## TL;DR — top-of-loop milestone (v1.55.2)
 

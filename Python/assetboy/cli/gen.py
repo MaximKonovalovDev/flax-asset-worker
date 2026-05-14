@@ -3903,6 +3903,18 @@ def list_providers_cmd(
             # 'public domain', 'unsplash', 'pexels', etc.
             lic = str(provider.get("license", "")).lower()
             return value.strip().lower() in lic
+        # v1.58.s282 — generic has-FIELD:true/false presence test for
+        # any provider field. Mirrors list-recipes pattern (v1.33.s199).
+        if field_name.startswith("has-") or field_name.startswith("has_"):
+            target = field_name[4:].strip().lower()
+            wanted_present = value.strip().lower() in ("true", "yes", "1")
+            val = provider.get(target)
+            is_present = (
+                val is not None and (
+                    not isinstance(val, str) or val.strip() != ""
+                )
+            )
+            return is_present is wanted_present
         return False  # unknown field -> never matches
 
     if parsed_filters:
