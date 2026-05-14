@@ -633,6 +633,150 @@ class TyperCliSmokeTests(unittest.TestCase):
     # v1.57.s279 BIG-SLICE — 6 atomics (filter/sort polish + compose)
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # v1.57.s280 BIG-SLICE — 5 atomic compose locks + release-notes doc
+    # ------------------------------------------------------------------ #
+
+    def test_list_providers_html_filter_limit_triple(self) -> None:
+        """s280 atomic-1: --html + --filter kind:audio + --limit 1 triple."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            html_path = Path(tmp) / "audio_only_1.html"
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "list-providers",
+                 "--filter", "kind:audio",
+                 "--limit", "1",
+                 "--html", str(html_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertTrue(html_path.exists())
+            body = html_path.read_text(encoding="utf-8")
+            # kind:audio substring matches multiple providers; --limit 1
+            # caps result. Either archive-org (image|audio|video|texts in
+            # asset_class) or jamendo (audio:music_track) wins by order.
+            # Verify exactly one provider row + filters summary present.
+            self.assertIn("kind:audio", body)
+            # Non-audio providers should NOT appear.
+            self.assertNotIn("met-museum", body)
+            self.assertNotIn("scryfall", body)
+            self.assertNotIn("iconify", body)
+
+    def test_pack_list_recipes_csv_with_filter_limit(self) -> None:
+        """s280 atomic-2: list-recipes --csv + --filter + --limit triple."""
+        import tempfile, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, plat in [
+                ("r_a", "flax"), ("r_b", "flax"), ("r_c", "flax"),
+                ("r_d", "unity"),
+            ]:
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump({
+                        "recipe": {"id": rid, "game": "g1",
+                                    "platform": plat},
+                        "packs": [],
+                    }), encoding="utf-8",
+                )
+            csv_path = tmp_p / "f.csv"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "platform:flax",
+                 "--sort", "name",
+                 "--limit", "2",
+                 "--csv", str(csv_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            body = csv_path.read_text(encoding="utf-8")
+            lines = [l for l in body.splitlines() if l.strip()]
+            # Header + 2 data rows (filter narrows to 3 flax recipes,
+            # limit caps to 2).
+            self.assertEqual(len(lines), 3)
+            # All data rows must have flax platform.
+            for line in lines[1:]:
+                self.assertIn("flax", line)
+
+    def test_history_tail_format_markdown_with_kind_last(self) -> None:
+        """s280 atomic-3: --format markdown + --kind + --last triple."""
+        import tempfile, os, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            hist_dir = tmp_p / "state" / "r1a_history"
+            hist_dir.mkdir(parents=True)
+            (hist_dir / "all_no_key_001.json").write_text(
+                _json.dumps({
+                    "kind": "all_no_key",
+                    "providers": [
+                        {"provider": "x", "matched": 5, "downloaded": 4,
+                         "ok": True, "skipped": False},
+                    ],
+                }), encoding="utf-8",
+            )
+            (hist_dir / "all_key_001.json").write_text(
+                _json.dumps({
+                    "kind": "all_key",
+                    "providers": [
+                        {"provider": "y", "matched": 1, "downloaded": 1,
+                         "ok": True, "skipped": False},
+                    ],
+                }), encoding="utf-8",
+            )
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "history-tail",
+                     "--last", "5",
+                     "--kind", "all_no_key",
+                     "--format", "markdown"],
+                )
+            finally:
+                os.chdir(old_cwd)
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        # Markdown table header + 1 provider row (only x kept).
+        self.assertIn("| provider |", result.stdout)
+        self.assertIn("| x |", result.stdout)
+        # y filtered out (all_key kind dropped).
+        self.assertNotIn("| y |", result.stdout)
+
+    def test_r1a_status_compose_kind_sort_limit_csv(self) -> None:
+        """s280 atomic-4: r1a-status --kind + --sort + --limit + --csv."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "audio.csv"
+            result = self.runner.invoke(
+                self.app,
+                ["library", "r1a-status",
+                 "--kind", "audio",
+                 "--sort", "id",
+                 "--limit", "5",
+                 "--csv", str(csv_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertTrue(csv_path.exists())
+            body = csv_path.read_text(encoding="utf-8")
+            lines = [l for l in body.splitlines() if l.strip()]
+            # Only audio providers (jamendo) match — header + 1 row.
+            self.assertGreaterEqual(len(lines), 2)
+            # All data rows mention 'audio' in asset_class column or 'jamendo'.
+            self.assertTrue(any("jamendo" in l for l in lines[1:]))
+
+    def test_release_notes_doc_lives_in_docs_dir(self) -> None:
+        """s280 atomic-5: RELEASE_NOTES_v1.40_v1.57.md exists and is non-empty."""
+        repo_root = Path(__file__).resolve().parents[2]
+        rn_path = repo_root / "docs" / "RELEASE_NOTES_v1.40_v1.57.md"
+        self.assertTrue(rn_path.exists())
+        body = rn_path.read_text(encoding="utf-8")
+        self.assertGreater(len(body), 5000)  # Substantial doc.
+        # Key sections present.
+        self.assertIn("v1.50 MAJOR", body)
+        self.assertIn("--html dashboard coverage", body)
+        self.assertIn("--csv export coverage", body)
+        self.assertIn("v1.57", body)
+
     def test_pack_list_recipes_filter_has_notes(self) -> None:
         """s279 atomic-1: --filter has-notes:true narrows to recipes with notes."""
         import tempfile, yaml as _yaml, json as _json

@@ -13,6 +13,7 @@
 | "What changed in the v1.10-v1.11 wave?" | `RELEASE_NOTES_v1.10_v1.11.md` |
 | "What changed in waves v1.12-v1.20?" | `RELEASE_NOTES_v1.12_v1.20.md` |
 | "What changed in waves v1.21-v1.39?" | `RELEASE_NOTES_v1.21_v1.39.md` |
+| "What changed in waves v1.40-v1.57?" | `RELEASE_NOTES_v1.40_v1.57.md` |
 | "How do I get started as operator?" | `SETUP.md` |
 | "What providers are available?" | `RELEASE_NOTES_v1.10_v1.11.md` table at top |
 | "How do I write a recipe?" | `RECIPE_SCHEMA.md` |
@@ -84,7 +85,8 @@ docs/
   RECIPE_SCHEMA.md                       authoritative recipe schema
   RELEASE_NOTES_v1.10_v1.11.md           R1A wave canonical reference
   RELEASE_NOTES_v1.12_v1.20.md           9-wave post-R1A summary
-  RELEASE_NOTES_v1.21_v1.39.md           19-wave continuous-loop summary (latest)
+  RELEASE_NOTES_v1.21_v1.39.md           19-wave continuous-loop summary
+  RELEASE_NOTES_v1.40_v1.57.md           18-wave HTML/CSV/filter summary (latest)
   COMMIT_READY-assetboi.md               slice-by-slice append-only ledger
   PATH_B_DAY11_PLAN.md                   backlog organization (older)
   MEGA_TOOL_DISPATCH.md                  Lane E broker dispatch contract (flax-mcp side)
