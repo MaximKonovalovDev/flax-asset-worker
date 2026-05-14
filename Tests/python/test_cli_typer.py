@@ -3097,6 +3097,41 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertNotIn("rawg", names)
         self.assertNotIn("jamendo", names)
 
+    def test_all_no_key_html_writes_report(self) -> None:
+        """v1.48.s255: --html writes standalone fan-out report."""
+        from unittest.mock import patch
+        from assetboy.execution.met_museum_runner import MetMuseumResult
+        from assetboy.execution.iconify_runner import IconifyResult
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            html_path = Path(tmp) / "fanout.html"
+            with patch(
+                "assetboy.execution.met_museum_runner.run_met_museum_batch",
+                return_value=MetMuseumResult(
+                    pack_id="x", query="q", output_dir=Path(tmp), ok=True,
+                ),
+            ), patch(
+                "assetboy.execution.iconify_runner.run_iconify_batch",
+                return_value=IconifyResult(
+                    pack_id="x", query="q", output_dir=Path(tmp), ok=True,
+                ),
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "all-no-key", "--query", "test",
+                     "--provider", "met_museum,iconify",
+                     "--dry-run", "--html", str(html_path)],
+                )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertIn("gen_all_no_key_html_path=", result.stdout)
+            self.assertTrue(html_path.exists())
+            body = html_path.read_text(encoding="utf-8")
+            self.assertIn("<!doctype html>", body)
+            self.assertIn("FAW Fan-out (no-key R1A providers)", body)
+            self.assertIn("met_museum", body)
+            self.assertIn("iconify", body)
+
     def test_all_no_key_compact_emits_single_line(self) -> None:
         """v1.35.s203: --compact single-line JSON for all-no-key."""
         from unittest.mock import patch

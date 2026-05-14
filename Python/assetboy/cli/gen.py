@@ -2597,6 +2597,25 @@ def all_no_key_cmd(
             ),
         ),
     ] = 0,
+    html_out: Annotated[
+        Path,
+        typer.Option(
+            "--html",
+            help=(
+                "v1.48.s255: write standalone HTML fan-out report"
+                " (per-provider status + matched/downloaded). Preempts JSON/text."
+            ),
+        ),
+    ] = Path(""),
+    open_html: Annotated[
+        bool,
+        typer.Option(
+            "--open",
+            help=(
+                "v1.48.s255: with --html, auto-open in system browser."
+            ),
+        ),
+    ] = False,
     compact: Annotated[
         bool,
         typer.Option(
@@ -2818,6 +2837,81 @@ def all_no_key_cmd(
             json.dumps(history_record, indent=2), encoding="utf-8"
         )
         summary["history_path"] = str(history_path)
+
+    # v1.48.s255 — HTML preempts JSON/text.
+    html_str = str(html_out)
+    if html_str and html_str != ".":
+        html_path = Path(html_str)
+        try:
+            html_path.parent.mkdir(parents=True, exist_ok=True)
+            rows_html: list[str] = []
+            for p in providers_run:
+                if p.get("ok"):
+                    status_class = "b-green"; status_text = "ok"
+                else:
+                    status_class = "b-red"; status_text = "failed"
+                rows_html.append(
+                    "<tr>"
+                    f"<td>{p.get('provider','?')}</td>"
+                    f"<td><span class='{status_class}'>{status_text}</span></td>"
+                    f"<td class='num'>{int(p.get('matched',0) or 0)}</td>"
+                    f"<td class='num'>{int(p.get('downloaded',0) or 0)}</td>"
+                    f"<td>{p.get('error','') or ''}</td>"
+                    "</tr>"
+                )
+            html = (
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                "<title>FAW Fan-out (no-key)</title>"
+                "<style>"
+                "body{font-family:system-ui,sans-serif;max-width:1100px;margin:2em auto;}"
+                "h1{margin-bottom:.2em}"
+                ".summary{color:#666;margin-bottom:1em}"
+                "table{border-collapse:collapse;width:100%}"
+                "th,td{padding:.4em .6em;border-bottom:1px solid #eee;text-align:left}"
+                "td.num{text-align:right;font-variant-numeric:tabular-nums}"
+                ".b-green,.b-red{color:#fff;padding:2px 8px;"
+                "border-radius:3px;font-size:.8em}"
+                ".b-green{background:#2e7d32}"
+                ".b-red{background:#c62828}"
+                "</style></head><body>"
+                "<h1>FAW Fan-out (no-key R1A providers)</h1>"
+                "<p class='summary'>"
+                f"Query: <code>{query}</code> &middot; "
+                f"dry-run: {dry_run} &middot; parallel: {parallel} &middot; "
+                f"providers run: {summary['providers_run']} &middot; "
+                f"ok: {summary['providers_ok']}/{summary['providers_run']} &middot; "
+                f"total matched: {summary['total_matched']} &middot; "
+                f"total downloaded: {summary['total_downloaded']}"
+                "</p>"
+                "<table>"
+                "<thead><tr><th>Provider</th><th>Status</th>"
+                "<th>Matched</th><th>Downloaded</th><th>Error</th>"
+                "</tr></thead><tbody>"
+                + "".join(rows_html)
+                + "</tbody></table>"
+                "</body></html>"
+            )
+            html_path.write_text(html, encoding="utf-8")
+        except Exception as exc:
+            print(f"gen_all_no_key_error=html_write_failed: {exc}")
+            raise typer.Exit(code=1)
+        print(f"gen_all_no_key_html_path={html_path}")
+        if open_html:
+            import platform
+            import subprocess
+            sys_name = platform.system().lower()
+            try:
+                if sys_name == "windows":
+                    import os
+                    os.startfile(str(html_path.resolve()))  # type: ignore[attr-defined]
+                elif sys_name == "darwin":
+                    subprocess.run(["open", str(html_path.resolve())], check=False)
+                else:
+                    subprocess.run(["xdg-open", str(html_path.resolve())], check=False)
+                print("gen_all_no_key_html_opened=true")
+            except Exception as exc:
+                print(f"gen_all_no_key_html_open_failed={exc}")
+        return
 
     if json_out:
         # v1.35.s203 — --compact emits single-line JSON.
