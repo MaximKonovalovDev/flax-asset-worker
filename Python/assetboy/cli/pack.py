@@ -139,11 +139,22 @@ def list_recipes_cmd(
             help=(
                 "v1.59.s283: emit cross-recipe relation graph (built from"
                 " recipe.related_recipes fields) as JSON. Includes"
-                " out_edges, in_edges, dangling refs, orphans."
-                " Preempts --json/--csv/text."
+                " out_edges, in_edges, dangling refs, orphans, is_acyclic,"
+                " topo_order. Preempts --json/--csv/text."
             ),
         ),
     ] = False,
+    html_out: Annotated[
+        Path,
+        typer.Option(
+            "--html",
+            help=(
+                "v1.60.s285: when used with --graph, render the graph as"
+                " standalone HTML (edges table, orphans, dangling refs,"
+                " topo order, cycle badge). No effect without --graph."
+            ),
+        ),
+    ] = Path(""),
     compact: Annotated[
         bool,
         typer.Option(
@@ -547,6 +558,7 @@ def list_recipes_cmd(
         entries = entries[:limit]
 
     # v1.59.s283 — --graph emits cross-recipe adjacency map as JSON.
+    # v1.60.s285 — when --graph combined with --html, render HTML report.
     # Preempts --csv / --json / text. Uses pre-built _graph (built once
     # at parse time, before per-recipe scan). Always emits even if
     # entries filtered away (graph is a global view of the catalog).
@@ -557,8 +569,99 @@ def list_recipes_cmd(
             # alone without any graph-using filter).
             from assetboy.workflows.recipe_graph import build_graph
             _graph = build_graph(recipes_root)
-        json.dump(_graph.to_dict(),
-                  sys.stdout, indent=None if compact else 2)
+        gdict = _graph.to_dict()
+        # v1.60.s285 — HTML companion when --html path provided.
+        html_str = str(html_out) if "html_out" in locals() else ""
+        if html_str and html_str != ".":
+            html_path = Path(html_str)
+            try:
+                html_path.parent.mkdir(parents=True, exist_ok=True)
+                # Build edge rows + orphan/dangling lists.
+                edge_rows: list[str] = []
+                for src in sorted(_graph.all_ids):
+                    targets = sorted(_graph.out_edges.get(src, set()))
+                    if not targets:
+                        continue
+                    edge_rows.append(
+                        f"<tr><td><code>{html_escape(src)}</code></td>"
+                        f"<td>{html_escape(', '.join(targets))}</td></tr>"
+                    )
+                orphan_html = ", ".join(
+                    f"<code>{html_escape(o)}</code>"
+                    for o in sorted(_graph.orphans)
+                ) or "<em>none</em>"
+                dangling_rows: list[str] = []
+                for src, missing in sorted(_graph.dangling.items()):
+                    missing_html = ", ".join(
+                        f"<code>{html_escape(m)}</code>" for m in sorted(missing)
+                    )
+                    dangling_rows.append(
+                        f"<tr><td><code>{html_escape(src)}</code></td>"
+                        f"<td>{missing_html}</td></tr>"
+                    )
+                topo_html = (
+                    ", ".join(
+                        f"<code>{html_escape(t)}</code>"
+                        for t in (gdict.get("topo_order") or [])
+                    )
+                    if gdict.get("is_acyclic")
+                    else "<em class='b-red-text'>cycle detected — no topo order</em>"
+                )
+                acyclic_badge = (
+                    "<span class='b-green'>acyclic</span>"
+                    if gdict["is_acyclic"]
+                    else "<span class='b-red'>cyclic</span>"
+                )
+                html = (
+                    "<!doctype html><html><head><meta charset='utf-8'>"
+                    "<title>FAW Recipe Graph</title>"
+                    "<style>"
+                    "body{font-family:system-ui,sans-serif;max-width:1100px;"
+                    "margin:2em auto;}"
+                    "h1{margin-bottom:.2em}h2{margin-top:1.5em}"
+                    ".summary{color:#666;margin-bottom:1em}"
+                    "table{border-collapse:collapse;width:100%}"
+                    "th,td{padding:.4em .6em;border-bottom:1px solid #eee;"
+                    "text-align:left;vertical-align:top}"
+                    "code{background:#f5f5f5;padding:1px 4px;border-radius:2px;"
+                    "font-size:.9em}"
+                    ".b-green,.b-red{color:#fff;padding:2px 8px;"
+                    "border-radius:3px;font-size:.8em}"
+                    ".b-green{background:#2e7d32}"
+                    ".b-red{background:#c62828}"
+                    ".b-red-text{color:#c62828}"
+                    "</style></head><body>"
+                    "<h1>FAW Recipe Graph</h1>"
+                    "<p class='summary'>"
+                    f"Total recipes: {gdict['total_recipes']} &middot; "
+                    f"Edges: {gdict['total_edges']} &middot; "
+                    f"Dangling: {gdict['dangling_count']} &middot; "
+                    f"Orphans: {gdict['orphan_count']} &middot; "
+                    f"Status: {acyclic_badge}"
+                    "</p>"
+                    f"<h2>Topological order</h2><p>{topo_html}</p>"
+                    f"<h2>Edges ({gdict['total_edges']})</h2>"
+                    "<table><thead><tr><th>From</th><th>To</th></tr></thead>"
+                    f"<tbody>{''.join(edge_rows) or '<tr><td colspan=2><em>none</em></td></tr>'}</tbody></table>"
+                    f"<h2>Orphans ({gdict['orphan_count']})</h2><p>{orphan_html}</p>"
+                    f"<h2>Dangling references ({gdict['dangling_count']})</h2>"
+                    + (
+                        "<table><thead><tr><th>From</th><th>Missing targets</th>"
+                        "</tr></thead><tbody>"
+                        + "".join(dangling_rows)
+                        + "</tbody></table>"
+                        if dangling_rows else "<p><em>none</em></p>"
+                    )
+                    + "</body></html>"
+                )
+                html_path.write_text(html, encoding="utf-8")
+            except Exception as exc:
+                print(f"pack_list_recipes_error=html_write_failed: {exc}")
+                raise typer.Exit(code=1)
+            print(f"pack_list_recipes_graph_html_path={html_path}")
+            return
+
+        json.dump(gdict, sys.stdout, indent=None if compact else 2)
         sys.stdout.write("\n")
         return
 

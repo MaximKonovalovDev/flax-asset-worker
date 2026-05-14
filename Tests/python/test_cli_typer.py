@@ -653,6 +653,201 @@ class TyperCliSmokeTests(unittest.TestCase):
     # v1.59.s284 BIG-SLICE — 5 atomics (descendants/ancestors + compose)
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # v1.60.s285 BIG-SLICE — 8 atomics (graph HTML + cycle/topo helpers)
+    # ------------------------------------------------------------------ #
+
+    def test_recipe_graph_is_acyclic_linear_chain(self) -> None:
+        """s285 atomic-1: linear a->b->c->d is acyclic."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [
+                ("a", ["b"]), ("b", ["c"]), ("c", ["d"]), ("d", []),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            g = build_graph(tmp_p)
+        self.assertTrue(g.is_acyclic())
+
+    def test_recipe_graph_is_acyclic_detects_cycle(self) -> None:
+        """s285 atomic-2: cycle a->b->c->a flagged not-acyclic."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [
+                ("a", ["b"]), ("b", ["c"]), ("c", ["a"]),
+            ]:
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump({
+                        "recipe": {"id": rid, "game": "g1",
+                                    "related_recipes": rel},
+                        "packs": [],
+                    }), encoding="utf-8",
+                )
+            g = build_graph(tmp_p)
+        self.assertFalse(g.is_acyclic())
+
+    def test_recipe_graph_topological_sort_linear(self) -> None:
+        """s285 atomic-3: topo sort returns dependency-respecting order."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            # a -> b -> c -> d (so install a first, d last).
+            for rid, rel in [
+                ("a", ["b"]), ("b", ["c"]), ("c", ["d"]), ("d", []),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            g = build_graph(tmp_p)
+        order = g.topological_sort()
+        # In Kahn's, zero-in-degree first: only 'a' has no in. Then
+        # b, c, d in chain.
+        self.assertEqual(order, ["a", "b", "c", "d"])
+
+    def test_recipe_graph_topological_sort_returns_none_on_cycle(self) -> None:
+        """s285 atomic-4: cycle -> topo_sort returns None."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "a.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "a", "game": "g1",
+                                              "related_recipes": ["b"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "b.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "b", "game": "g1",
+                                              "related_recipes": ["a"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            g = build_graph(tmp_p)
+        self.assertIsNone(g.topological_sort())
+
+    def test_list_recipes_graph_json_includes_is_acyclic(self) -> None:
+        """s285 atomic-5: --graph JSON includes is_acyclic + topo_order."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "a.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "a", "game": "g1",
+                                              "related_recipes": ["b"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "b.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "b", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--graph"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        self.assertTrue(data["is_acyclic"])
+        self.assertEqual(data["topo_order"], ["a", "b"])
+
+    def test_list_recipes_graph_json_cycle_yields_null_topo(self) -> None:
+        """s285 atomic-6: --graph JSON shows is_acyclic=false + topo_order=null."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "a.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "a", "game": "g1",
+                                              "related_recipes": ["b"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "b.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "b", "game": "g1",
+                                              "related_recipes": ["a"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--graph"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        self.assertFalse(data["is_acyclic"])
+        self.assertIsNone(data["topo_order"])
+
+    def test_list_recipes_graph_html_renders_acyclic_badge(self) -> None:
+        """s285 atomic-7: --graph --html writes HTML with acyclic badge."""
+        import tempfile, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "a.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "a", "game": "g1",
+                                              "related_recipes": ["b"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "b.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "b", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            html_path = tmp_p / "graph.html"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--graph", "--html", str(html_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertIn("pack_list_recipes_graph_html_path=", result.stdout)
+            self.assertTrue(html_path.exists())
+            body = html_path.read_text(encoding="utf-8")
+            self.assertIn("FAW Recipe Graph", body)
+            self.assertIn("acyclic", body)  # badge text
+            # Topo order should include both nodes.
+            self.assertIn("<code>a</code>", body)
+            self.assertIn("<code>b</code>", body)
+
+    def test_list_recipes_graph_html_renders_cycle_warning(self) -> None:
+        """s285 atomic-8: --graph --html with cycle shows red badge + warning."""
+        import tempfile, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "x.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "x", "game": "g1",
+                                              "related_recipes": ["y"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "y.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "y", "game": "g1",
+                                              "related_recipes": ["x"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            html_path = tmp_p / "cycle.html"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--graph", "--html", str(html_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            body = html_path.read_text(encoding="utf-8")
+            self.assertIn("cyclic", body)
+            self.assertIn("cycle detected", body)
+
     def test_recipe_graph_descendants_transitive_closure(self) -> None:
         """s284 atomic-1: descendants() returns all reachable ids."""
         import tempfile, yaml as _yaml
