@@ -785,6 +785,23 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["total_packs"], 1)
         self.assertEqual(data["results"][0]["pack_id"], "P_ICN")
 
+    def test_pack_validate_all_html_writes_dashboard(self) -> None:
+        """v1.41.s234: --html writes per-recipe status dashboard."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            html_path = Path(tmp) / "validate.html"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "validate-all", "--html", str(html_path)],
+            )
+            # Either 0 (all pass) or 1 (errors). Verify file exists and has body.
+            self.assertIn(result.exit_code, (0, 1))
+            self.assertIn("pack_validate_all_html_path=", result.stdout)
+            self.assertTrue(html_path.exists())
+            body = html_path.read_text(encoding="utf-8")
+            self.assertIn("<!doctype html>", body)
+            self.assertIn("FAW Recipe Validation", body)
+
     def test_pack_validate_all_compact_emits_single_line(self) -> None:
         """v1.39.s216: --compact single-line JSON for validate-all."""
         result = self.runner.invoke(

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import sys
+from html import escape as html_escape  # v1.41.s234: HTML report rendering
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -1322,6 +1323,26 @@ def validate_all_cmd(
             help="Treat warnings as errors (exit 1 if any warning).",
         ),
     ] = False,
+    html_out: Annotated[
+        Path,
+        typer.Option(
+            "--html",
+            help=(
+                "v1.41.s234: write standalone HTML validation dashboard"
+                " (per-recipe status + drilldown to errors/warnings)."
+                " Preempts JSON/text."
+            ),
+        ),
+    ] = Path(""),
+    open_html: Annotated[
+        bool,
+        typer.Option(
+            "--open",
+            help=(
+                "v1.41.s234: with --html, auto-open in system browser."
+            ),
+        ),
+    ] = False,
     compact: Annotated[
         bool,
         typer.Option(
@@ -1386,6 +1407,102 @@ def validate_all_cmd(
                 "errors": result.errors,
                 "warnings": result.warnings,
             })
+
+    # v1.41.s234 — HTML dashboard preempts JSON/text.
+    html_str = str(html_out)
+    if html_str and html_str != ".":
+        html_path = Path(html_str)
+        try:
+            html_path.parent.mkdir(parents=True, exist_ok=True)
+            rows_html: list[str] = []
+            for entry in per_recipe:
+                status = entry.get("status", "?")
+                if status == "pass":
+                    status_class = "b-green"
+                elif status == "warn":
+                    status_class = "b-yellow"
+                else:
+                    status_class = "b-red"
+                errors_html = "".join(
+                    f"<li class='err'>{html_escape(str(e))}</li>"
+                    for e in (entry.get("errors") or [])
+                )
+                warnings_html = "".join(
+                    f"<li class='warn'>{html_escape(str(w))}</li>"
+                    for w in (entry.get("warnings") or [])
+                )
+                drilldown = ""
+                if errors_html or warnings_html:
+                    drilldown = (
+                        "<ul class='drill'>"
+                        + errors_html + warnings_html
+                        + "</ul>"
+                    )
+                rows_html.append(
+                    "<tr>"
+                    f"<td>{html_escape(str(entry.get('path','?')))}</td>"
+                    f"<td><span class='{status_class}'>{status}</span></td>"
+                    f"<td class='num'>{len(entry.get('errors') or [])}</td>"
+                    f"<td class='num'>{len(entry.get('warnings') or [])}</td>"
+                    f"<td>{drilldown}</td>"
+                    "</tr>"
+                )
+            html = (
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                "<title>FAW Validate-All</title>"
+                "<style>"
+                "body{font-family:system-ui,sans-serif;max-width:1100px;margin:2em auto;}"
+                "h1{margin-bottom:.2em}"
+                ".summary{color:#666;margin-bottom:1em}"
+                "table{border-collapse:collapse;width:100%}"
+                "th,td{padding:.4em .6em;border-bottom:1px solid #eee;"
+                "text-align:left;vertical-align:top}"
+                "td.num{text-align:right;font-variant-numeric:tabular-nums}"
+                ".b-green,.b-yellow,.b-red{color:#fff;padding:2px 8px;"
+                "border-radius:3px;font-size:.8em}"
+                ".b-green{background:#2e7d32}"
+                ".b-yellow{background:#f9a825;color:#000}"
+                ".b-red{background:#c62828}"
+                ".drill{margin:0;padding-left:1em;font-size:.85em}"
+                ".err{color:#c62828}"
+                ".warn{color:#f9a825}"
+                "</style></head><body>"
+                "<h1>FAW Recipe Validation</h1>"
+                "<p class='summary'>"
+                f"Total: {total} &middot; passed: {pass_count} &middot; "
+                f"failed: {error_count} &middot; with warnings: {warn_count}"
+                + (" &middot; strict mode" if strict else "")
+                + "</p>"
+                "<table>"
+                "<thead><tr><th>Recipe</th><th>Status</th>"
+                "<th>Errors</th><th>Warnings</th>"
+                "<th>Details</th></tr></thead>"
+                "<tbody>" + "".join(rows_html) + "</tbody></table>"
+                "</body></html>"
+            )
+            html_path.write_text(html, encoding="utf-8")
+        except Exception as exc:
+            print(f"pack_validate_all_error=html_write_failed: {exc}")
+            raise typer.Exit(code=1)
+        print(f"pack_validate_all_html_path={html_path}")
+        if open_html:
+            import platform
+            import subprocess
+            sys_name = platform.system().lower()
+            try:
+                if sys_name == "windows":
+                    import os
+                    os.startfile(str(html_path.resolve()))  # type: ignore[attr-defined]
+                elif sys_name == "darwin":
+                    subprocess.run(["open", str(html_path.resolve())], check=False)
+                else:
+                    subprocess.run(["xdg-open", str(html_path.resolve())], check=False)
+                print("pack_validate_all_html_opened=true")
+            except Exception as exc:
+                print(f"pack_validate_all_html_open_failed={exc}")
+        if not aggregate_ok:
+            raise typer.Exit(code=1)
+        return
 
     if json_out:
         json.dump(
