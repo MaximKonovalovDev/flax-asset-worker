@@ -122,6 +122,16 @@ def list_recipes_cmd(
             ),
         ),
     ] = 0,
+    csv_out: Annotated[
+        Path,
+        typer.Option(
+            "--csv",
+            help=(
+                "v1.55.s275: export recipe catalog as CSV (header:"
+                " path,game,recipe_id,pack_count,min_tier). Mutex with --json."
+            ),
+        ),
+    ] = Path(""),
     compact: Annotated[
         bool,
         typer.Option(
@@ -419,6 +429,32 @@ def list_recipes_cmd(
     # v1.53.s270 — --limit caps output after filter+sort+reverse.
     if limit > 0 and len(entries) > limit:
         entries = entries[:limit]
+
+    # v1.55.s275 — --csv preempts JSON/text.
+    csv_str = str(csv_out)
+    if csv_str and csv_str != ".":
+        import csv as _csv
+        csv_path = Path(csv_str)
+        try:
+            csv_path.parent.mkdir(parents=True, exist_ok=True)
+            with csv_path.open("w", encoding="utf-8", newline="") as fh:
+                w = _csv.writer(fh)
+                w.writerow(["path", "game", "recipe_id", "pack_count",
+                             "min_tier"])
+                for e in entries:
+                    w.writerow([
+                        str(e.get("path", "")),
+                        str(e.get("game", "")),
+                        str(e.get("recipe_id", "")),
+                        int(e.get("pack_count", 0) or 0),
+                        e.get("min_tier", ""),
+                    ])
+        except Exception as exc:
+            print(f"pack_list_recipes_error=csv_write_failed: {exc}")
+            raise typer.Exit(code=1)
+        print(f"pack_list_recipes_csv_path={csv_path}")
+        print(f"pack_list_recipes_csv_rows={len(entries)}")
+        return
 
     if json_out:
         out = {

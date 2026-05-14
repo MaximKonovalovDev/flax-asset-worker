@@ -411,6 +411,36 @@ class TyperCliSmokeTests(unittest.TestCase):
             # No ledger on disk for this pack id => no last_run_utc.
             self.assertNotIn("last_run_utc", r1)
 
+    def test_pack_list_recipes_csv_writes_catalog(self) -> None:
+        """v1.55.s275: --csv writes recipe catalog with header + rows."""
+        import tempfile, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "r_a.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "r_a", "game": "g1"},
+                    "packs": [{"id": "P_A", "provider": "iconify",
+                                "acquisition_method": "direct_url",
+                                "search_terms": ["x"]}],
+                }), encoding="utf-8",
+            )
+            csv_path = tmp_p / "recipes.csv"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--csv", str(csv_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertIn("pack_list_recipes_csv_path=", result.stdout)
+            self.assertTrue(csv_path.exists())
+            body = csv_path.read_text(encoding="utf-8")
+            lines = [l for l in body.splitlines() if l.strip()]
+            # Header + 1 data row.
+            self.assertEqual(len(lines), 2)
+            self.assertIn("path,game,recipe_id", lines[0])
+            self.assertIn("r_a", lines[1])
+
     def test_pack_list_recipes_limit_caps_output(self) -> None:
         """v1.53.s270: --limit 2 caps to first 2 recipes (after sort)."""
         import tempfile, json as _json, yaml as _yaml
