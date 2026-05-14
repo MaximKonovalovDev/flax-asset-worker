@@ -257,5 +257,69 @@ class RawgRunnerTests(unittest.TestCase):
         self.assertIn("search_failed", result.error or "")
 
 
+class RawgMinRatingTests(unittest.TestCase):
+    """v1.43.s242 — min_rating filter on RAWG rating field."""
+
+    def setUp(self) -> None:
+        from assetboy.execution import rawg_runner
+        self.mod = rawg_runner
+
+    def test_min_rating_drops_low_rated_games(self) -> None:
+        """min_rating=4.0 drops games with rating<4.0."""
+        search = _json_response({
+            "results": [
+                {"id": 1, "name": "Mid Game", "slug": "mid",
+                 "rating": 3.2, "background_image": "https://x/1.jpg",
+                 "short_screenshots": []},
+                {"id": 2, "name": "Great Game", "slug": "great",
+                 "rating": 4.5, "background_image": "https://x/2.jpg",
+                 "short_screenshots": []},
+            ],
+        })
+        blob = _binary_response(b"fakejpg")
+        responses = iter([search, blob])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(
+                self.mod.urllib.request, "urlopen",
+                side_effect=lambda *a, **kw: next(responses),
+            ):
+                with patch.object(self.mod.time, "sleep"):
+                    result = self.mod.run_rawg_games_batch(
+                        query="x", api_key="k", pack_id="R",
+                        count=5,
+                        include_screenshots=False,
+                        min_rating=4.0,
+                        output_dir=Path(tmp),
+                    )
+        self.assertTrue(result.ok)
+        self.assertEqual(result.games_downloaded, 1)
+
+    def test_min_rating_zero_keeps_all(self) -> None:
+        search = _json_response({
+            "results": [
+                {"id": 1, "name": "Low", "slug": "low",
+                 "rating": 1.0, "background_image": "https://x/1.jpg",
+                 "short_screenshots": []},
+            ],
+        })
+        blob = _binary_response(b"fake")
+        responses = iter([search, blob])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(
+                self.mod.urllib.request, "urlopen",
+                side_effect=lambda *a, **kw: next(responses),
+            ):
+                with patch.object(self.mod.time, "sleep"):
+                    result = self.mod.run_rawg_games_batch(
+                        query="x", api_key="k", pack_id="R",
+                        count=5,
+                        include_screenshots=False,
+                        output_dir=Path(tmp),
+                    )
+        self.assertEqual(result.games_downloaded, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

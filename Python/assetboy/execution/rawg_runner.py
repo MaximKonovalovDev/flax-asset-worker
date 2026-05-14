@@ -148,6 +148,7 @@ def run_rawg_games_batch(
     max_screenshots_per_game: int = 3,
     genres: str | None = None,
     platforms: str | None = None,
+    min_rating: float = 0.0,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.15,
     dry_run: bool = False,
@@ -205,6 +206,14 @@ def run_rawg_games_batch(
             break
         if not isinstance(game, dict):
             continue
+        # v1.43.s242 — min_rating filter (RAWG 0.0-5.0 scale).
+        if min_rating > 0.0:
+            try:
+                rating = float(game.get("rating", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                rating = 0.0
+            if rating < min_rating:
+                continue
         game_id = game.get("id", "")
         name = str(game.get("name", "")) or f"game_{game_id}"
         slug = str(game.get("slug", ""))

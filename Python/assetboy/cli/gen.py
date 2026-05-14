@@ -2111,6 +2111,16 @@ def rawg_games_cmd(
             ),
         ),
     ] = "",
+    min_rating: Annotated[
+        float,
+        typer.Option(
+            "--min-rating",
+            help=(
+                "v1.43.s242: skip games whose RAWG rating < N (0.0-5.0)."
+                " 0.0 (default) = no filter."
+            ),
+        ),
+    ] = 0.0,
     max_screenshots: Annotated[
         int,
         typer.Option(
@@ -2152,6 +2162,7 @@ def rawg_games_cmd(
             max_screenshots_per_game=max_screenshots,
             genres=genres_arg,
             platforms=platforms_arg,
+            min_rating=min_rating,
             output_dir=out_dir_arg, dry_run=dry_run,
         )
     except Exception as exc:
