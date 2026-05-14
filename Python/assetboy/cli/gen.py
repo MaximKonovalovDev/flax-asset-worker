@@ -1975,6 +1975,26 @@ def pixabay_videos_cmd(
             ),
         ),
     ] = 0.0,
+    min_width: Annotated[
+        int,
+        typer.Option(
+            "--min-width",
+            help=(
+                "v1.42.s240: skip videos whose picked variant width < N px."
+                " 0 (default) = no filter."
+            ),
+        ),
+    ] = 0,
+    min_height: Annotated[
+        int,
+        typer.Option(
+            "--min-height",
+            help=(
+                "v1.42.s240: skip videos whose picked variant height < N px."
+                " 0 (default) = no filter."
+            ),
+        ),
+    ] = 0,
     pack_id: Annotated[str, typer.Option("--pack-id")] = "",
     output_dir: Annotated[Path, typer.Option("--output-dir")] = Path(""),
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
@@ -2001,6 +2021,8 @@ def pixabay_videos_cmd(
             query=query, pack_id=pack_id_arg, count=count, variant=variant,
             video_type=video_type_arg,
             min_duration_s=min_duration_s,
+            min_width=min_width,
+            min_height=min_height,
             output_dir=out_dir_arg, dry_run=dry_run,
         )
     except Exception as exc:

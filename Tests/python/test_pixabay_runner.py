@@ -339,6 +339,48 @@ class PixabayVideoRunnerTests(unittest.TestCase):
         self.assertEqual(result.items_downloaded, 1)
 
 
+class PixabayVideoMinDimsTests(unittest.TestCase):
+    """v1.42.s240 — min_width / min_height filter for picked video variant."""
+
+    def setUp(self) -> None:
+        from assetboy.execution import pixabay_runner
+        self.mod = pixabay_runner
+
+    def test_min_width_drops_narrow_variant(self) -> None:
+        # Two hits: one with medium=640x360 only, one with 1280x720.
+        search = _json_response({
+            "hits": [
+                {"id": 1, "tags": "x", "user": "u", "pageURL": "p",
+                 "duration": 10,
+                 "videos": {"medium": {"url": "https://v/1.mp4",
+                                        "width": 640, "height": 360,
+                                        "size": 100}}},
+                {"id": 2, "tags": "x", "user": "u", "pageURL": "p",
+                 "duration": 10,
+                 "videos": {"medium": {"url": "https://v/2.mp4",
+                                        "width": 1280, "height": 720,
+                                        "size": 200}}},
+            ],
+        })
+        blob = _binary_response(b"fake")
+        responses = iter([search, blob])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(
+                self.mod.urllib.request, "urlopen",
+                side_effect=lambda *a, **kw: next(responses),
+            ):
+                with patch.object(self.mod.time, "sleep"):
+                    result = self.mod.run_pixabay_video_batch(
+                        query="x", api_key="k", pack_id="V",
+                        count=5, variant="medium",
+                        min_width=1000,
+                        output_dir=Path(tmp),
+                    )
+        self.assertTrue(result.ok)
+        self.assertEqual(result.items_downloaded, 1)
+
+
 class PixabayPhotoMinDimsTests(unittest.TestCase):
     """v1.40.s227 — min_width / min_height post-filter for photos."""
 

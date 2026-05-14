@@ -371,6 +371,8 @@ def run_pixabay_video_batch(
     variant: str = "medium",
     video_type: str | None = None,
     min_duration_s: float = 0.0,
+    min_width: int = 0,
+    min_height: int = 0,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.2,
     dry_run: bool = False,
@@ -443,6 +445,13 @@ def run_pixabay_video_batch(
         if not vinfo or not vinfo.get("url"):
             result.items_failed += 1
             continue
+        # v1.42.s240 — min_width/min_height filter on picked variant.
+        if min_width > 0 or min_height > 0:
+            vw = int(vinfo.get("width", 0) or 0)
+            vh = int(vinfo.get("height", 0) or 0)
+            if (min_width > 0 and vw < min_width) or \
+               (min_height > 0 and vh < min_height):
+                continue
 
         hit_id = hit.get("id", "")
         suffix = ".mp4"
