@@ -1,15 +1,28 @@
 # HEARTBEAT — assetboi (operator hibernation read-back)
 
-> **Last update:** 2026-05-14 (continuous loop, **302 commits + 286 tags
-> shipped this run** (origin), **981 tests**; latest tag
-> v1.45.2-pack-honors-expected-max)
+> **Last update:** 2026-05-14 (continuous loop, **317 commits + 305 tags
+> shipped this run** (origin), **994 tests**; latest tag
+> v1.52.1-pack-diff-html)
 > **Repo:** `flax-asset-worker` (this repo; assetboi commits freely here)
-> **Loop status:** ETERNAL mode + BOSS-PING bidirectional comms active
+> **Loop status:** ETERNAL mode + lane-E Phase-A resumption + BOSS-PING
 
-## TL;DR — top-of-loop milestone (v1.45.2)
+## TL;DR — top-of-loop milestone (v1.52.1)
 
-**302 commits since baseline `0b1ad7d`, 286 tags pushed, 981 tests
-passing. 12 R1A providers + 18 HTTP endpoints + 32 wave milestones
+**317 commits since baseline `0b1ad7d`, 305 tags pushed, 994 tests
+passing. **v1.50 MAJOR** + **300-tag** + **990-test** milestones all
+crossed. 39 consecutive wave milestones (v1.13->v1.51 complete; v1.52
+in flight). 13 commands now carry --html dashboards covering every
+operator-facing surface: r1a-status / manifest-stats / history-tail /
+list-providers / validate-all / scout-by-license / all-no-key / all-key
+/ from-recipe / rerun-failed / iconify list-sets / met-museum
+departments / pack diff. 11 commands carry --compact JSON. License-
+family filter coverage (cc0 / pd / cc-by / cc-by-sa) on Wikimedia +
+Archive.org + Unsplash. Min-dim coverage (--min-width / --min-height)
+on 6 image providers + 2 video providers. Recipe schema: 10 optional
+metadata fields (genre, theme, style, tags, created_utc, updated_utc,
+author, contact, platform, engine_version, cost_minutes,
+expected_min_assets, expected_max_assets) + 4 derived (last_run_utc,
+min_tier, last_validated_utc, pipeline_log). 12 R1A providers + 18 HTTP endpoints + 32 wave milestones
 shipped (v1.10..v1.45 in flight; v1.44 complete). 32 consecutive
 waves (v1.13->v1.44) with 0 RULE violations. Recent waves: v1.42
 all-no-key/all-key --retry + history-tail --format csv|markdown +
