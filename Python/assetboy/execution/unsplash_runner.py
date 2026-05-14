@@ -162,6 +162,9 @@ def search_unsplash_photos(
     return list(payload.get("results", []))
 
 
+_VALID_UNSPLASH_LICENSE_FAMILIES = {"unsplash"}
+
+
 def run_unsplash_photo_batch(
     *,
     query: str,
@@ -173,6 +176,7 @@ def run_unsplash_photo_batch(
     collections: str | None = None,
     min_width: int = 0,
     min_height: int = 0,
+    license_filter: str | None = None,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.2,
     dry_run: bool = False,
@@ -211,6 +215,20 @@ def run_unsplash_photo_batch(
         pack_id=resolved_pack_id, query=query, output_dir=out_dir,
         dry_run=dry_run,
     )
+
+    # v1.44.s246 — license_filter validator. Unsplash photos are uniformly
+    # under "Unsplash License" (no CC family split in their API). The flag
+    # exists for API symmetry with other providers + operator intent check.
+    if license_filter and license_filter.strip():
+        lf = license_filter.strip().lower()
+        if lf not in _VALID_UNSPLASH_LICENSE_FAMILIES:
+            result.ok = False
+            result.error = (
+                f"invalid_license_filter: {license_filter!r}"
+                f" (valid: {sorted(_VALID_UNSPLASH_LICENSE_FAMILIES)};"
+                " Unsplash photos all carry the Unsplash License only)"
+            )
+            return result
 
     key = access_key or get_access_key()
     if not key:

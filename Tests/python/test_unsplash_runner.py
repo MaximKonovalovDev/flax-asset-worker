@@ -277,6 +277,54 @@ class UnsplashRunnerTests(unittest.TestCase):
         self.assertFalse(result)
 
 
+class UnsplashLicenseFilterTests(unittest.TestCase):
+    """v1.44.s246 — license_filter validator (Unsplash has one license family)."""
+
+    def setUp(self) -> None:
+        from assetboy.execution import unsplash_runner
+        self.mod = unsplash_runner
+
+    def test_license_filter_unsplash_passes(self) -> None:
+        """'unsplash' is the accepted token."""
+        search = _json_response({"results": []})
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(
+                self.mod.urllib.request, "urlopen", return_value=search,
+            ):
+                result = self.mod.run_unsplash_photo_batch(
+                    query="x", access_key="k", pack_id="L",
+                    count=1, license_filter="unsplash",
+                    output_dir=Path(tmp),
+                )
+        self.assertTrue(result.ok)
+        self.assertEqual(result.error, "no_matches")
+
+    def test_license_filter_unknown_fails_fast(self) -> None:
+        """Unknown license_filter rejects before any HTTP call."""
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self.mod.run_unsplash_photo_batch(
+                query="x", access_key="k", pack_id="L",
+                count=1, license_filter="cc-by-sa",
+                output_dir=Path(tmp),
+            )
+        self.assertFalse(result.ok)
+        self.assertIn("invalid_license_filter", result.error or "")
+
+    def test_license_filter_empty_no_op(self) -> None:
+        """Empty license_filter (default) is a no-op."""
+        search = _json_response({"results": []})
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(
+                self.mod.urllib.request, "urlopen", return_value=search,
+            ):
+                result = self.mod.run_unsplash_photo_batch(
+                    query="x", access_key="k", pack_id="L",
+                    count=1,
+                    output_dir=Path(tmp),
+                )
+        self.assertTrue(result.ok)
+
+
 class UnsplashMinDimsTests(unittest.TestCase):
     """v1.40.s228 — min_width / min_height post-filter."""
 

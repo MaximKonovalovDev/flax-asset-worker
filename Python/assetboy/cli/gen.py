@@ -2413,6 +2413,18 @@ def unsplash_photos_cmd(
             ),
         ),
     ] = 0,
+    license_filter: Annotated[
+        str,
+        typer.Option(
+            "--license",
+            help=(
+                "v1.44.s246: assert license family. Unsplash photos all"
+                " carry the Unsplash License only; accepted value is"
+                " 'unsplash' (or empty/default). Other values reject"
+                " the call to catch operator mistakes."
+            ),
+        ),
+    ] = "",
     pack_id: Annotated[str, typer.Option("--pack-id")] = "",
     output_dir: Annotated[Path, typer.Option("--output-dir")] = Path(""),
     skip_download_ping: Annotated[
@@ -2447,6 +2459,8 @@ def unsplash_photos_cmd(
     orientation_arg: str | None = orientation.strip().lower() if orientation.strip() else None
     collection_arg: str | None = collection.strip() or None  # v1.19.s133
 
+    license_filter_arg: str | None = license_filter.strip().lower() or None  # v1.44.s246
+
     try:
         result = run_unsplash_photo_batch(
             query=query, pack_id=pack_id_arg, count=count, variant=variant,
@@ -2454,6 +2468,7 @@ def unsplash_photos_cmd(
             collections=collection_arg,
             min_width=min_width,
             min_height=min_height,
+            license_filter=license_filter_arg,
             output_dir=out_dir_arg, dry_run=dry_run,
             skip_download_ping=skip_download_ping,
         )
