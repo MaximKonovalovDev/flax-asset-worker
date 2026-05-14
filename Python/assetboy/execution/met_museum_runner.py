@@ -133,6 +133,7 @@ def run_met_museum_batch(
     pack_id: str | None = None,
     count: int = 6,
     department_id: int | None = None,
+    has_images: bool = True,
     output_dir: str | Path | None = None,
     use_small_image: bool = False,
     polite_sleep_s: float = 0.2,
@@ -170,7 +171,7 @@ def run_met_museum_batch(
     # Step 1: search.
     try:
         object_ids = search_met_object_ids(
-            query, has_images=True, department_id=department_id
+            query, has_images=has_images, department_id=department_id
         )
     except (urllib.error.URLError, ValueError, TimeoutError) as exc:
         result.ok = False

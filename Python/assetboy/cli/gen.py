@@ -838,6 +838,17 @@ def met_fetch_cmd(
             help="Met department filter (e.g. 13=Greek/Roman, 11=European Paintings).",
         ),
     ] = -1,
+    no_images_only: Annotated[
+        bool,
+        typer.Option(
+            "--include-imageless",
+            help=(
+                "v1.43.s243: include search results that have NO downloadable"
+                " image (default OFF - only objects with images are returned)."
+                " Useful for mass-scanning the catalog."
+            ),
+        ),
+    ] = False,
     output_dir: Annotated[
         Path,
         typer.Option(
@@ -883,6 +894,7 @@ def met_fetch_cmd(
             pack_id=pack_id_arg,
             count=count,
             department_id=dep_id,
+            has_images=not no_images_only,  # v1.43.s243
             output_dir=out_dir_arg,
             use_small_image=small,
             dry_run=dry_run,

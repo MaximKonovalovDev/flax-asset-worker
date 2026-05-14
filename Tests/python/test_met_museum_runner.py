@@ -216,5 +216,44 @@ class MetMuseumRunnerTests(unittest.TestCase):
         self.assertEqual(result.error, "no_matches")
 
 
+class MetMuseumHasImagesTests(unittest.TestCase):
+    """v1.43.s243 — has_images toggle threaded to search."""
+
+    def setUp(self) -> None:
+        from assetboy.execution import met_museum_runner
+        self.mod = met_museum_runner
+
+    def test_has_images_false_passes_through_to_search(self) -> None:
+        """When has_images=False, search URL must NOT contain hasImages=true."""
+        captured: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured.append(str(req.full_url))
+            import io
+            return io.BytesIO(b'{"objectIDs": []}')
+
+        with patch.object(
+            self.mod.urllib.request, "urlopen", side_effect=capture
+        ):
+            self.mod.search_met_object_ids("x", has_images=False)
+        joined = " ".join(captured)
+        self.assertNotIn("hasImages=true", joined)
+
+    def test_has_images_true_adds_param(self) -> None:
+        captured: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured.append(str(req.full_url))
+            import io
+            return io.BytesIO(b'{"objectIDs": []}')
+
+        with patch.object(
+            self.mod.urllib.request, "urlopen", side_effect=capture
+        ):
+            self.mod.search_met_object_ids("x", has_images=True)
+        joined = " ".join(captured)
+        self.assertIn("hasImages=true", joined)
+
+
 if __name__ == "__main__":
     unittest.main()
