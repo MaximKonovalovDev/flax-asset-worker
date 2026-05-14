@@ -682,6 +682,67 @@ class TyperCliSmokeTests(unittest.TestCase):
     # backing surface + CLI graph JSON contract locks)
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # v1.63.s292 BIG-SLICE — 6 atomics (RECIPE_GRAPH.md doc + index)
+    # ------------------------------------------------------------------ #
+
+    def test_recipe_graph_doc_exists_and_substantial(self) -> None:
+        """s292 atomic-1: docs/RECIPE_GRAPH.md ships and is non-trivial."""
+        repo_root = Path(__file__).resolve().parents[2]
+        doc = repo_root / "docs" / "RECIPE_GRAPH.md"
+        self.assertTrue(doc.exists())
+        body = doc.read_text(encoding="utf-8")
+        self.assertGreater(len(body), 3000)  # Substantial reference
+
+    def test_recipe_graph_doc_mentions_all_graph_filters(self) -> None:
+        """s292 atomic-2: doc references all 10 graph-aware filters."""
+        repo_root = Path(__file__).resolve().parents[2]
+        body = (repo_root / "docs" / "RECIPE_GRAPH.md").read_text(
+            encoding="utf-8",
+        )
+        for f in [
+            "is-orphan", "has-dangling", "descendants-of", "ancestors-of",
+            "is-entry-point", "depth-from", "is-leaf",
+            "related-recipe", "related-count", "on-path",
+        ]:
+            self.assertIn(f, body, msg=f"doc missing filter: {f}")
+
+    def test_recipe_graph_doc_mentions_all_graph_sort_keys(self) -> None:
+        """s292 atomic-3: doc references all 4 graph-aware sort keys."""
+        repo_root = Path(__file__).resolve().parents[2]
+        body = (repo_root / "docs" / "RECIPE_GRAPH.md").read_text(
+            encoding="utf-8",
+        )
+        for k in ["topo", "depth", "in_degree", "out_degree"]:
+            self.assertIn(k, body, msg=f"doc missing sort key: {k}")
+
+    def test_recipe_graph_doc_mentions_http_endpoint(self) -> None:
+        """s292 atomic-4: doc references the /api/v1/library/recipe-graph endpoint."""
+        repo_root = Path(__file__).resolve().parents[2]
+        body = (repo_root / "docs" / "RECIPE_GRAPH.md").read_text(
+            encoding="utf-8",
+        )
+        self.assertIn("/api/v1/library/recipe-graph", body)
+
+    def test_recipe_graph_doc_listed_in_index(self) -> None:
+        """s292 atomic-5: _INDEX.md links to the new doc."""
+        repo_root = Path(__file__).resolve().parents[2]
+        body = (repo_root / "docs" / "_INDEX.md").read_text(encoding="utf-8")
+        self.assertIn("RECIPE_GRAPH.md", body)
+
+    def test_recipe_graph_doc_lists_all_module_methods(self) -> None:
+        """s292 atomic-6: doc mentions every public RecipeGraph method."""
+        repo_root = Path(__file__).resolve().parents[2]
+        body = (repo_root / "docs" / "RECIPE_GRAPH.md").read_text(
+            encoding="utf-8",
+        )
+        for m in [
+            "build_graph", "descendants", "ancestors", "depth_from",
+            "entry_points", "leaves", "is_acyclic", "topological_sort",
+            "max_depth", "path_between", "has_path", "to_dict",
+        ]:
+            self.assertIn(m, body, msg=f"doc missing method: {m}")
+
     def test_recipe_graph_json_contract_has_all_expected_keys(self) -> None:
         """s291 atomic-1: --graph JSON output has the keys C# HTTP handler
         expects (out_edges, in_edges, all_ids, dangling, orphans, etc)."""

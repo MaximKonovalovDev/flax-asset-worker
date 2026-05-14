@@ -17,6 +17,7 @@
 | "How do I get started as operator?" | `SETUP.md` |
 | "What providers are available?" | `RELEASE_NOTES_v1.10_v1.11.md` table at top |
 | "How do I write a recipe?" | `RECIPE_SCHEMA.md` |
+| "How do recipe dependencies / graphs work?" | `RECIPE_GRAPH.md` |
 | "What's the slice-by-slice history?" | `COMMIT_READY-assetboi.md` |
 
 ---
