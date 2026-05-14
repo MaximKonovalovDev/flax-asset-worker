@@ -673,6 +673,168 @@ class TyperCliSmokeTests(unittest.TestCase):
     # v1.62.s289 BIG-SLICE — 8 atomics (graph-aware sort keys)
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # v1.62.s290 BIG-SLICE — 7 atomics (path_between + on-path filter)
+    # ------------------------------------------------------------------ #
+
+    def test_recipe_graph_path_between_linear_chain(self) -> None:
+        """s290 atomic-1: path_between(a, c) on a->b->c returns [a, b, c]."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [("a", ["b"]), ("b", ["c"]), ("c", [])]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            g = build_graph(tmp_p)
+        self.assertEqual(g.path_between("a", "c"), ["a", "b", "c"])
+
+    def test_recipe_graph_path_between_unreachable_returns_none(self) -> None:
+        """s290 atomic-2: unreachable pair returns None."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "a.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "a", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "b.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "b", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            g = build_graph(tmp_p)
+        self.assertIsNone(g.path_between("a", "b"))
+        # Self-path returns [rid].
+        self.assertEqual(g.path_between("a", "a"), ["a"])
+        # Unknown id returns None.
+        self.assertIsNone(g.path_between("a", "zzz"))
+
+    def test_recipe_graph_path_between_diamond_shortest(self) -> None:
+        """s290 atomic-3: diamond a->b, a->c, b->d, c->d gives 3-step path."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [
+                ("a", ["b", "c"]), ("b", ["d"]), ("c", ["d"]), ("d", []),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            g = build_graph(tmp_p)
+        path = g.path_between("a", "d")
+        # Either [a, b, d] or [a, c, d] depending on BFS visit order;
+        # always length 3.
+        self.assertIsNotNone(path)
+        self.assertEqual(len(path), 3)
+        self.assertEqual(path[0], "a")
+        self.assertEqual(path[-1], "d")
+        self.assertIn(path[1], {"b", "c"})
+
+    def test_recipe_graph_has_path_asymmetric(self) -> None:
+        """s290 atomic-4: directed-graph has_path is asymmetric."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "a.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "a", "game": "g1",
+                                              "related_recipes": ["b"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "b.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "b", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            g = build_graph(tmp_p)
+        self.assertTrue(g.has_path("a", "b"))
+        self.assertFalse(g.has_path("b", "a"))
+
+    def test_list_recipes_filter_on_path_keeps_chain(self) -> None:
+        """s290 atomic-5: --filter on-path:a:c keeps {a, b, c}; side-recipe excluded."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            # Use 'side' (not 'aux'; aux.* is reserved on Windows).
+            for rid, rel in [
+                ("a", ["b"]), ("b", ["c"]), ("c", []), ("side", []),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "on-path:a:c", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = {r["recipe_id"] for r in data["recipes"]}
+        self.assertEqual(ids, {"a", "b", "c"})
+
+    def test_list_recipes_filter_on_path_unreachable_returns_empty(self) -> None:
+        """s290 atomic-6: unreachable on-path returns empty result."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "a.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "a", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "b.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "b", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "on-path:a:b", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        self.assertEqual(data["count"], 0)
+
+    def test_list_recipes_filter_on_path_self_loop_returns_single(self) -> None:
+        """s290 atomic-7: on-path:a:a returns just [a]."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "a.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "a", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "b.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "b", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "on-path:a:a", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = {r["recipe_id"] for r in data["recipes"]}
+        self.assertEqual(ids, {"a"})
+
     def test_list_recipes_sort_topo_linear_chain(self) -> None:
         """s289 atomic-1: --sort topo orders a->b->c as [a, b, c]."""
         import tempfile, yaml as _yaml, json as _json

@@ -217,7 +217,9 @@ def list_recipes_cmd(
                           "is-entry-point", "is_entry_point",
                           "depth-from", "depth_from",
                           # v1.61.s288 — leaf filter.
-                          "is-leaf", "is_leaf"}
+                          "is-leaf", "is_leaf",
+                          # v1.62.s290 — path filter.
+                          "on-path", "on_path"}
     # v1.62.s289 — graph-aware sort keys also trigger graph build.
     _graph_sort_keys = {"topo", "depth", "in_degree", "out_degree"}
     _sort_needs_graph = sort.strip().lower() in _graph_sort_keys
@@ -352,6 +354,24 @@ def list_recipes_cmd(
                 return not wanted
             is_ep = rid in _graph.entry_points()
             return is_ep is wanted
+        # v1.62.s290 — on-path:<src>:<dst> matches recipes on the BFS
+        # shortest path from <src> to <dst> (inclusive of endpoints).
+        if field_name in ("on-path", "on_path"):
+            if _graph is None or ":" not in value:
+                return False
+            src_id, _, dst_id = value.rpartition(":")
+            src_id = src_id.strip()
+            dst_id = dst_id.strip()
+            if not src_id or not dst_id:
+                return False
+            path = _graph.path_between(src_id, dst_id)
+            if path is None:
+                return False
+            recipe_d = doc.get("recipe") or {}
+            rid = recipe_d.get("id")
+            if not isinstance(rid, str):
+                return False
+            return rid in path
         # v1.61.s288 — is-leaf:bool matches terminal nodes with incoming
         # edges but no outgoing (or dangling) edges.
         if field_name in ("is-leaf", "is_leaf"):

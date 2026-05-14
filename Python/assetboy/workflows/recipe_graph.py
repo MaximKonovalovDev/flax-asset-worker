@@ -170,6 +170,41 @@ class RecipeGraph:
             and self.in_edges.get(rid)
         }
 
+    def path_between(self, src: str, dst: str) -> list[str] | None:
+        """v1.62.s290: BFS shortest path from src to dst along out_edges.
+
+        Returns list of ids from src to dst inclusive (e.g. ['a', 'b',
+        'c'] for chain a->b->c). Returns [src] when src == dst (in graph).
+        Returns None if unreachable or src/dst missing.
+        """
+        if src not in self.all_ids or dst not in self.all_ids:
+            return None
+        if src == dst:
+            return [src]
+        from collections import deque
+        # parent[child] = node we came from (BFS predecessor map).
+        parent: dict[str, str] = {src: src}  # src is its own parent (sentinel)
+        queue = deque([src])
+        while queue:
+            node = queue.popleft()
+            if node == dst:
+                # Reconstruct path.
+                path: list[str] = [dst]
+                while path[-1] != src:
+                    path.append(parent[path[-1]])
+                path.reverse()
+                return path
+            for neighbor in self.out_edges.get(node, set()):
+                if neighbor in parent:
+                    continue
+                parent[neighbor] = node
+                queue.append(neighbor)
+        return None
+
+    def has_path(self, src: str, dst: str) -> bool:
+        """v1.62.s290: True if a directed path exists from src to dst."""
+        return self.path_between(src, dst) is not None
+
     def max_depth(self) -> int | None:
         """v1.61.s288: longest path length in the DAG.
 
