@@ -1833,6 +1833,26 @@ def pixabay_photos_cmd(
             ),
         ),
     ] = "",
+    min_width: Annotated[
+        int,
+        typer.Option(
+            "--min-width",
+            help=(
+                "v1.40.s227: skip hits whose imageWidth < N px. 0"
+                " (default) = no filter. Client-side post-filter."
+            ),
+        ),
+    ] = 0,
+    min_height: Annotated[
+        int,
+        typer.Option(
+            "--min-height",
+            help=(
+                "v1.40.s227: skip hits whose imageHeight < N px. 0"
+                " (default) = no filter."
+            ),
+        ),
+    ] = 0,
     pack_id: Annotated[str, typer.Option("--pack-id")] = "",
     output_dir: Annotated[Path, typer.Option("--output-dir")] = Path(""),
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
@@ -1860,6 +1880,8 @@ def pixabay_photos_cmd(
             query=query, pack_id=pack_id_arg, count=count,
             image_type=image_type, variant=variant,
             orientation=orientation_arg,
+            min_width=min_width,
+            min_height=min_height,
             output_dir=out_dir_arg, dry_run=dry_run,
         )
     except Exception as exc:

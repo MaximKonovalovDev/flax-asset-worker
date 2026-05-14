@@ -202,6 +202,8 @@ def run_pixabay_photo_batch(
     image_type: str = "photo",
     variant: str = "largeImageURL",
     orientation: str | None = None,
+    min_width: int = 0,
+    min_height: int = 0,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.1,
     dry_run: bool = False,
@@ -269,6 +271,14 @@ def run_pixabay_photo_batch(
             break
         if not isinstance(hit, dict):
             continue
+        # v1.40.s227 — min_width / min_height post-filter (Pixabay reports
+        # imageWidth / imageHeight on hits).
+        if min_width > 0 or min_height > 0:
+            iw = int(hit.get("imageWidth", 0) or 0)
+            ih = int(hit.get("imageHeight", 0) or 0)
+            if (min_width > 0 and iw < min_width) or \
+               (min_height > 0 and ih < min_height):
+                continue
         # Try requested variant, fall back through descending sizes.
         image_url = None
         chosen_variant = None

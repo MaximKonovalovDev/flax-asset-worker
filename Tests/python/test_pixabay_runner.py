@@ -339,5 +339,68 @@ class PixabayVideoRunnerTests(unittest.TestCase):
         self.assertEqual(result.items_downloaded, 1)
 
 
+class PixabayPhotoMinDimsTests(unittest.TestCase):
+    """v1.40.s227 — min_width / min_height post-filter for photos."""
+
+    def setUp(self) -> None:
+        from assetboy.execution import pixabay_runner
+        self.mod = pixabay_runner
+
+    def test_min_width_filters_narrow_hits(self) -> None:
+        search = _json_response({
+            "hits": [
+                {"id": 1, "imageWidth": 640, "imageHeight": 480,
+                 "tags": "x", "user": "u", "pageURL": "p",
+                 "largeImageURL": "https://x/1.jpg"},
+                {"id": 2, "imageWidth": 1920, "imageHeight": 1080,
+                 "tags": "x", "user": "u", "pageURL": "p",
+                 "largeImageURL": "https://x/2.jpg"},
+            ],
+        })
+        blob = _binary_response(b"fake")
+        responses = iter([search, blob])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(
+                self.mod.urllib.request, "urlopen",
+                side_effect=lambda *a, **kw: next(responses),
+            ):
+                with patch.object(self.mod.time, "sleep"):
+                    result = self.mod.run_pixabay_photo_batch(
+                        query="x", api_key="k", pack_id="P",
+                        count=5, min_width=1500,
+                        output_dir=Path(tmp),
+                    )
+        self.assertTrue(result.ok)
+        self.assertEqual(result.items_downloaded, 1)
+
+    def test_min_height_filters_short_hits(self) -> None:
+        search = _json_response({
+            "hits": [
+                {"id": 1, "imageWidth": 1920, "imageHeight": 480,
+                 "tags": "x", "user": "u", "pageURL": "p",
+                 "largeImageURL": "https://x/1.jpg"},
+                {"id": 2, "imageWidth": 1920, "imageHeight": 1080,
+                 "tags": "x", "user": "u", "pageURL": "p",
+                 "largeImageURL": "https://x/2.jpg"},
+            ],
+        })
+        blob = _binary_response(b"fake")
+        responses = iter([search, blob])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(
+                self.mod.urllib.request, "urlopen",
+                side_effect=lambda *a, **kw: next(responses),
+            ):
+                with patch.object(self.mod.time, "sleep"):
+                    result = self.mod.run_pixabay_photo_batch(
+                        query="x", api_key="k", pack_id="P",
+                        count=5, min_height=900,
+                        output_dir=Path(tmp),
+                    )
+        self.assertEqual(result.items_downloaded, 1)
+
+
 if __name__ == "__main__":
     unittest.main()
