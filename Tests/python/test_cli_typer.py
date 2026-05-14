@@ -2202,6 +2202,84 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn("history_root_not_found", result.stdout)
 
+    def test_history_tail_format_csv(self) -> None:
+        """v1.42.s237: --format csv emits CSV header + per-provider rows."""
+        import tempfile, os, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            hist_dir = tmp_p / "state" / "r1a_history"
+            hist_dir.mkdir(parents=True)
+            (hist_dir / "all_no_key_001.json").write_text(_json.dumps({
+                "kind": "all_no_key",
+                "providers": [
+                    {"provider": "met", "matched": 5, "downloaded": 4,
+                     "ok": True, "skipped": False},
+                    {"provider": "wiki", "matched": 2, "downloaded": 1,
+                     "ok": False, "skipped": False},
+                ],
+            }), encoding="utf-8")
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "history-tail", "--format", "csv"],
+                )
+            finally:
+                os.chdir(old_cwd)
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        lines = [l for l in result.stdout.splitlines() if l.strip()]
+        self.assertEqual(lines[0],
+                         "provider,runs,avg_matched,avg_downloaded,ok_rate,skipped_count")
+        # 2 provider rows.
+        self.assertEqual(len(lines), 3)
+        self.assertTrue(any("met," in l for l in lines[1:]))
+        self.assertTrue(any("wiki," in l for l in lines[1:]))
+
+    def test_history_tail_format_markdown(self) -> None:
+        """v1.42.s237: --format markdown emits a markdown table."""
+        import tempfile, os, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            hist_dir = tmp_p / "state" / "r1a_history"
+            hist_dir.mkdir(parents=True)
+            (hist_dir / "all_no_key_001.json").write_text(_json.dumps({
+                "kind": "all_no_key",
+                "providers": [{"provider": "p", "matched": 1,
+                                "downloaded": 1, "ok": True,
+                                "skipped": False}],
+            }), encoding="utf-8")
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "history-tail", "--format", "markdown"],
+                )
+            finally:
+                os.chdir(old_cwd)
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        self.assertIn("| provider |", result.stdout)
+        self.assertIn("|---|", result.stdout)
+        self.assertIn("| p |", result.stdout)
+
+    def test_history_tail_format_unknown_exits_1(self) -> None:
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "state" / "r1a_history").mkdir(parents=True)
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "history-tail", "--format", "yaml"],
+                )
+            finally:
+                os.chdir(old_cwd)
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("unknown_format", result.stdout)
+
     def test_history_tail_html_writes_file(self) -> None:
         """v1.40.s223: --html writes standalone HTML report with ok_rate bars."""
         import tempfile, os, json as _json

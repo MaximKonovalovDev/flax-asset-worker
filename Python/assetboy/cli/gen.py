@@ -3999,6 +3999,17 @@ def history_tail_cmd(
             ),
         ),
     ] = False,
+    output_format: Annotated[
+        str,
+        typer.Option(
+            "--format",
+            help=(
+                "v1.42.s237: output format. 'text' (default) prints text"
+                " lines; 'csv' emits CSV rows to stdout; 'markdown' emits"
+                " a markdown table. Mutually exclusive with --html / --json."
+            ),
+        ),
+    ] = "text",
     compact: Annotated[
         bool,
         typer.Option(
@@ -4181,6 +4192,46 @@ def history_tail_cmd(
                 print("gen_history_tail_html_opened=true")
             except Exception as exc:
                 print(f"gen_history_tail_html_open_failed={exc}")
+        return
+
+    # v1.42.s237 — --format csv|markdown preempts JSON/text.
+    fmt = (output_format or "text").strip().lower()
+    if fmt not in {"text", "csv", "markdown", "md"}:
+        msg = (
+            f"unknown_format: {output_format!r}"
+            " (valid: 'text', 'csv', 'markdown')"
+        )
+        if json_out:
+            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(f"gen_history_tail_error={msg}")
+        raise typer.Exit(code=1)
+    if fmt == "csv":
+        # Header + per-provider row.
+        import csv as _csv
+        w = _csv.writer(sys.stdout)
+        w.writerow(["provider", "runs", "avg_matched",
+                     "avg_downloaded", "ok_rate", "skipped_count"])
+        for row in summary:
+            w.writerow([
+                row["provider"],
+                int(row["runs"]),
+                float(row["avg_matched"]),
+                float(row["avg_downloaded"]),
+                float(row["ok_rate"]),
+                int(row["skipped_count"]),
+            ])
+        return
+    if fmt in ("markdown", "md"):
+        print("| provider | runs | avg_matched | avg_downloaded | ok_rate | skipped |")
+        print("|---|---:|---:|---:|---:|---:|")
+        for row in summary:
+            print(
+                f"| {row['provider']} | {row['runs']} | "
+                f"{row['avg_matched']} | {row['avg_downloaded']} | "
+                f"{row['ok_rate']:.3f} | {row['skipped_count']} |"
+            )
         return
 
     if json_out:
