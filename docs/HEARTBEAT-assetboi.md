@@ -1,31 +1,33 @@
 # HEARTBEAT — assetboi (operator hibernation read-back)
 
-> **Last update:** 2026-05-14 (continuous loop, **288 commits + 274 tags
-> shipped this run** (origin), **956 tests**; latest tag
-> v1.42-WAVE-COMPLETE)
+> **Last update:** 2026-05-14 (continuous loop, **302 commits + 286 tags
+> shipped this run** (origin), **981 tests**; latest tag
+> v1.45.2-pack-honors-expected-max)
 > **Repo:** `flax-asset-worker` (this repo; assetboi commits freely here)
-> **Loop status:** ETERNAL mode active per BOSS v1.40 mandate
+> **Loop status:** ETERNAL mode + BOSS-PING bidirectional comms active
 
-## TL;DR — top-of-loop milestone (v1.42.3, eternal mode)
+## TL;DR — top-of-loop milestone (v1.45.2)
 
-**288 commits since baseline `0b1ad7d`, 274 tags pushed, 956 tests
-passing. 12 R1A providers + 18 HTTP endpoints + 30 wave milestones
-shipped (v1.10..v1.42 complete). 30 consecutive waves (v1.13->v1.42)
-with 0 RULE violations. Recent waves: v1.40 HTML/dashboard surface
-(manifest-stats/history-tail/list-providers --html) + provider depth
-(Iconify --style, Pexels/Pixabay/Unsplash --min-width/height,
-Archive.org --year-from/to); v1.41 list-recipes --since-days, recipe.
-engine_version metadata, validate-all --html; v1.42 all-no-key/all-key
---retry, history-tail --format csv|markdown. Surfaces: 11 commands
-with --compact, 5 commands with --html (r1a-status / manifest-stats /
-history-tail / list-providers / validate-all), recipe metadata fields
-(author, contact, platform, engine_version, cost_minutes, created_utc,
-updated_utc, last_run_utc derived).**
+**302 commits since baseline `0b1ad7d`, 286 tags pushed, 981 tests
+passing. 12 R1A providers + 18 HTTP endpoints + 32 wave milestones
+shipped (v1.10..v1.45 in flight; v1.44 complete). 32 consecutive
+waves (v1.13->v1.44) with 0 RULE violations. Recent waves: v1.42
+all-no-key/all-key --retry + history-tail --format csv|markdown +
+r1a-status --since-days + Pixabay/Pexels videos --min-width/height;
+v1.43 RAWG --min-rating + Met --include-imageless + Wikimedia
+--min-width/height (min-dim coverage complete); v1.44 Archive.org +
+Unsplash --license filter (license-family coverage complete); v1.45
+recipe.expected_max_assets + from-recipe runtime within_expected_max
+gate. Surfaces: 11 cmds with --compact, 5 cmds with --html, 6 image
+providers + 2 video providers carry --min-width/height, 3 providers
+carry --license family filter, recipe schema has 9 optional metadata
+fields + 4 derived/computed fields. BOSS-PING file+HTTP comms channel
+established (file-based works; HTTP-PING self-deadlocks documented).
+300-commit milestone hit. 950+960+970+980-test milestones all crossed.**
 
 Daemon restarted once mid-loop in earlier session (~30s downtime);
-buffer survived; loop resumed without intervention. Operator BOSS
-v1.40 mandate received and 16 slices shipped continuously across
-v1.40/v1.41/v1.42.
+buffer survived; loop resumed without intervention. BOSS-PING channel
+validated 2026-05-14 with first cross-channel ACK from operator.
 
 This is the single doc to read first if you (operator) just woke up.
 Everything else (PATH_B_DAY11_PLAN.md, COMMIT_READY-assetboi.md, README,
