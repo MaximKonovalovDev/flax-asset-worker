@@ -1,15 +1,18 @@
 # HEARTBEAT — assetboi (operator hibernation read-back)
 
-> **Last update:** 2026-05-14 (continuous loop, **340 commits + 330 tags
-> shipped this run** (origin), **1053 tests**; latest tag
-> v1.58.2-bigslice-provider-has-field-filter)
+> **Last update:** 2026-05-14 (continuous loop, **349 commits + 344 tags
+> shipped this run** (origin), **1117 tests**; latest tag
+> v1.63.1-bigslice-http-recipe-graph-endpoint)
 > **Repo:** `flax-asset-worker` (this repo; assetboi commits freely here)
 > **Loop status:** ETERNAL + lane-E BIG-SLICE-MANDATE active
 >
-> v1.58 ships in flight: recipe.related_recipes cross-recipe discovery
-> graph (s281) + generic has-FIELD filter for gen list-providers (s282).
-> RELEASE_NOTES_v1.40_v1.57.md covers the 18-wave HTML/CSV/filter polish
-> block. v2.3 scope (FMOD+DLSS) acknowledged separate-repo per ADR-024.
+> v1.62 wave-complete: 50-WAVE MILESTONE reached. Cross-recipe graph
+> analysis surface complete (s281-s290): build/dangling/orphans/
+> descendants/ancestors/acyclic/topo_sort/entry_points/depth_from/
+> leaves/max_depth/path_between/on-path filter/9 sort keys/HTML/CSV
+> rendering. v1.63 opens with HTTP endpoint /api/v1/library/recipe-graph
+> exposing graph as JSON (19 HTTP endpoints total). v2.3 scope
+> (FMOD+DLSS) acknowledged separate-repo per ADR-024.
 
 ## TL;DR — top-of-loop milestone (v1.55.2)
 

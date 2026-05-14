@@ -677,6 +677,206 @@ class TyperCliSmokeTests(unittest.TestCase):
     # v1.62.s290 BIG-SLICE — 7 atomics (path_between + on-path filter)
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # v1.63.s291 BIG-SLICE — 8 atomics (HTTP /library/recipe-graph endpoint
+    # backing surface + CLI graph JSON contract locks)
+    # ------------------------------------------------------------------ #
+
+    def test_recipe_graph_json_contract_has_all_expected_keys(self) -> None:
+        """s291 atomic-1: --graph JSON output has the keys C# HTTP handler
+        expects (out_edges, in_edges, all_ids, dangling, orphans, etc)."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "a.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "a", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--graph"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        # HTTP handler stamps success=true; CLI doesn't (added by C# wrapper).
+        # The CLI must emit all OTHER keys for the wrapper to surface.
+        for key in (
+            "out_edges", "in_edges", "all_ids", "dangling", "orphans",
+            "total_recipes", "total_edges", "dangling_count", "orphan_count",
+            "is_acyclic", "topo_order", "entry_points", "leaves", "max_depth",
+        ):
+            self.assertIn(key, data, msg=f"missing key: {key}")
+
+    def test_recipe_graph_json_compact_mode_is_single_line(self) -> None:
+        """s291 atomic-2: --graph --compact emits single-line JSON
+        (used by HTTP wrapper for safe stdout parsing)."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "a.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "a", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--graph", "--compact"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        stripped = result.stdout.strip()
+        # Single-line JSON has no newlines in the body.
+        # (Stdout might have a trailing newline; we strip.)
+        self.assertNotIn("\n", stripped)
+        data = _json.loads(stripped)
+        self.assertIn("all_ids", data)
+
+    def test_recipe_graph_json_empty_recipes_dir(self) -> None:
+        """s291 atomic-3: empty recipes dir -> graph with 0 ids."""
+        import tempfile, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--graph"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        self.assertEqual(data["total_recipes"], 0)
+        self.assertEqual(data["all_ids"], [])
+        self.assertEqual(data["total_edges"], 0)
+        # Empty graph is trivially acyclic.
+        self.assertTrue(data["is_acyclic"])
+        self.assertEqual(data["topo_order"], [])
+
+    def test_recipe_graph_json_missing_recipes_dir_returns_exit_1(self) -> None:
+        """s291 atomic-4: --recipes-root pointing nowhere -> exit 1."""
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmp:
+            missing_dir = Path(tmp) / "nonexistent"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes",
+                 "--recipes-root", str(missing_dir), "--graph"],
+            )
+        self.assertEqual(result.exit_code, 1)
+        # Must surface error key in output for HTTP wrapper to catch.
+        self.assertIn("error", result.stdout.lower())
+
+    def test_recipe_graph_json_topo_order_is_list_or_null(self) -> None:
+        """s291 atomic-5: topo_order is either a list or null (json-typed)."""
+        import tempfile, yaml as _yaml, json as _json
+        # Cycle case -> null.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "x.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "x", "game": "g1",
+                                              "related_recipes": ["y"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "y.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "y", "game": "g1",
+                                              "related_recipes": ["x"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--graph"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout)
+        # Cycle -> null.
+        self.assertIsNone(data["topo_order"])
+        # is_acyclic must be Boolean, not string.
+        self.assertIsInstance(data["is_acyclic"], bool)
+
+    def test_recipe_graph_json_max_depth_is_int_or_null(self) -> None:
+        """s291 atomic-6: max_depth is int (DAG) or null (cycle)."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [("a", ["b"]), ("b", [])]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--graph"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout)
+        # Two-node chain a->b has max_depth=1 (one edge).
+        self.assertEqual(data["max_depth"], 1)
+        self.assertIsInstance(data["max_depth"], int)
+
+    def test_recipe_graph_json_entry_points_leaves_are_sorted_lists(self) -> None:
+        """s291 atomic-7: entry_points + leaves emit sorted list[str]."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [
+                ("z_root", ["m"]), ("a_root", ["m"]),
+                ("m", ["z_leaf", "a_leaf"]),
+                ("z_leaf", []), ("a_leaf", []),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--graph"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout)
+        # Sorted lists for stable HTTP consumption.
+        self.assertEqual(data["entry_points"], sorted(data["entry_points"]))
+        self.assertEqual(data["leaves"], sorted(data["leaves"]))
+        # Content check.
+        self.assertEqual(data["entry_points"], ["a_root", "z_root"])
+        self.assertEqual(data["leaves"], ["a_leaf", "z_leaf"])
+
+    def test_recipe_graph_json_dangling_is_sorted_map(self) -> None:
+        """s291 atomic-8: dangling field is {referrer: [sorted targets]}."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "ref.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "ref", "game": "g1",
+                                "related_recipes": ["zzz_ghost", "aaa_ghost"]},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--graph"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout)
+        # Dangling targets are sorted lists (HTTP-stable).
+        self.assertEqual(
+            data["dangling"]["ref"],
+            ["aaa_ghost", "zzz_ghost"],
+        )
+
     def test_recipe_graph_path_between_linear_chain(self) -> None:
         """s290 atomic-1: path_between(a, c) on a->b->c returns [a, b, c]."""
         import tempfile, yaml as _yaml

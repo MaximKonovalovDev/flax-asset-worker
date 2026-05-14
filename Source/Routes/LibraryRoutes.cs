@@ -455,6 +455,61 @@ namespace FAW.Routes
             }
         }
 
+        /// <summary>
+        /// v1.63.s291: GET /api/v1/library/recipe-graph
+        /// Wraps `pack list-recipes --graph --json` to surface the
+        /// cross-recipe relation graph (built from recipe.related_recipes).
+        /// Query params:
+        ///   ?recipes_root=&lt;path&gt; (optional override)
+        /// Response: full graph dict with out_edges, in_edges, dangling,
+        /// orphans, is_acyclic, topo_order, entry_points, leaves, max_depth.
+        /// </summary>
+        public static async Task<JObject> HandleRecipeGraphAsync(HttpListenerContext ctx)
+        {
+            try
+            {
+                var recipesRoot = ctx.Request.QueryString["recipes_root"] ?? "";
+
+                var args = "-m assetboy.cli pack list-recipes --graph";
+                if (!string.IsNullOrWhiteSpace(recipesRoot))
+                    args += $" --recipes-root \"{recipesRoot}\"";
+
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "python",
+                    Arguments = args,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8,
+                };
+                var proc = new Process { StartInfo = psi };
+                proc.Start();
+                var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+                var stderrTask = proc.StandardError.ReadToEndAsync();
+                if (!proc.WaitForExit(15000))
+                {
+                    try { proc.Kill(); } catch { }
+                    return Error("timeout: recipe-graph took > 15s");
+                }
+                var stdout = await stdoutTask;
+                var stderr = await stderrTask;
+                if (proc.ExitCode != 0)
+                    return Error($"recipe_graph_failed: exit={proc.ExitCode} stderr={stderr}");
+                JObject parsed;
+                try { parsed = JObject.Parse(stdout); }
+                catch (Exception jx) { return Error($"recipe_graph_unparseable: {jx.Message}"); }
+                parsed["success"] = true;
+                return parsed;
+            }
+            catch (Exception exc)
+            {
+                return Error($"recipe_graph_crashed: {exc.Message}");
+            }
+        }
+
         private static JObject Error(string msg) => new JObject { ["success"] = false, ["error"] = msg };
     }
 }

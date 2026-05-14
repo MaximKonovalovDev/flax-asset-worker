@@ -148,6 +148,13 @@ namespace FAW.Core
                     // Query: ?last=N&kind=all_no_key|all_key
                     result = await LibraryRoutes.HandleHistoryTailAsync(ctx);
                 }
+                else if (path == "/api/v1/library/recipe-graph" && method == "GET")
+                {
+                    // v1.63.s291 — cross-recipe relation graph from
+                    // recipe.related_recipes fields.
+                    // Query: ?recipes_root=<path> (optional)
+                    result = await LibraryRoutes.HandleRecipeGraphAsync(ctx);
+                }
                 else if (path.StartsWith("/api/v1/library/asset/") && method == "GET")
                 {
                     // v1.6.s2: single-asset metadata lookup
