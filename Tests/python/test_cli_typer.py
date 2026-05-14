@@ -869,6 +869,25 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("total", data)
         self.assertIn("aggregate_ok", data)
 
+    def test_pack_rerun_failed_html_writes_dashboard(self) -> None:
+        """v1.50.s258: --html writes standalone rerun-failed dashboard."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            html_path = Path(tmp) / "rerun.html"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "rerun-failed",
+                 "--recipe", "sandbox/one_pack_smoke.yaml",
+                 "--dry-run", "--html", str(html_path)],
+            )
+            # 0 = no failures, 1 = some attempted.
+            self.assertIn(result.exit_code, (0, 1))
+            self.assertIn("pack_rerun_failed_html_path=", result.stdout)
+            self.assertTrue(html_path.exists())
+            body = html_path.read_text(encoding="utf-8")
+            self.assertIn("<!doctype html>", body)
+            self.assertIn("FAW Rerun Failed", body)
+
     def test_pack_rerun_failed_compact_emits_single_line(self) -> None:
         """v1.39.s217: --compact single-line JSON for rerun-failed."""
         result = self.runner.invoke(

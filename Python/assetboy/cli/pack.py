@@ -1861,6 +1861,25 @@ def rerun_failed_cmd(
         bool,
         typer.Option("--dry-run", help="Plan only; don't re-execute."),
     ] = False,
+    html_out: Annotated[
+        Path,
+        typer.Option(
+            "--html",
+            help=(
+                "v1.50.s258: write standalone HTML rerun report (per-pack"
+                " status: succeeded/failed/skipped). Preempts JSON/text."
+            ),
+        ),
+    ] = Path(""),
+    open_html: Annotated[
+        bool,
+        typer.Option(
+            "--open",
+            help=(
+                "v1.50.s258: with --html, auto-open in system browser."
+            ),
+        ),
+    ] = False,
     compact: Annotated[
         bool,
         typer.Option(
@@ -2060,6 +2079,91 @@ def rerun_failed_cmd(
         summary["expected_min_check"] = expected_status_r
     if min_passes_status_r is not None:
         summary["min_required_passes_check"] = min_passes_status_r
+
+    # v1.50.s258 — HTML preempts JSON/text.
+    html_str = str(html_out)
+    if html_str and html_str != ".":
+        html_path = Path(html_str)
+        try:
+            html_path.parent.mkdir(parents=True, exist_ok=True)
+            rows_html: list[str] = []
+            for r in results:
+                status = r.get("status", "?")
+                if status == "completed":
+                    status_class = "b-green"
+                elif status == "pending_manual_drop":
+                    status_class = "b-yellow"
+                else:
+                    status_class = "b-red"
+                pid = str(r.get("pack_id", "?"))
+                rows_html.append(
+                    "<tr>"
+                    f"<td>{html_escape(pid)}</td>"
+                    f"<td><span class='{status_class}'>{html_escape(status)}</span></td>"
+                    f"<td>{html_escape(str(r.get('current_state','?') or ''))}</td>"
+                    "</tr>"
+                )
+            deferred_rows = "".join(
+                f"<tr><td>{html_escape(pid)}</td>"
+                "<td><span class='b-grey'>deferred</span></td>"
+                "<td>(--max-attempts cap)</td></tr>"
+                for pid in deferred_ids
+            )
+            html = (
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                "<title>FAW Rerun Failed</title>"
+                "<style>"
+                "body{font-family:system-ui,sans-serif;max-width:1100px;margin:2em auto;}"
+                "h1{margin-bottom:.2em}"
+                ".summary{color:#666;margin-bottom:1em}"
+                "table{border-collapse:collapse;width:100%}"
+                "th,td{padding:.4em .6em;border-bottom:1px solid #eee;text-align:left}"
+                ".b-green,.b-yellow,.b-red,.b-grey{color:#fff;padding:2px 8px;"
+                "border-radius:3px;font-size:.8em}"
+                ".b-green{background:#2e7d32}"
+                ".b-yellow{background:#f9a825;color:#000}"
+                ".b-red{background:#c62828}"
+                ".b-grey{background:#9e9e9e}"
+                "</style></head><body>"
+                "<h1>FAW Rerun Failed</h1>"
+                "<p class='summary'>"
+                f"Recipe: <code>{html_escape(str(resolved))}</code> &middot; "
+                f"total failed (audit): {len(failed)} &middot; "
+                f"matched in recipe: {len(targets) + len(deferred_ids)} &middot; "
+                f"rerun succeeded: {re_success} &middot; "
+                f"rerun failed: {re_fail} &middot; "
+                f"deferred: {len(deferred_ids)}"
+                "</p>"
+                "<table>"
+                "<thead><tr><th>Pack id</th><th>Status</th>"
+                "<th>State / Notes</th></tr></thead>"
+                "<tbody>" + "".join(rows_html) + deferred_rows + "</tbody>"
+                "</table>"
+                "</body></html>"
+            )
+            html_path.write_text(html, encoding="utf-8")
+        except Exception as exc:
+            print(f"pack_rerun_failed_error=html_write_failed: {exc}")
+            raise typer.Exit(code=1)
+        print(f"pack_rerun_failed_html_path={html_path}")
+        if open_html:
+            import platform
+            import subprocess
+            sys_name = platform.system().lower()
+            try:
+                if sys_name == "windows":
+                    import os
+                    os.startfile(str(html_path.resolve()))  # type: ignore[attr-defined]
+                elif sys_name == "darwin":
+                    subprocess.run(["open", str(html_path.resolve())], check=False)
+                else:
+                    subprocess.run(["xdg-open", str(html_path.resolve())], check=False)
+                print("pack_rerun_failed_html_opened=true")
+            except Exception as exc:
+                print(f"pack_rerun_failed_html_open_failed={exc}")
+        if re_fail > 0:
+            raise typer.Exit(code=1)
+        return
 
     if json_out:
         # v1.39.s217 — --compact emits single-line JSON.
