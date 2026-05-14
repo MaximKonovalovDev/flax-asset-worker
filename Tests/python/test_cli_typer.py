@@ -4693,6 +4693,38 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("providers", data)
         self.assertIn("total", data)
 
+    def test_list_providers_sort_id_alpha(self) -> None:
+        """v1.53.s266: --sort id orders providers alphabetically."""
+        import json as _json
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "list-providers", "--sort", "id", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = [p["id"] for p in data["providers"]]
+        self.assertEqual(ids, sorted(ids))
+
+    def test_list_providers_sort_license_alpha(self) -> None:
+        """--sort license orders providers alphabetically by license string."""
+        import json as _json
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "list-providers", "--sort", "license", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout)
+        licenses = [p["license"].lower() for p in data["providers"]]
+        self.assertEqual(licenses, sorted(licenses))
+
+    def test_list_providers_sort_unknown_exits_1(self) -> None:
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "list-providers", "--sort", "weight", "--json"],
+        )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("unknown_sort", result.stdout)
+
     def test_list_providers_filter_license_cc0_narrows(self) -> None:
         """v1.52.s265: --filter license:cc0 narrows to CC0-license providers."""
         import json as _json

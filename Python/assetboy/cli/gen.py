@@ -3608,6 +3608,16 @@ def list_providers_cmd(
             ),
         ),
     ] = False,
+    sort_key: Annotated[
+        str,
+        typer.Option(
+            "--sort",
+            help=(
+                "v1.53.s266: sort providers by 'id' | 'license' | 'asset_class'"
+                " | 'env_var'. Default empty = catalog order."
+            ),
+        ),
+    ] = "",
     compact: Annotated[
         bool,
         typer.Option(
@@ -3794,6 +3804,34 @@ def list_providers_cmd(
             p for p in providers
             if all(_matches_filter(p, fn, fv) for fn, fv in parsed_filters)
         ]
+
+    # v1.53.s266 — --sort by id / license / asset_class / env_var.
+    sort_norm = sort_key.strip().lower() if sort_key else ""
+    if sort_norm:
+        valid_sorts = {"id", "license", "asset_class", "env_var"}
+        if sort_norm not in valid_sorts:
+            msg = (
+                f"unknown_sort: {sort_key!r}"
+                f" (valid: {sorted(valid_sorts)})"
+            )
+            if json_out:
+                json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(f"gen_list_providers_error={msg}")
+            raise typer.Exit(code=1)
+        # env_var=None sorts last via (None_first, value) tuple.
+        if sort_norm == "env_var":
+            providers.sort(
+                key=lambda p: (
+                    p.get("env_var") is None,
+                    str(p.get("env_var") or "").lower(),
+                ),
+            )
+        else:
+            providers.sort(
+                key=lambda p: str(p.get(sort_norm, "")).lower(),
+            )
 
     no_key_count = sum(1 for p in providers if p["env_var"] is None)
     key_required = [p for p in providers if p["env_var"] is not None]
