@@ -2964,6 +2964,26 @@ def list_providers_cmd(
             ),
         ),
     ] = None,
+    html_out: Annotated[
+        Path,
+        typer.Option(
+            "--html",
+            help=(
+                "v1.40.s224: write standalone HTML catalog (CSS badges"
+                " per asset_class + env status). Preempts JSON/text."
+            ),
+        ),
+    ] = Path(""),
+    open_html: Annotated[
+        bool,
+        typer.Option(
+            "--open",
+            help=(
+                "v1.40.s224: when used with --html, auto-open in system"
+                " browser. No-op without --html."
+            ),
+        ),
+    ] = False,
     compact: Annotated[
         bool,
         typer.Option(
@@ -3159,6 +3179,106 @@ def list_providers_cmd(
         "key_unset_count": key_unset,
         "filters_applied": [f"{fn}:{fv}" for fn, fv in parsed_filters],
     }
+
+    # v1.40.s224 — HTML preempts JSON/text.
+    html_str = str(html_out)
+    if html_str and html_str != ".":
+        html_path = Path(html_str)
+        try:
+            html_path.parent.mkdir(parents=True, exist_ok=True)
+            rows_html: list[str] = []
+            for p in providers:
+                ev = p.get("env_var")
+                env_set = p.get("env_set")
+                if ev is None:
+                    env_badge = "<span class='b-grey'>no key</span>"
+                elif env_set:
+                    env_badge = "<span class='b-green'>SET</span>"
+                else:
+                    env_badge = "<span class='b-red'>unset</span>"
+                ac = str(p.get("asset_class", ""))
+                # Color the asset_class badge by kind family.
+                ac_lower = ac.lower()
+                if "audio" in ac_lower:
+                    ac_class = "b-pink"
+                elif "video" in ac_lower:
+                    ac_class = "b-orange"
+                elif "icon" in ac_lower:
+                    ac_class = "b-purple"
+                elif "generated" in ac_lower:
+                    ac_class = "b-grey"
+                else:
+                    ac_class = "b-blue"
+                rows_html.append(
+                    "<tr>"
+                    f"<td>{p.get('id','?')}</td>"
+                    f"<td><span class='{ac_class}'>{ac}</span></td>"
+                    f"<td>{env_badge}</td>"
+                    f"<td>{p.get('env_var') or '-'}</td>"
+                    f"<td>{p.get('license','?')}</td>"
+                    "</tr>"
+                )
+            html = (
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                "<title>FAW Provider Catalog</title>"
+                "<style>"
+                "body{font-family:system-ui,sans-serif;max-width:1100px;margin:2em auto;}"
+                "h1{margin-bottom:.2em}"
+                ".summary{color:#666;margin-bottom:1em}"
+                "table{border-collapse:collapse;width:100%}"
+                "th,td{padding:.4em .6em;border-bottom:1px solid #eee;text-align:left}"
+                ".b-green,.b-red,.b-grey,.b-blue,.b-orange,.b-pink,.b-purple"
+                "{color:#fff;padding:2px 8px;border-radius:3px;font-size:.8em}"
+                ".b-green{background:#2e7d32}"
+                ".b-red{background:#c62828}"
+                ".b-grey{background:#9e9e9e}"
+                ".b-blue{background:#1976d2}"
+                ".b-orange{background:#ef6c00}"
+                ".b-pink{background:#c2185b}"
+                ".b-purple{background:#7b1fa2}"
+                "</style></head><body>"
+                "<h1>FAW Provider Catalog</h1>"
+                "<p class='summary'>"
+                f"Total: {len(providers)} &middot; no-key: {no_key_count} "
+                f"&middot; keyed: {len(key_required)} "
+                f"(set: {key_set}, unset: {key_unset})"
+                + (
+                    " &middot; filters: " + ", ".join(
+                        f"{fn}:{fv}" for fn, fv in parsed_filters
+                    )
+                    if parsed_filters else ""
+                )
+                + "</p>"
+                "<table>"
+                "<thead><tr>"
+                "<th>Provider</th><th>Asset class</th><th>Env</th>"
+                "<th>Env var</th><th>License</th>"
+                "</tr></thead><tbody>"
+                + "".join(rows_html)
+                + "</tbody></table>"
+                "</body></html>"
+            )
+            html_path.write_text(html, encoding="utf-8")
+        except Exception as exc:
+            print(f"gen_list_providers_error=html_write_failed: {exc}")
+            raise typer.Exit(code=1)
+        print(f"gen_list_providers_html_path={html_path}")
+        if open_html:
+            import platform
+            import subprocess
+            sys_name = platform.system().lower()
+            try:
+                if sys_name == "windows":
+                    import os
+                    os.startfile(str(html_path.resolve()))  # type: ignore[attr-defined]
+                elif sys_name == "darwin":
+                    subprocess.run(["open", str(html_path.resolve())], check=False)
+                else:
+                    subprocess.run(["xdg-open", str(html_path.resolve())], check=False)
+                print("gen_list_providers_html_opened=true")
+            except Exception as exc:
+                print(f"gen_list_providers_html_open_failed={exc}")
+        return
 
     if json_out:
         # v1.34.s201 — --compact emits single-line JSON.

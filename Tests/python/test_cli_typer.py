@@ -3952,6 +3952,27 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn("bad_filter_shape", result.stdout)
 
+    def test_list_providers_html_writes_catalog(self) -> None:
+        """v1.40.s224: --html writes provider catalog with asset_class badges."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            html_path = tmp_p / "catalog.html"
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "list-providers", "--html", str(html_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertIn("gen_list_providers_html_path=", result.stdout)
+            self.assertTrue(html_path.exists())
+            body = html_path.read_text(encoding="utf-8")
+            self.assertIn("<!doctype html>", body)
+            self.assertIn("FAW Provider Catalog", body)
+            # At least one no-key provider id should appear.
+            self.assertIn("met-museum", body)
+            # Color-coded asset_class badges present.
+            self.assertIn("b-blue", body)
+
     def test_list_providers_compact_emits_single_line(self) -> None:
         """v1.34.s201: --compact JSON for list-providers (no indent)."""
         result = self.runner.invoke(
