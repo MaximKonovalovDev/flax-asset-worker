@@ -3490,6 +3490,40 @@ class TyperCliSmokeTests(unittest.TestCase):
             # Backdated file should be excluded.
             self.assertEqual(data["sources_seen"], 0)
 
+    def test_pack_manifest_stats_html_composes_with_top(self) -> None:
+        """v1.46.s252: --html + --top 1 emits HTML showing only top source by bytes."""
+        import tempfile, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "small").mkdir()
+            (tmp_p / "small" / "small_manifest.json").write_text(
+                _json.dumps({
+                    "source": "small_src", "objects_downloaded": 1,
+                    "objects_skipped_non_pd": 0, "objects_failed": 0,
+                    "entries": [{"bytes": 100}],
+                }), encoding="utf-8",
+            )
+            (tmp_p / "big").mkdir()
+            (tmp_p / "big" / "big_manifest.json").write_text(
+                _json.dumps({
+                    "source": "big_src", "objects_downloaded": 1,
+                    "objects_skipped_non_pd": 0, "objects_failed": 0,
+                    "entries": [{"bytes": 9000}],
+                }), encoding="utf-8",
+            )
+            html_path = tmp_p / "top_report.html"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "manifest-stats", "--root", str(tmp_p),
+                 "--top", "1", "--html", str(html_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertTrue(html_path.exists())
+            body = html_path.read_text(encoding="utf-8")
+            # Only big_src should appear in the table; small_src filtered.
+            self.assertIn("big_src", body)
+            self.assertNotIn("small_src", body)
+
     def test_pack_manifest_stats_html_writes_file(self) -> None:
         """v1.40.s222: --html writes standalone HTML with CSS bars."""
         import tempfile, json as _json
