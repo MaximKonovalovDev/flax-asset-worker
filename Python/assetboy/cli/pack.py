@@ -1992,6 +1992,28 @@ def manifest_stats_cmd(
             ),
         ),
     ] = Path(""),
+    html_out: Annotated[
+        Path,
+        typer.Option(
+            "--html",
+            help=(
+                "v1.40.s222: write standalone HTML report (CSS bars +"
+                " per-source rows). Mutually exclusive with --json/--csv;"
+                " stdout shows only the written path."
+            ),
+        ),
+    ] = Path(""),
+    open_html: Annotated[
+        bool,
+        typer.Option(
+            "--open",
+            help=(
+                "v1.40.s222: when used with --html, auto-open in system"
+                " browser (Windows: os.startfile, macOS: open, Linux:"
+                " xdg-open). No-op without --html."
+            ),
+        ),
+    ] = False,
     compact: Annotated[
         bool,
         typer.Option(
@@ -2251,6 +2273,89 @@ def manifest_stats_cmd(
         "min_bytes_filtered_count": min_bytes_filtered,
         "by_source": per_source_view,
     }
+
+    # v1.40.s222 — HTML preempts CSV/JSON/text (mutually exclusive).
+    html_str = str(html_out)
+    if html_str and html_str != ".":
+        html_path = Path(html_str)
+        try:
+            html_path.parent.mkdir(parents=True, exist_ok=True)
+            max_bytes = max(
+                (int(b.get("bytes", 0) or 0) for b in per_source_view.values()),
+                default=0,
+            )
+            rows_html: list[str] = []
+            for src, b in sorted(
+                per_source_view.items(),
+                key=lambda kv: int(kv[1].get("bytes", 0) or 0),
+                reverse=True,
+            ):
+                bytes_v = int(b.get("bytes", 0) or 0)
+                pct = (100.0 * bytes_v / max_bytes) if max_bytes > 0 else 0.0
+                rows_html.append(
+                    "<tr>"
+                    f"<td>{src}</td>"
+                    f"<td class='num'>{int(b.get('manifests', 0))}</td>"
+                    f"<td class='num'>{int(b.get('downloaded', 0))}</td>"
+                    f"<td class='num'>{int(b.get('skipped', 0))}</td>"
+                    f"<td class='num'>{int(b.get('failed', 0))}</td>"
+                    f"<td class='num'>{bytes_v:,}</td>"
+                    f"<td><div class='bar' style='width:{pct:.1f}%'></div></td>"
+                    "</tr>"
+                )
+            html = (
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                "<title>FAW Manifest Stats</title>"
+                "<style>"
+                "body{font-family:system-ui,sans-serif;max-width:1100px;margin:2em auto;}"
+                "h1{margin-bottom:.2em}"
+                ".summary{color:#666;margin-bottom:1em}"
+                "table{border-collapse:collapse;width:100%}"
+                "th,td{padding:.4em .6em;border-bottom:1px solid #eee;text-align:left}"
+                "td.num{text-align:right;font-variant-numeric:tabular-nums}"
+                ".bar{background:#4a90e2;height:14px;border-radius:2px}"
+                "</style></head><body>"
+                "<h1>FAW Manifest Stats</h1>"
+                "<p class='summary'>"
+                f"Manifests scanned: {len(manifests)} &middot; "
+                f"Sources: {len(per_source)} &middot; "
+                f"Downloaded: {total_downloaded:,} &middot; "
+                f"Failed: {total_failed:,} &middot; "
+                f"Total bytes: {total_bytes:,}"
+                "</p>"
+                "<table>"
+                "<thead><tr>"
+                "<th>Source</th><th>Manifests</th><th>Downloaded</th>"
+                "<th>Skipped</th><th>Failed</th><th>Bytes</th>"
+                "<th>Bytes proportion</th>"
+                "</tr></thead><tbody>"
+                + "".join(rows_html)
+                + "</tbody></table>"
+                f"<p class='summary'>Scan root: <code>{scan_root}</code></p>"
+                "</body></html>"
+            )
+            html_path.write_text(html, encoding="utf-8")
+        except Exception as exc:
+            msg = f"html_write_failed: {exc}"
+            print(f"pack_manifest_stats_error={msg}")
+            raise typer.Exit(code=1)
+        print(f"pack_manifest_stats_html_path={html_path}")
+        if open_html:
+            import platform
+            import subprocess
+            sys_name = platform.system().lower()
+            try:
+                if sys_name == "windows":
+                    import os
+                    os.startfile(str(html_path.resolve()))  # type: ignore[attr-defined]
+                elif sys_name == "darwin":
+                    subprocess.run(["open", str(html_path.resolve())], check=False)
+                else:
+                    subprocess.run(["xdg-open", str(html_path.resolve())], check=False)
+                print("pack_manifest_stats_html_opened=true")
+            except Exception as exc:
+                print(f"pack_manifest_stats_html_open_failed={exc}")
+        return
 
     # v1.29.s186 — CSV preempts JSON / text (mutually exclusive).
     csv_str = str(csv_out)

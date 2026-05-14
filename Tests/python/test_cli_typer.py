@@ -3069,6 +3069,42 @@ class TyperCliSmokeTests(unittest.TestCase):
             # Backdated file should be excluded.
             self.assertEqual(data["sources_seen"], 0)
 
+    def test_pack_manifest_stats_html_writes_file(self) -> None:
+        """v1.40.s222: --html writes standalone HTML with CSS bars."""
+        import tempfile, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "a").mkdir()
+            (tmp_p / "a" / "a_manifest.json").write_text(
+                _json.dumps({
+                    "source": "src_alpha", "objects_downloaded": 4,
+                    "objects_skipped_non_pd": 1, "objects_failed": 0,
+                    "entries": [{"bytes": 500}, {"bytes": 1500}],
+                }), encoding="utf-8",
+            )
+            html_path = tmp_p / "report.html"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "manifest-stats", "--root", str(tmp_p),
+                 "--html", str(html_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertIn("pack_manifest_stats_html_path=", result.stdout)
+            self.assertTrue(html_path.exists())
+            body = html_path.read_text(encoding="utf-8")
+            self.assertIn("<!doctype html>", body)
+            self.assertIn("src_alpha", body)
+            self.assertIn("FAW Manifest Stats", body)
+            self.assertIn("2,000", body)  # bytes sum 500+1500
+
+    def test_pack_manifest_stats_html_open_without_html_is_noop(self) -> None:
+        result = self.runner.invoke(
+            self.app, ["pack", "manifest-stats", "--open"],
+        )
+        # Should fall through to default text mode without error.
+        self.assertEqual(result.exit_code, 0)
+        self.assertNotIn("pack_manifest_stats_html_opened", result.stdout)
+
     def test_pack_manifest_stats_csv_writes_file(self) -> None:
         """v1.29.s186: --csv writes per-source rows with correct header."""
         import tempfile, json as _json
