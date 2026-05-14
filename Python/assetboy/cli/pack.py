@@ -439,8 +439,13 @@ def list_recipes_cmd(
             csv_path.parent.mkdir(parents=True, exist_ok=True)
             with csv_path.open("w", encoding="utf-8", newline="") as fh:
                 w = _csv.writer(fh)
-                w.writerow(["path", "game", "recipe_id", "pack_count",
-                             "min_tier"])
+                # v1.55.s276 — extended CSV columns include the operator-
+                # useful metadata fields (cost_minutes, engine_version,
+                # platform, author). Empty cells when fields absent.
+                w.writerow([
+                    "path", "game", "recipe_id", "pack_count", "min_tier",
+                    "cost_minutes", "engine_version", "platform", "author",
+                ])
                 for e in entries:
                     w.writerow([
                         str(e.get("path", "")),
@@ -448,6 +453,10 @@ def list_recipes_cmd(
                         str(e.get("recipe_id", "")),
                         int(e.get("pack_count", 0) or 0),
                         e.get("min_tier", ""),
+                        e.get("cost_minutes", ""),
+                        str(e.get("engine_version", "") or ""),
+                        str(e.get("platform", "") or ""),
+                        str(e.get("author", "") or ""),
                     ])
         except Exception as exc:
             print(f"pack_list_recipes_error=csv_write_failed: {exc}")

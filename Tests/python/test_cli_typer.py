@@ -441,6 +441,227 @@ class TyperCliSmokeTests(unittest.TestCase):
             self.assertIn("path,game,recipe_id", lines[0])
             self.assertIn("r_a", lines[1])
 
+    # ------------------------------------------------------------------ #
+    # v1.55.s276 BIG-SLICE — 7 atomic composition + contract locks
+    # ------------------------------------------------------------------ #
+
+    def test_pack_list_recipes_csv_includes_extended_columns(self) -> None:
+        """s276 atomic-2: --csv header carries cost_minutes/engine_version/
+        platform/author columns; values populate when fields present."""
+        import tempfile, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "rich.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {
+                        "id": "rich", "game": "g1",
+                        "cost_minutes": 42,
+                        "engine_version": "1.6",
+                        "platform": "flax",
+                        "author": "J Doe",
+                    },
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            csv_path = tmp_p / "rich.csv"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--csv", str(csv_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            body = csv_path.read_text(encoding="utf-8")
+            lines = [l for l in body.splitlines() if l.strip()]
+            # Header has all 9 columns.
+            header = lines[0].split(",")
+            self.assertIn("cost_minutes", header)
+            self.assertIn("engine_version", header)
+            self.assertIn("platform", header)
+            self.assertIn("author", header)
+            # Data row carries values.
+            self.assertIn("42", lines[1])
+            self.assertIn("1.6", lines[1])
+            self.assertIn("flax", lines[1])
+            self.assertIn("J Doe", lines[1])
+
+    def test_pack_from_recipe_expected_min_and_max_both_present(self) -> None:
+        """s276 atomic-1: when recipe has both expected_min + expected_max,
+        JSON expected_min_check carries BOTH check keys."""
+        inline = (
+            "recipe:\n"
+            "  id: both_test\n"
+            "  game: sandbox\n"
+            "  expected_min_assets: 1\n"
+            "  expected_max_assets: 100\n"
+            "packs:\n"
+            "  - id: P_BOTH\n"
+            "    provider: iconify\n"
+            "    acquisition_method: direct_url\n"
+            "    search_terms: [x]\n"
+        )
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "from-recipe", "--inline-yaml", inline,
+             "--dry-run", "--json"],
+        )
+        import json as _json
+        data = _json.loads(result.stdout)
+        chk = data["expected_min_check"]
+        # Both fields present.
+        self.assertEqual(chk["expected_min_assets"], 1)
+        self.assertEqual(chk["expected_max_assets"], 100)
+        # Booleans surface independently.
+        self.assertIn("meets_expected_min", chk)
+        self.assertIn("within_expected_max", chk)
+        # 0 downloaded < 1 expected_min -> meets=False; 0 <= 100 -> within=True.
+        self.assertFalse(chk["meets_expected_min"])
+        self.assertTrue(chk["within_expected_max"])
+
+    def test_pack_manifest_stats_since_days_top_compose(self) -> None:
+        """s276 atomic-3: --since-days + --top compose; only recent +
+        top-bytes per_source rows survive."""
+        import tempfile, json as _json, time, os
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "fresh_big").mkdir()
+            mf_big = tmp_p / "fresh_big" / "big_manifest.json"
+            mf_big.write_text(_json.dumps({
+                "source": "fresh_big", "objects_downloaded": 1,
+                "objects_skipped_non_pd": 0, "objects_failed": 0,
+                "entries": [{"bytes": 10_000}],
+            }), encoding="utf-8")
+            (tmp_p / "fresh_small").mkdir()
+            mf_small = tmp_p / "fresh_small" / "small_manifest.json"
+            mf_small.write_text(_json.dumps({
+                "source": "fresh_small", "objects_downloaded": 1,
+                "objects_skipped_non_pd": 0, "objects_failed": 0,
+                "entries": [{"bytes": 100}],
+            }), encoding="utf-8")
+            # Backdate small_manifest by 10 days; it should be excluded by
+            # --since-days 1.
+            old_t = time.time() - (10 * 86400)
+            os.utime(mf_small, (old_t, old_t))
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "manifest-stats", "--root", str(tmp_p),
+                 "--since-days", "1", "--top", "1", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout.strip())
+        # Stale source filtered out; only fresh_big remains; --top 1 no-op.
+        self.assertEqual(data["sources_seen"], 1)
+        self.assertIn("fresh_big", data["by_source"])
+        self.assertNotIn("fresh_small", data["by_source"])
+
+    def test_library_r1a_status_provider_filter_check_live(self) -> None:
+        """s276 atomic-4: --provider met-museum + --check-live runs live probe
+        on that one provider only; live_response_ms surfaces."""
+        from unittest.mock import patch
+        with patch(
+            "assetboy.execution.met_museum_runner.search_met_object_ids",
+            return_value=[1, 2, 3],
+        ):
+            result = self.runner.invoke(
+                self.app,
+                ["library", "r1a-status",
+                 "--provider", "met-museum",
+                 "--check-live", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["providers_total"], 1)
+        p = data["providers"][0]
+        self.assertEqual(p["id"], "met-museum")
+        self.assertTrue(p["live_ok"])
+        self.assertIsInstance(p["live_response_ms"], (int, float))
+
+    def test_list_providers_filter_env_var_none_no_key_only(self) -> None:
+        """s276 atomic-5: --filter env_var:none narrows to no-key providers."""
+        import json as _json
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "list-providers",
+             "--filter", "env_var:none", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        # Every result has env_var=None.
+        for p in data["providers"]:
+            self.assertIsNone(p["env_var"], msg=f"{p['id']} leaked")
+        # Met-museum + iconify + wikimedia + archive-org + scryfall +
+        # inaturalist + openlibrary + comfyui + sd: at least 6 no-key.
+        self.assertGreaterEqual(data["total"], 6)
+
+    def test_pack_list_recipes_filter_cost_range_compose(self) -> None:
+        """s276 atomic-6: min-cost-minutes + max-cost-minutes compose as range."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, cm in [("r_5", 5), ("r_15", 15), ("r_30", 30),
+                              ("r_60", 60), ("r_none", None)]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if cm is not None:
+                    doc["recipe"]["cost_minutes"] = cm
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "min-cost-minutes:10",
+                 "--filter", "max-cost-minutes:30",
+                 "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = {r["recipe_id"] for r in data["recipes"]}
+        # Range [10, 30] inclusive: r_15, r_30 only.
+        self.assertEqual(ids, {"r_15", "r_30"})
+
+    def test_history_tail_last_kind_format_csv_triple(self) -> None:
+        """s276 atomic-7: --last N + --kind + --format csv triple compose."""
+        import tempfile, os, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            hist_dir = tmp_p / "state" / "r1a_history"
+            hist_dir.mkdir(parents=True)
+            # 3 all_no_key snapshots + 1 all_key snapshot.
+            for i, kind in enumerate(
+                ["all_no_key", "all_no_key", "all_no_key", "all_key"],
+            ):
+                (hist_dir / f"{kind}_{i:03}.json").write_text(
+                    _json.dumps({
+                        "kind": kind,
+                        "providers": [
+                            {"provider": "p", "matched": i + 1,
+                             "downloaded": i, "ok": True, "skipped": False},
+                        ],
+                    }), encoding="utf-8",
+                )
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "history-tail",
+                     "--last", "2",
+                     "--kind", "all_no_key",
+                     "--format", "csv"],
+                )
+            finally:
+                os.chdir(old_cwd)
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        lines = [l for l in result.stdout.splitlines() if l.strip()]
+        # Header + 1 provider row (all 2 kept snapshots are 'p' provider).
+        self.assertEqual(lines[0],
+                         "provider,runs,avg_matched,avg_downloaded,ok_rate,skipped_count")
+        self.assertEqual(len(lines), 2)
+        # 2 snapshots aggregated (the all_key one filtered out).
+        self.assertIn("p,2,", lines[1])
+
     def test_pack_list_recipes_limit_caps_output(self) -> None:
         """v1.53.s270: --limit 2 caps to first 2 recipes (after sort)."""
         import tempfile, json as _json, yaml as _yaml

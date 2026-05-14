@@ -1,12 +1,23 @@
 # HEARTBEAT — assetboi (operator hibernation read-back)
 
-> **Last update:** 2026-05-14 (continuous loop, **317 commits + 305 tags
-> shipped this run** (origin), **994 tests**; latest tag
-> v1.52.1-pack-diff-html)
+> **Last update:** 2026-05-14 (continuous loop, **334 commits + 322 tags
+> shipped this run** (origin), **1022 tests**; latest tag
+> v1.55.2-bigslice-bulk-hardening)
 > **Repo:** `flax-asset-worker` (this repo; assetboi commits freely here)
-> **Loop status:** ETERNAL mode + lane-E Phase-A resumption + BOSS-PING
+> **Loop status:** ETERNAL + lane-E BIG-SLICE-MANDATE active
 
-## TL;DR — top-of-loop milestone (v1.52.1)
+## TL;DR — top-of-loop milestone (v1.55.2)
+
+BIG-SLICE shipped: 8-atomic bulk hardening slice (s276) under one tag.
+v2.3 scope (FMOD+DLSS bridges) acknowledged separate-repo per ADR-024.
+
+**334 commits / 322 tags / 1022 tests / 43 consecutive waves. Same
+strengths: 13 --html cmds, 11 --compact cmds, 4 --csv cmds, 3 --limit
+cmds, 6 image + 2 video providers with --min-width/height, 3 providers
+with --license family filter. Recipe schema has 11 optional metadata
+fields, 4 derived. 0 RULE violations across ~140 atomic slices.**
+
+## (legacy) TL;DR — top-of-loop milestone (v1.52.1)
 
 **317 commits since baseline `0b1ad7d`, 305 tags pushed, 994 tests
 passing. **v1.50 MAJOR** + **300-tag** + **990-test** milestones all
