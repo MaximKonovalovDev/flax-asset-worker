@@ -2468,6 +2468,17 @@ def all_no_key_cmd(
             ),
         ),
     ] = False,
+    retry: Annotated[
+        int,
+        typer.Option(
+            "--retry",
+            help=(
+                "v1.42.s235: retry each failed provider up to N times"
+                " (sequential mode only; no effect in --parallel)."
+                " 0 (default) = single attempt."
+            ),
+        ),
+    ] = 0,
     compact: Annotated[
         bool,
         typer.Option(
@@ -2621,14 +2632,22 @@ def all_no_key_cmd(
     else:
         # Original sequential path.
         bailed = False  # v1.28.s181
+        retries_used = 0  # v1.42.s235
         for pid, fn, kwargs in tasks:
-            try:
-                r = fn(**kwargs)
-                rec = _result_to_record(pid, r)
-            except Exception as exc:
-                rec = _crashed_record(pid, exc)
+            # v1.42.s235 — try up to (retry + 1) times.
+            rec = None
+            for attempt in range(max(retry, 0) + 1):
+                try:
+                    r = fn(**kwargs)
+                    rec = _result_to_record(pid, r)
+                except Exception as exc:
+                    rec = _crashed_record(pid, exc)
+                if rec.get("ok", False):
+                    break
+                if attempt < max(retry, 0):
+                    retries_used += 1
             providers_run.append(rec)
-            # v1.28.s181 — bail out on first failure (sequential only).
+            # v1.28.s181 — bail out on first failure (after retries exhausted).
             if bail_on_error and not rec.get("ok", False):
                 bailed = True
                 break
@@ -2645,6 +2664,8 @@ def all_no_key_cmd(
         "parallel": parallel,
         "bail_on_error": bail_on_error,
         "bailed": locals().get("bailed", False),
+        "retry": retry,
+        "retries_used": locals().get("retries_used", 0),
         "providers_run": len(providers_run),
         "providers_ok": providers_ok,
         "providers_failed": providers_failed,

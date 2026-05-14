@@ -2926,6 +2926,53 @@ class TyperCliSmokeTests(unittest.TestCase):
         data = _json.loads(body)
         self.assertIn("providers", data)
 
+    def test_all_no_key_retry_attempts_failed_providers(self) -> None:
+        """v1.42.s235: --retry 2 retries each failed provider up to 2 times."""
+        from unittest.mock import patch
+        from assetboy.execution.met_museum_runner import MetMuseumResult
+        from assetboy.execution.iconify_runner import IconifyResult
+        import tempfile
+
+        # First met call fails, second succeeds; iconify succeeds first try.
+        met_results = iter([
+            MetMuseumResult(pack_id="x", query="q",
+                             output_dir=Path("/tmp"),
+                             ok=False, error="forced"),
+            MetMuseumResult(pack_id="x", query="q",
+                             output_dir=Path("/tmp"), ok=True),
+        ])
+
+        def met_call(**kwargs):
+            return next(met_results)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch(
+                "assetboy.execution.met_museum_runner.run_met_museum_batch",
+                side_effect=met_call,
+            ), patch(
+                "assetboy.execution.iconify_runner.run_iconify_batch",
+                return_value=IconifyResult(
+                    pack_id="x", query="q",
+                    output_dir=Path(tmp), ok=True,
+                ),
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "all-no-key", "--query", "q",
+                     "--provider", "met_museum,iconify",
+                     "--retry", "2", "--dry-run", "--json"],
+                )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        # retry=2 declared in summary; 1 retry used (met failed once then ok).
+        self.assertEqual(data["retry"], 2)
+        self.assertEqual(data["retries_used"], 1)
+        # Final met state is ok=True.
+        met_rec = next(p for p in data["providers"]
+                        if p["provider"] == "met_museum")
+        self.assertTrue(met_rec["ok"])
+
     def test_all_no_key_bail_on_error_stops_after_first_failure(self) -> None:
         """v1.28.s181: --bail-on-error halts sequential after first ok=False."""
         from unittest.mock import patch
