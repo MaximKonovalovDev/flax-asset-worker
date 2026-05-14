@@ -621,6 +621,135 @@ class TyperCliSmokeTests(unittest.TestCase):
         # Range [10, 30] inclusive: r_15, r_30 only.
         self.assertEqual(ids, {"r_15", "r_30"})
 
+    # ------------------------------------------------------------------ #
+    # v1.56.s277 BIG-SLICE — 5 atomics (recipe.notes + fan-out CSVs)
+    # ------------------------------------------------------------------ #
+
+    def test_recipe_notes_field_threads_to_list_recipes_json(self) -> None:
+        """s277 atomic-1: recipe.notes surfaces in list-recipes JSON."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "noted.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {
+                        "id": "noted", "game": "g1",
+                        "notes": "Reference cleanup planned for v2.0",
+                    },
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        r = next(x for x in data["recipes"] if x["recipe_id"] == "noted")
+        self.assertEqual(r["notes"], "Reference cleanup planned for v2.0")
+
+    def test_recipe_notes_csv_truncates_long_text(self) -> None:
+        """s277 atomic-2: list-recipes --csv truncates notes to 80 chars +
+        single-line; column present in header."""
+        import tempfile, yaml as _yaml
+        long_note = "X" * 150
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "n.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "n", "game": "g1",
+                                "notes": long_note},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            csv_path = tmp_p / "n.csv"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--csv", str(csv_path)],
+            )
+            self.assertEqual(result.exit_code, 0)
+            body = csv_path.read_text(encoding="utf-8")
+            lines = body.splitlines()
+            self.assertIn("notes", lines[0])
+            # Data row notes cell truncated to 80 chars (77 + "...").
+            data_row = lines[1]
+            self.assertIn("...", data_row)
+            # Original 150-char run not present.
+            self.assertNotIn("X" * 150, data_row)
+
+    def test_all_no_key_csv_writes_summary(self) -> None:
+        """s277 atomic-3: --csv writes per-provider fan-out summary."""
+        from unittest.mock import patch
+        from assetboy.execution.met_museum_runner import MetMuseumResult
+        from assetboy.execution.iconify_runner import IconifyResult
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "fanout.csv"
+            with patch(
+                "assetboy.execution.met_museum_runner.run_met_museum_batch",
+                return_value=MetMuseumResult(
+                    pack_id="x", query="q", output_dir=Path(tmp), ok=True,
+                ),
+            ), patch(
+                "assetboy.execution.iconify_runner.run_iconify_batch",
+                return_value=IconifyResult(
+                    pack_id="x", query="q", output_dir=Path(tmp), ok=True,
+                ),
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "all-no-key", "--query", "test",
+                     "--provider", "met_museum,iconify",
+                     "--dry-run", "--csv", str(csv_path)],
+                )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertIn("gen_all_no_key_csv_path=", result.stdout)
+            self.assertTrue(csv_path.exists())
+            body = csv_path.read_text(encoding="utf-8")
+            lines = [l for l in body.splitlines() if l.strip()]
+            self.assertEqual(lines[0],
+                             "provider,ok,matched,downloaded,skipped,error")
+            self.assertEqual(len(lines), 3)  # header + 2 providers
+
+    def test_scout_by_license_csv_writes_report(self) -> None:
+        """s277 atomic-4: --csv writes per-provider scout summary."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "scout.csv"
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "scout-by-license", "--license", "cc0",
+                 "--query", "test", "--max-providers", "1",
+                 "--dry-run", "--csv", str(csv_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertIn("gen_scout_by_license_csv_path=", result.stdout)
+            self.assertTrue(csv_path.exists())
+            body = csv_path.read_text(encoding="utf-8")
+            lines = [l for l in body.splitlines() if l.strip()]
+            self.assertEqual(lines[0],
+                             "provider,ok,skipped,matched,downloaded,error")
+            # At least header + 1 provider.
+            self.assertGreaterEqual(len(lines), 2)
+
+    def test_recipe_notes_non_string_warns_not_errors(self) -> None:
+        """s277 atomic-5: recipe.notes as non-string -> warning, ok=True."""
+        from assetboy.workflows.recipe_validator import validate_recipe_doc
+        doc = {
+            "recipe": {"id": "bad", "game": "g1",
+                        "notes": ["not", "a", "string"]},
+            "packs": [],
+        }
+        r = validate_recipe_doc(doc, "n.yaml")
+        # ok stays True (warning, not error).
+        self.assertTrue(r.ok)
+        self.assertTrue(any("notes" in w and "string" in w
+                            for w in r.warnings))
+
     def test_history_tail_last_kind_format_csv_triple(self) -> None:
         """s276 atomic-7: --last N + --kind + --format csv triple compose."""
         import tempfile, os, json as _json

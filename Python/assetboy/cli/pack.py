@@ -293,12 +293,12 @@ def list_recipes_cmd(
                 if tier_values:
                     entry_data["min_tier"] = min(tier_values)
                 # v1.23.s160 / v1.25.s172 / v1.30.s189 / v1.38.s210 /
-                # v1.41.s233 / v1.45.s247: misc metadata.
+                # v1.41.s233 / v1.45.s247 / v1.56.s277: misc metadata.
                 for meta_key in ("genre", "theme", "style", "tags",
                                   "created_utc", "updated_utc",
                                   "author", "contact", "platform",
                                   "cost_minutes", "engine_version",
-                                  "expected_max_assets"):
+                                  "expected_max_assets", "notes"):
                     if meta_key in recipe:
                         entry_data[meta_key] = recipe[meta_key]
                 # v1.40.s230 — last_run_utc derived from pack-pipeline ledger
@@ -445,8 +445,15 @@ def list_recipes_cmd(
                 w.writerow([
                     "path", "game", "recipe_id", "pack_count", "min_tier",
                     "cost_minutes", "engine_version", "platform", "author",
+                    "notes",
                 ])
                 for e in entries:
+                    # v1.56.s277 — notes truncated to 80 chars + newline-
+                    # stripped for CSV one-line-per-row safety.
+                    raw_notes = str(e.get("notes", "") or "")
+                    notes_csv = raw_notes.replace("\n", " ").replace("\r", " ")
+                    if len(notes_csv) > 80:
+                        notes_csv = notes_csv[:77] + "..."
                     w.writerow([
                         str(e.get("path", "")),
                         str(e.get("game", "")),
@@ -457,6 +464,7 @@ def list_recipes_cmd(
                         str(e.get("engine_version", "") or ""),
                         str(e.get("platform", "") or ""),
                         str(e.get("author", "") or ""),
+                        notes_csv,
                     ])
         except Exception as exc:
             print(f"pack_list_recipes_error=csv_write_failed: {exc}")

@@ -2765,6 +2765,17 @@ def all_no_key_cmd(
             ),
         ),
     ] = 0,
+    csv_out: Annotated[
+        Path,
+        typer.Option(
+            "--csv",
+            help=(
+                "v1.56.s277: write fan-out summary as CSV (header:"
+                " provider,ok,matched,downloaded,skipped,error)."
+                " Mutex with --html/--json/text."
+            ),
+        ),
+    ] = Path(""),
     html_out: Annotated[
         Path,
         typer.Option(
@@ -3005,6 +3016,33 @@ def all_no_key_cmd(
             json.dumps(history_record, indent=2), encoding="utf-8"
         )
         summary["history_path"] = str(history_path)
+
+    # v1.56.s277 — --csv preempts HTML/JSON/text.
+    csv_str = str(csv_out)
+    if csv_str and csv_str != ".":
+        import csv as _csv
+        csv_path = Path(csv_str)
+        try:
+            csv_path.parent.mkdir(parents=True, exist_ok=True)
+            with csv_path.open("w", encoding="utf-8", newline="") as fh:
+                w = _csv.writer(fh)
+                w.writerow(["provider", "ok", "matched", "downloaded",
+                             "skipped", "error"])
+                for p in providers_run:
+                    w.writerow([
+                        str(p.get("provider", "")),
+                        "true" if p.get("ok") else "false",
+                        int(p.get("matched", 0) or 0),
+                        int(p.get("downloaded", 0) or 0),
+                        "true" if p.get("skipped") else "false",
+                        str(p.get("error", "") or "")[:200],
+                    ])
+        except Exception as exc:
+            print(f"gen_all_no_key_error=csv_write_failed: {exc}")
+            raise typer.Exit(code=1)
+        print(f"gen_all_no_key_csv_path={csv_path}")
+        print(f"gen_all_no_key_csv_rows={len(providers_run)}")
+        return
 
     # v1.48.s255 — HTML preempts JSON/text.
     html_str = str(html_out)
@@ -4389,6 +4427,16 @@ def scout_by_license_cmd(
             ),
         ),
     ] = Path(""),
+    csv_out: Annotated[
+        Path,
+        typer.Option(
+            "--csv",
+            help=(
+                "v1.56.s277: write scout-report as CSV (header:"
+                " provider,ok,skipped,matched,downloaded,error)."
+            ),
+        ),
+    ] = Path(""),
     open_html: Annotated[
         bool,
         typer.Option(
@@ -4542,6 +4590,33 @@ def scout_by_license_cmd(
         "total_downloaded": sum(r["downloaded"] for r in results),
         "providers": results,
     }
+
+    # v1.56.s277 — --csv preempts HTML/JSON/text.
+    csv_str = str(csv_out)
+    if csv_str and csv_str != ".":
+        import csv as _csv
+        csv_path = Path(csv_str)
+        try:
+            csv_path.parent.mkdir(parents=True, exist_ok=True)
+            with csv_path.open("w", encoding="utf-8", newline="") as fh:
+                w = _csv.writer(fh)
+                w.writerow(["provider", "ok", "skipped", "matched",
+                             "downloaded", "error"])
+                for r in results:
+                    w.writerow([
+                        str(r.get("provider", "")),
+                        "true" if r.get("ok") else "false",
+                        "true" if r.get("skipped") else "false",
+                        int(r.get("matched", 0) or 0),
+                        int(r.get("downloaded", 0) or 0),
+                        str(r.get("error", "") or "")[:200],
+                    ])
+        except Exception as exc:
+            print(f"gen_scout_by_license_error=csv_write_failed: {exc}")
+            raise typer.Exit(code=1)
+        print(f"gen_scout_by_license_csv_path={csv_path}")
+        print(f"gen_scout_by_license_csv_rows={len(results)}")
+        return
 
     # v1.48.s254 — HTML preempts JSON/text.
     html_str = str(html_out)

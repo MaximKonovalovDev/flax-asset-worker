@@ -210,6 +210,15 @@ def validate_recipe_doc(doc: Any, source_label: str = "<recipe>") -> ValidationR
                     f"{source_label}: recipe.cost_minutes is negative"
                     f" ({cm}); should be >= 0"
                 )
+        # v1.56.s277 — optional recipe.notes free-form text field. Warn on
+        # non-string; empty allowed (operator may intentionally leave blank).
+        if "notes" in recipe and recipe["notes"] is not None:
+            nv = recipe["notes"]
+            if not isinstance(nv, str):
+                result.warnings.append(
+                    f"{source_label}: recipe.notes should be a string;"
+                    f" got {type(nv).__name__}"
+                )
         # v1.41.s233 — optional engine_version string (e.g. '1.6', '6.0',
         # '2026.1'). Warn on non-string; non-empty soft check; never error.
         if "engine_version" in recipe and recipe["engine_version"] is not None:
