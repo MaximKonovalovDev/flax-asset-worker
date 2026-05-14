@@ -3618,6 +3618,16 @@ def list_providers_cmd(
             ),
         ),
     ] = "",
+    reverse: Annotated[
+        bool,
+        typer.Option(
+            "--reverse",
+            help=(
+                "v1.53.s267: reverse sort order (Z->A instead of A->Z)."
+                " No effect without --sort."
+            ),
+        ),
+    ] = False,
     compact: Annotated[
         bool,
         typer.Option(
@@ -3832,6 +3842,9 @@ def list_providers_cmd(
             providers.sort(
                 key=lambda p: str(p.get(sort_norm, "")).lower(),
             )
+        # v1.53.s267 — --reverse flips the order after sort.
+        if reverse:
+            providers.reverse()
 
     no_key_count = sum(1 for p in providers if p["env_var"] is None)
     key_required = [p for p in providers if p["env_var"] is not None]

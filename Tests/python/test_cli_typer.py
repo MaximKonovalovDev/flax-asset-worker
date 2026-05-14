@@ -4693,6 +4693,34 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("providers", data)
         self.assertIn("total", data)
 
+    def test_list_providers_sort_reverse_id(self) -> None:
+        """v1.53.s267: --sort id --reverse orders Z->A."""
+        import json as _json
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "list-providers", "--sort", "id", "--reverse", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = [p["id"] for p in data["providers"]]
+        self.assertEqual(ids, sorted(ids, reverse=True))
+
+    def test_list_providers_reverse_without_sort_noop(self) -> None:
+        """--reverse without --sort is a no-op (catalog order preserved)."""
+        import json as _json
+        without_reverse = self.runner.invoke(
+            self.app, ["gen", "list-providers", "--json"],
+        )
+        with_reverse = self.runner.invoke(
+            self.app, ["gen", "list-providers", "--reverse", "--json"],
+        )
+        self.assertEqual(without_reverse.exit_code, 0)
+        self.assertEqual(with_reverse.exit_code, 0)
+        d1 = _json.loads(without_reverse.stdout)
+        d2 = _json.loads(with_reverse.stdout)
+        self.assertEqual([p["id"] for p in d1["providers"]],
+                         [p["id"] for p in d2["providers"]])
+
     def test_list_providers_sort_id_alpha(self) -> None:
         """v1.53.s266: --sort id orders providers alphabetically."""
         import json as _json
