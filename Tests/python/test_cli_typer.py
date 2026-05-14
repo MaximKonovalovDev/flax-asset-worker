@@ -895,6 +895,35 @@ class TyperCliSmokeTests(unittest.TestCase):
                 # Multi-line output (per-pack chatter); skip strict newline check.
                 pass
 
+    def test_pack_from_recipe_html_writes_dashboard(self) -> None:
+        """v1.50.s257: --html writes standalone pack-execution dashboard."""
+        import tempfile
+        inline = (
+            "recipe:\n"
+            "  id: html_test\n"
+            "  game: sandbox\n"
+            "packs:\n"
+            "  - id: P_HTML\n"
+            "    provider: iconify\n"
+            "    acquisition_method: direct_url\n"
+            "    search_terms: [test]\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            html_path = Path(tmp) / "exec.html"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "from-recipe", "--inline-yaml", inline,
+                 "--dry-run", "--html", str(html_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertIn("pack_from_recipe_html_path=", result.stdout)
+            self.assertTrue(html_path.exists())
+            body = html_path.read_text(encoding="utf-8")
+            self.assertIn("<!doctype html>", body)
+            self.assertIn("FAW Pack Execution", body)
+            self.assertIn("P_HTML", body)
+            self.assertIn("html_test", body)
+
     def test_pack_from_recipe_compact_emits_single_line(self) -> None:
         """v1.39.s215: --compact single-line JSON for from-recipe."""
         inline = (
