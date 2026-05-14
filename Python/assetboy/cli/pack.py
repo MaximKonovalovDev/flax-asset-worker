@@ -218,7 +218,10 @@ def list_recipes_cmd(
                           "depth-from", "depth_from",
                           # v1.61.s288 — leaf filter.
                           "is-leaf", "is_leaf"}
-    _needs_graph = graph_out or any(
+    # v1.62.s289 — graph-aware sort keys also trigger graph build.
+    _graph_sort_keys = {"topo", "depth", "in_degree", "out_degree"}
+    _sort_needs_graph = sort.strip().lower() in _graph_sort_keys
+    _needs_graph = graph_out or _sort_needs_graph or any(
         fn in _graph_filter_keys for fn, _ in parsed_filters
     )
     if _needs_graph:
@@ -536,6 +539,62 @@ def list_recipes_cmd(
             -int(e.get("related_count", 0) or 0),
             e["path"],
         ))
+    elif sort_norm == "topo":
+        # v1.62.s289 — order by topological_sort() position; entries not
+        # in graph (e.g. unparseable recipes) and cycles sort last.
+        if _graph is None:
+            # Defensive — _needs_graph should have triggered build.
+            from assetboy.workflows.recipe_graph import build_graph
+            _graph = build_graph(recipes_root)
+        _topo = _graph.topological_sort() or []
+        _topo_pos = {rid: i for i, rid in enumerate(_topo)}
+        entries.sort(key=lambda e: (
+            e.get("recipe_id") not in _topo_pos,
+            _topo_pos.get(e.get("recipe_id"), 10_000_000),
+            e["path"],
+        ))
+    elif sort_norm == "depth":
+        # v1.62.s289 — order by max-depth-from-any-root; deeper = later.
+        # DAGs only — cycle case falls through to "depth=infinity" for all.
+        if _graph is None:
+            from assetboy.workflows.recipe_graph import build_graph
+            _graph = build_graph(recipes_root)
+        # Compute per-recipe max depth from any entry_point.
+        _per_recipe_depth: dict[str, int] = {}
+        if _graph.is_acyclic():
+            for entry in _graph.entry_points():
+                for rid, d in _graph.depth_from(entry).items():
+                    cur = _per_recipe_depth.get(rid, -1)
+                    if d > cur:
+                        _per_recipe_depth[rid] = d
+            # Recipes not reachable from any entry_point (e.g. orphans).
+            for rid in _graph.all_ids - _per_recipe_depth.keys():
+                _per_recipe_depth[rid] = 0
+        entries.sort(key=lambda e: (
+            e.get("recipe_id") not in _per_recipe_depth,
+            _per_recipe_depth.get(e.get("recipe_id"), 0),
+            e["path"],
+        ))
+    elif sort_norm == "in_degree":
+        # v1.62.s289 — least incoming edges first (roots first).
+        if _graph is None:
+            from assetboy.workflows.recipe_graph import build_graph
+            _graph = build_graph(recipes_root)
+        entries.sort(key=lambda e: (
+            e.get("recipe_id") not in _graph.all_ids,
+            len(_graph.in_edges.get(e.get("recipe_id"), set())),
+            e["path"],
+        ))
+    elif sort_norm == "out_degree":
+        # v1.62.s289 — least outgoing edges first (leaves first).
+        if _graph is None:
+            from assetboy.workflows.recipe_graph import build_graph
+            _graph = build_graph(recipes_root)
+        entries.sort(key=lambda e: (
+            e.get("recipe_id") not in _graph.all_ids,
+            len(_graph.out_edges.get(e.get("recipe_id"), set())),
+            e["path"],
+        ))
     elif sort_norm in ("updated_utc", "created_utc", "last_run_utc"):
         # v1.32.s195 / v1.40.s231 — sort by timestamp field (newest first);
         # entries without that field sort last.
@@ -574,7 +633,8 @@ def list_recipes_cmd(
             f"unknown_sort_key: {sort_norm!r}"
             " (valid: 'path', 'tier', 'name', 'platform',"
             " 'updated_utc', 'created_utc', 'last_run_utc',"
-            " 'cost_minutes', 'author', 'related_count')"
+            " 'cost_minutes', 'author', 'related_count',"
+            " 'topo', 'depth', 'in_degree', 'out_degree')"
         )
         if json_out:
             json.dump({"error": msg}, sys.stdout, indent=2)

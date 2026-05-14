@@ -669,6 +669,222 @@ class TyperCliSmokeTests(unittest.TestCase):
     # v1.61.s288 BIG-SLICE — 6 atomics (leaves + max_depth + filter)
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # v1.62.s289 BIG-SLICE — 8 atomics (graph-aware sort keys)
+    # ------------------------------------------------------------------ #
+
+    def test_list_recipes_sort_topo_linear_chain(self) -> None:
+        """s289 atomic-1: --sort topo orders a->b->c as [a, b, c]."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            # Add in reverse-alphabetical to verify topo isn't just name-sort.
+            for rid, rel in [("c", []), ("b", ["c"]), ("a", ["b"])]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--sort", "topo", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = [r["recipe_id"] for r in data["recipes"]]
+        self.assertEqual(ids, ["a", "b", "c"])
+
+    def test_list_recipes_sort_topo_with_reverse(self) -> None:
+        """s289 atomic-2: --sort topo --reverse yields [c, b, a]."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [("a", ["b"]), ("b", ["c"]), ("c", [])]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--sort", "topo", "--reverse", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = [r["recipe_id"] for r in data["recipes"]]
+        self.assertEqual(ids, ["c", "b", "a"])
+
+    def test_list_recipes_sort_depth_orders_by_root_distance(self) -> None:
+        """s289 atomic-3: --sort depth puts entry points first (depth 0)."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [
+                ("root", ["mid"]), ("mid", ["leaf"]), ("leaf", []),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--sort", "depth", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = [r["recipe_id"] for r in data["recipes"]]
+        # root (depth 0) -> mid (1) -> leaf (2)
+        self.assertEqual(ids, ["root", "mid", "leaf"])
+
+    def test_list_recipes_sort_in_degree_roots_first(self) -> None:
+        """s289 atomic-4: --sort in_degree puts roots (0 in-edges) first."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            # Hub points to 2 leaves; both leaves have in_degree=1.
+            for rid, rel in [
+                ("hub", ["leaf_a", "leaf_b"]),
+                ("leaf_a", []), ("leaf_b", []),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--sort", "in_degree", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = [r["recipe_id"] for r in data["recipes"]]
+        # hub (in=0) first, then leaf_a + leaf_b (in=1) alphabetical by path.
+        self.assertEqual(ids[0], "hub")
+        self.assertEqual(set(ids[1:]), {"leaf_a", "leaf_b"})
+
+    def test_list_recipes_sort_out_degree_leaves_first(self) -> None:
+        """s289 atomic-5: --sort out_degree puts leaves (0 out-edges) first."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [
+                ("hub", ["a", "b", "c"]),
+                ("a", []), ("b", []), ("c", []),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--sort", "out_degree", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = [r["recipe_id"] for r in data["recipes"]]
+        # First 3 are leaves (out=0), hub (out=3) last.
+        self.assertEqual(ids[-1], "hub")
+        self.assertEqual(set(ids[:3]), {"a", "b", "c"})
+
+    def test_list_recipes_sort_topo_with_cycle_sorts_all_last(self) -> None:
+        """s289 atomic-6: cycle -> topo_sort returns None; all recipes share
+        not-in-topo flag so they fall back to alphabetical path order."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            # Cycle a->b->a + isolated c
+            (tmp_p / "g1" / "a.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "a", "game": "g1",
+                                              "related_recipes": ["b"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "b.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "b", "game": "g1",
+                                              "related_recipes": ["a"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "c.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "c", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--sort", "topo", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = [r["recipe_id"] for r in data["recipes"]]
+        # All 3 fall to alphabetical path order (no topo possible).
+        self.assertEqual(ids, ["a", "b", "c"])
+
+    def test_list_recipes_sort_topo_unknown_compatible_with_sort_keys_msg(self) -> None:
+        """s289 atomic-7: unknown sort key error msg includes new graph
+        keys (topo/depth/in_degree/out_degree)."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "x.yaml").write_text(
+                "recipe: {id: x, game: g1}\npacks: []\n", encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--sort", "nonexistent_key"],
+            )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("topo", result.stdout)
+        self.assertIn("depth", result.stdout)
+        self.assertIn("in_degree", result.stdout)
+        self.assertIn("out_degree", result.stdout)
+
+    def test_list_recipes_sort_in_degree_with_limit_compose(self) -> None:
+        """s289 atomic-8: --sort in_degree + --limit picks top-N roots."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [
+                ("root1", ["mid"]), ("root2", ["mid"]),
+                ("mid", ["leaf"]), ("leaf", []),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--sort", "in_degree", "--limit", "2", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = [r["recipe_id"] for r in data["recipes"]]
+        # Two zero-in-degree recipes: root1, root2 (path-tiebroken).
+        self.assertEqual(len(ids), 2)
+        self.assertEqual(set(ids), {"root1", "root2"})
+
     def test_recipe_graph_leaves_linear_chain(self) -> None:
         """s288 atomic-1: leaves on a->b->c returns {c}."""
         import tempfile, yaml as _yaml
