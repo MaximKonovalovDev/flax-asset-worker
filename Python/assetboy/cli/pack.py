@@ -3849,6 +3849,27 @@ def run_plan_cmd(
             ),
         ),
     ] = None,
+    html_out: Annotated[
+        Path,
+        typer.Option(
+            "--html",
+            help=(
+                "v1.67.s300: write standalone HTML execution report"
+                " (per-step status, duration, exit code, error). Preempts"
+                " --json/--csv/text."
+            ),
+        ),
+    ] = Path(""),
+    stop_after: Annotated[
+        str,
+        typer.Option(
+            "--stop-after",
+            help=(
+                "v1.67.s300: halt after the specified recipe id completes"
+                " (success or failure). Useful for incremental rollouts."
+            ),
+        ),
+    ] = "",
     compact: Annotated[
         bool,
         typer.Option(
@@ -3997,6 +4018,7 @@ def run_plan_cmd(
 
     def _execute_recipe(rid: str, yml_path: Path) -> dict:
         """Subprocess from-recipe; capture summary; never raises."""
+        import time as _t_exec
         step = {
             "recipe_id": rid,
             "path": str(yml_path.relative_to(recipes_root)),
@@ -4004,7 +4026,9 @@ def run_plan_cmd(
             "ok": True,
         }
         if dry_run:
+            step["duration_ms"] = 0  # v1.67.s300
             return step
+        t0 = _t_exec.perf_counter()
         try:
             cmd = [
                 _sys.executable, "-m", "assetboy.cli",
@@ -4035,6 +4059,10 @@ def run_plan_cmd(
         except Exception as exc:
             step["ok"] = False
             step["error"] = f"exec_crashed: {exc}"
+        # v1.67.s300 — record wall-time duration.
+        step["duration_ms"] = round(
+            (_t_exec.perf_counter() - t0) * 1000.0, 1
+        )
         return step
 
     # Sequential vs parallel dispatch.
@@ -4074,6 +4102,13 @@ def run_plan_cmd(
                                 if not f.done():
                                     f.cancel()
                             break
+                    # v1.67.s300 — --stop-after seen in this batch -> bail.
+                    if stop_after and step["recipe_id"] == stop_after.strip():
+                        bailed = True
+                        for f, r in futs.items():
+                            if not f.done():
+                                f.cancel()
+                        break
     else:
         for rid in plan_ids:
             step = _execute_recipe(rid, rid_to_path[rid])
@@ -4083,6 +4118,10 @@ def run_plan_cmd(
                 errors.append(f"{rid}: {step.get('error', 'failed')}")
                 if fail_fast:
                     break
+            # v1.67.s300 — --stop-after halts after the named recipe
+            # (whether success or failure).
+            if stop_after and rid == stop_after.strip():
+                break
 
     summary = {
         "ok": len(failed_ids) == 0,
@@ -4095,7 +4134,82 @@ def run_plan_cmd(
         "failed_ids": failed_ids,
         "errors": errors,
         "plan": [s["recipe_id"] for s in executed],
+        # v1.67.s300 — full step list (with duration_ms).
+        "steps": executed,
+        "stop_after": stop_after.strip() or None,
     }
+
+    # v1.67.s300 — HTML preempts JSON/text.
+    html_str = str(html_out)
+    if html_str and html_str != ".":
+        html_path = Path(html_str)
+        try:
+            html_path.parent.mkdir(parents=True, exist_ok=True)
+            rows_html: list[str] = []
+            for s in executed:
+                status_class = "b-green" if s["ok"] else "b-red"
+                status_text = "OK" if s["ok"] else "FAIL"
+                err = html_escape(str(s.get("error", "") or ""))[:200]
+                rows_html.append(
+                    "<tr>"
+                    f"<td><code>{html_escape(str(s['recipe_id']))}</code></td>"
+                    f"<td><span class='{status_class}'>{status_text}</span></td>"
+                    f"<td class='num'>{s.get('duration_ms', 0)}</td>"
+                    f"<td class='num'>{s.get('exit_code', '')}</td>"
+                    f"<td>{err}</td>"
+                    "</tr>"
+                )
+            mode_badge = (
+                "<span class='b-grey'>DRY-RUN</span>"
+                if dry_run else "<span class='b-blue'>LIVE</span>"
+            )
+            html = (
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                "<title>FAW Run Plan</title>"
+                "<style>"
+                "body{font-family:system-ui,sans-serif;max-width:1100px;"
+                "margin:2em auto;}"
+                "h1{margin-bottom:.2em}"
+                ".summary{color:#666;margin-bottom:1em}"
+                "table{border-collapse:collapse;width:100%}"
+                "th,td{padding:.4em .6em;border-bottom:1px solid #eee;"
+                "text-align:left;vertical-align:top}"
+                "td.num{text-align:right;font-variant-numeric:tabular-nums}"
+                "code{background:#f5f5f5;padding:1px 4px;border-radius:2px;"
+                "font-size:.9em}"
+                ".b-green,.b-red,.b-grey,.b-blue{color:#fff;padding:2px 8px;"
+                "border-radius:3px;font-size:.8em}"
+                ".b-green{background:#2e7d32}"
+                ".b-red{background:#c62828}"
+                ".b-grey{background:#9e9e9e}"
+                ".b-blue{background:#1976d2}"
+                "</style></head><body>"
+                "<h1>FAW Run Plan</h1>"
+                "<p class='summary'>"
+                f"Mode: {mode_badge} &middot; "
+                f"Total planned: {len(plan_ids)} &middot; "
+                f"Executed: {len(executed)} &middot; "
+                f"Failed: {len(failed_ids)} &middot; "
+                f"Max parallel: {max_parallel}"
+                + (f" &middot; stop-after: <code>{html_escape(stop_after.strip())}</code>"
+                   if stop_after.strip() else "")
+                + "</p>"
+                "<table><thead><tr>"
+                "<th>Recipe</th><th>Status</th>"
+                "<th>Duration (ms)</th><th>Exit code</th><th>Error</th>"
+                "</tr></thead><tbody>"
+                + "".join(rows_html)
+                + "</tbody></table>"
+                "</body></html>"
+            )
+            html_path.write_text(html, encoding="utf-8")
+        except Exception as exc:
+            print(f"pack_run_plan_error=html_write_failed: {exc}")
+            raise typer.Exit(code=1)
+        print(f"pack_run_plan_html_path={html_path}")
+        if not summary["ok"]:
+            raise typer.Exit(code=1)
+        return
 
     if json_out:
         json.dump(summary, sys.stdout, indent=None if compact else 2)

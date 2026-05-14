@@ -716,6 +716,157 @@ class TyperCliSmokeTests(unittest.TestCase):
     # v1.67.s299 BIG-SLICE — 8 atomics (real-exec wiring + parallel batches)
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # v1.67.s300 BIG-SLICE — 7 atomics (HTML report + --stop-after +
+    # duration_ms + doc update + 300-SLICE MILESTONE)
+    # ------------------------------------------------------------------ #
+
+    def test_pack_run_plan_html_writes_execution_report(self) -> None:
+        """s300 atomic-1: --html writes standalone execution dashboard."""
+        import tempfile, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "x.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "x", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            html_path = tmp_p / "run.html"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "run-plan", "--recipes-root", str(tmp_p),
+                 "--html", str(html_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertIn("pack_run_plan_html_path=", result.stdout)
+            self.assertTrue(html_path.exists())
+            body = html_path.read_text(encoding="utf-8")
+            self.assertIn("FAW Run Plan", body)
+            self.assertIn("DRY-RUN", body)
+            self.assertIn("<code>x</code>", body)
+
+    def test_pack_run_plan_html_live_mode_badge(self) -> None:
+        """s300 atomic-2: --no-dry-run --html shows LIVE badge."""
+        import tempfile, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "x.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "x", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            html_path = tmp_p / "live.html"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "run-plan", "--recipes-root", str(tmp_p),
+                 "--no-dry-run", "--html", str(html_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            body = html_path.read_text(encoding="utf-8")
+            self.assertIn("LIVE", body)
+            self.assertNotIn("DRY-RUN", body)
+
+    def test_pack_run_plan_step_carries_duration_ms(self) -> None:
+        """s300 atomic-3: JSON --steps array carries duration_ms per step."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "x.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "x", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "run-plan", "--recipes-root", str(tmp_p),
+                 "--no-dry-run", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        # 'steps' surfaces full step list.
+        self.assertIn("steps", data)
+        self.assertEqual(len(data["steps"]), 1)
+        self.assertIn("duration_ms", data["steps"][0])
+        # Real subprocess takes > 0 ms.
+        self.assertGreater(data["steps"][0]["duration_ms"], 0)
+
+    def test_pack_run_plan_dry_run_steps_have_zero_duration(self) -> None:
+        """s300 atomic-4: dry-run steps have duration_ms=0 (no subprocess)."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "x.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "x", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "run-plan", "--recipes-root", str(tmp_p),
+                 "--json"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout)
+        self.assertEqual(data["steps"][0]["duration_ms"], 0)
+
+    def test_pack_run_plan_stop_after_halts_at_named_recipe(self) -> None:
+        """s300 atomic-5: --stop-after b halts after b in a->b->c chain."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [("a", ["b"]), ("b", ["c"]), ("c", [])]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "run-plan", "--recipes-root", str(tmp_p),
+                 "--stop-after", "b", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        # Should have executed a + b only (not c).
+        self.assertEqual(data["plan"], ["a", "b"])
+        self.assertEqual(data["stop_after"], "b")
+
+    def test_pack_run_plan_stop_after_empty_defaults_to_run_all(self) -> None:
+        """s300 atomic-6: empty --stop-after (default) runs all."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [("a", ["b"]), ("b", [])]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "run-plan", "--recipes-root", str(tmp_p),
+                 "--json"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout)
+        self.assertEqual(data["stop_after"], None)
+        self.assertEqual(data["plan"], ["a", "b"])
+
+    def test_recipe_graph_doc_mentions_html_and_stop_after(self) -> None:
+        """s300 atomic-7: RECIPE_GRAPH.md mentions --html + --stop-after."""
+        repo_root = Path(__file__).resolve().parents[2]
+        body = (repo_root / "docs" / "RECIPE_GRAPH.md").read_text(
+            encoding="utf-8",
+        )
+        self.assertIn("--html", body)
+        self.assertIn("--stop-after", body)
+        self.assertIn("--max-parallel", body)
+        self.assertIn("duration_ms", body)
+
     def test_pack_run_plan_no_dry_run_invokes_from_recipe(self) -> None:
         """s299 atomic-1: --no-dry-run actually subprocess-invokes from-recipe."""
         import tempfile, yaml as _yaml, json as _json

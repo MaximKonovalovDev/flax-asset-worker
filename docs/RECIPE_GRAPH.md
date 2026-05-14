@@ -71,7 +71,20 @@ pack run-plan --no-dry-run
 
 # Halt on first failure (real-exec mode)
 pack run-plan --no-dry-run --fail-fast
+
+# Parallel batches (v1.67.s299)
+pack run-plan --no-dry-run --max-parallel 4
+
+# HTML execution report (v1.67.s300)
+pack run-plan --no-dry-run --html report.html
+
+# Stop after specific recipe completes (v1.67.s300)
+pack run-plan --no-dry-run --stop-after r_foo
 ```
+
+JSON output (v1.67.s300) carries per-step `steps` array with
+`duration_ms`, `exit_code`, and `error` fields. HTML format includes
+mode badge (DRY-RUN/LIVE), counters, and a steps table.
 
 ## Mermaid format
 
