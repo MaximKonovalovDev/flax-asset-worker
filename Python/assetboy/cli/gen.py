@@ -1467,6 +1467,17 @@ def iconify_fetch_cmd(
             ),
         ),
     ] = "",
+    style_filter: Annotated[
+        str,
+        typer.Option(
+            "--style",
+            help=(
+                "v1.40.s225: post-search filter by style heuristic"
+                " (outline/filled/duotone/two-tone/solid/regular/thin/bold)."
+                " Matches substring in icon id. Default empty = no filter."
+            ),
+        ),
+    ] = "",
     pack_id: Annotated[
         str, typer.Option("--pack-id"),
     ] = "",
@@ -1507,6 +1518,7 @@ def iconify_fetch_cmd(
     pack_id_arg: str | None = pack_id if pack_id else None
     color_arg: str | None = color if color.strip() else None
     prefix_arg: str | None = prefix.strip() or None  # v1.20.s138
+    style_filter_arg: str | None = style_filter.strip().lower() or None  # v1.40.s225
 
     try:
         result = run_iconify_batch(
@@ -1516,6 +1528,7 @@ def iconify_fetch_cmd(
             width=width,
             color=color_arg,
             prefix=prefix_arg,
+            style_filter=style_filter_arg,
             output_dir=out_dir_arg,
             skip_collections_check=skip_collections_check,
             dry_run=dry_run,

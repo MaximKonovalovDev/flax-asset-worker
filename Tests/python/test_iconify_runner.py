@@ -254,5 +254,61 @@ class IconifyRunnerTests(unittest.TestCase):
         self.assertEqual(result.error, "no_matches")
 
 
+class IconifyStyleFilterTests(unittest.TestCase):
+    """v1.40.s225 — --style post-search filter."""
+
+    def setUp(self) -> None:
+        from assetboy.execution import iconify_runner
+        self.mod = iconify_runner
+
+    def test_style_outline_keeps_only_outline_ids(self) -> None:
+        # Mix of outline / filled / plain icon ids.
+        search_payload = _json_response({
+            "icons": [
+                "mdi-light:sword", "mdi:sword",
+                "tabler:sword-outline", "tabler:sword-filled",
+            ],
+        })
+        collections_payload = _json_response({
+            "mdi-light": {"name": "MDI Light",
+                          "license": {"spdx": "Apache-2.0",
+                                       "title": "Apache 2.0", "url": "x"}},
+            "mdi": {"name": "MDI",
+                    "license": {"spdx": "Apache-2.0",
+                                 "title": "Apache 2.0", "url": "x"}},
+            "tabler": {"name": "Tabler",
+                       "license": {"spdx": "MIT",
+                                    "title": "MIT", "url": "y"}},
+        })
+        # Only "outline" matches expected.
+        svg = _text_response('<svg/>')
+        responses = iter([search_payload, collections_payload, svg])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(
+                self.mod.urllib.request, "urlopen",
+                side_effect=lambda *a, **kw: next(responses),
+            ):
+                with patch.object(self.mod.time, "sleep"):
+                    result = self.mod.run_iconify_batch(
+                        query="sword", pack_id="X", count=10,
+                        style_filter="outline",
+                        output_dir=Path(tmp),
+                    )
+        self.assertTrue(result.ok)
+        # After filter, only tabler:sword-outline remains; 1 download.
+        self.assertEqual(result.icons_matched, 1)
+
+    def test_invalid_style_filter_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self.mod.run_iconify_batch(
+                query="x", pack_id="X", count=1,
+                style_filter="hologram",
+                output_dir=Path(tmp),
+            )
+        self.assertFalse(result.ok)
+        self.assertIn("invalid_style_filter", result.error or "")
+
+
 if __name__ == "__main__":
     unittest.main()

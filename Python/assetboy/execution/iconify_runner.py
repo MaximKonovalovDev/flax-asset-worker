@@ -162,6 +162,10 @@ def fetch_icon_svg(
     return _get_text(url, timeout=timeout)
 
 
+_VALID_ICONIFY_STYLES = {"outline", "filled", "duotone", "two-tone",
+                          "solid", "regular", "thin", "bold"}
+
+
 def run_iconify_batch(
     *,
     query: str,
@@ -170,6 +174,7 @@ def run_iconify_batch(
     width: int = 64,
     color: str | None = None,
     prefix: str | None = None,
+    style_filter: str | None = None,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.05,
     skip_collections_check: bool = False,
@@ -204,13 +209,31 @@ def run_iconify_batch(
         dry_run=dry_run,
     )
 
-    # Step 1: search (oversample to absorb license filter losses).
+    # v1.40.s225 — validate style_filter.
+    if style_filter and style_filter.strip().lower() not in _VALID_ICONIFY_STYLES:
+        result.ok = False
+        result.error = (
+            f"invalid_style_filter: {style_filter!r}"
+            f" (valid: {sorted(_VALID_ICONIFY_STYLES)})"
+        )
+        return result
+
+    # Step 1: search (oversample to absorb license + style filter losses).
     try:
-        icons = search_iconify_icons(query, limit=min(count * 2, 64), prefix=prefix)
+        # Oversample 4x when style filter is on (most sets don't carry the keyword).
+        oversample = 4 if style_filter else 2
+        icons = search_iconify_icons(
+            query, limit=min(count * oversample, 96), prefix=prefix
+        )
     except (urllib.error.URLError, ValueError, TimeoutError) as exc:
         result.ok = False
         result.error = f"search_failed: {exc}"
         return result
+
+    # v1.40.s225 — apply style filter (substring match on icon id).
+    if style_filter:
+        sf = style_filter.strip().lower()
+        icons = [i for i in icons if sf in i.lower()]
 
     result.icons_matched = len(icons)
     if not icons:
