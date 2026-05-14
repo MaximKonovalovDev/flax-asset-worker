@@ -657,6 +657,170 @@ class TyperCliSmokeTests(unittest.TestCase):
     # v1.60.s285 BIG-SLICE — 8 atomics (graph HTML + cycle/topo helpers)
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # v1.60.s286 BIG-SLICE — 6 atomics (graph CSV + compose locks)
+    # ------------------------------------------------------------------ #
+
+    def test_list_recipes_graph_csv_writes_edges(self) -> None:
+        """s286 atomic-1: --graph --csv writes kind,from_id,to_id rows for edges."""
+        import tempfile, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "a.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "a", "game": "g1",
+                                              "related_recipes": ["b"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "b.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "b", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            csv_path = tmp_p / "graph.csv"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--graph", "--csv", str(csv_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertIn("pack_list_recipes_graph_csv_path=", result.stdout)
+            self.assertTrue(csv_path.exists())
+            body = csv_path.read_text(encoding="utf-8")
+            lines = [l for l in body.splitlines() if l.strip()]
+            # Header + 1 edge row (a -> b). b has no out-edges.
+            self.assertEqual(lines[0], "kind,from_id,to_id")
+            self.assertIn("edge,a,b", lines)
+
+    def test_list_recipes_graph_csv_includes_dangling(self) -> None:
+        """s286 atomic-2: dangling refs marked as kind=dangling in CSV."""
+        import tempfile, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "ref.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "ref", "game": "g1",
+                                "related_recipes": ["ghost"]},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            csv_path = tmp_p / "g.csv"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--graph", "--csv", str(csv_path)],
+            )
+            self.assertEqual(result.exit_code, 0)
+            body = csv_path.read_text(encoding="utf-8")
+            self.assertIn("dangling,ref,ghost", body)
+
+    def test_list_recipes_graph_csv_includes_orphans(self) -> None:
+        """s286 atomic-3: orphan rows have kind=orphan with empty to_id."""
+        import tempfile, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "iso.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "iso", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            csv_path = tmp_p / "iso.csv"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--graph", "--csv", str(csv_path)],
+            )
+            self.assertEqual(result.exit_code, 0)
+            body = csv_path.read_text(encoding="utf-8")
+            # orphan row has empty to_id column.
+            self.assertIn("orphan,iso,", body)
+
+    def test_list_recipes_graph_csv_with_cycle_still_writes(self) -> None:
+        """s286 atomic-4: cycle in graph does NOT prevent CSV write
+        (CSV is data, not status — operator can investigate later)."""
+        import tempfile, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "x.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "x", "game": "g1",
+                                              "related_recipes": ["y"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "y.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "y", "game": "g1",
+                                              "related_recipes": ["x"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            csv_path = tmp_p / "cycle.csv"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--graph", "--csv", str(csv_path)],
+            )
+            self.assertEqual(result.exit_code, 0)
+            self.assertTrue(csv_path.exists())
+            body = csv_path.read_text(encoding="utf-8")
+            # Both edges present.
+            self.assertIn("edge,x,y", body)
+            self.assertIn("edge,y,x", body)
+
+    def test_list_recipes_graph_csv_row_count_matches_summary(self) -> None:
+        """s286 atomic-5: graph CSV emits row_count = edges + dangling + orphans."""
+        import tempfile, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            # 1 edge (a->b), 1 dangling (a->ghost), 1 orphan (c).
+            (tmp_p / "g1" / "a.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "a", "game": "g1",
+                                              "related_recipes": ["b", "ghost"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "b.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "b", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "c.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "c", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            csv_path = tmp_p / "mixed.csv"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--graph", "--csv", str(csv_path)],
+            )
+            self.assertEqual(result.exit_code, 0)
+            # Stdout reports row count = 1 edge + 1 dangling + 1 orphan = 3.
+            self.assertIn("pack_list_recipes_graph_csv_rows=3", result.stdout)
+            body = csv_path.read_text(encoding="utf-8")
+            lines = [l for l in body.splitlines() if l.strip()]
+            self.assertEqual(len(lines), 4)  # 1 header + 3 data rows
+
+    def test_list_recipes_graph_csv_with_recipes_root_compose(self) -> None:
+        """s286 atomic-6: --graph + --csv + --recipes-root all compose."""
+        import tempfile, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "x.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "x", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            csv_path = tmp_p / "x.csv"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes",
+                 "--recipes-root", str(tmp_p),
+                 "--graph", "--csv", str(csv_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertTrue(csv_path.exists())
+            # Single recipe with no edges -> 1 orphan row.
+            body = csv_path.read_text(encoding="utf-8")
+            self.assertIn("orphan,x,", body)
+
     def test_recipe_graph_is_acyclic_linear_chain(self) -> None:
         """s285 atomic-1: linear a->b->c->d is acyclic."""
         import tempfile, yaml as _yaml

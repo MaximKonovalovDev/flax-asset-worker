@@ -570,6 +570,38 @@ def list_recipes_cmd(
             from assetboy.workflows.recipe_graph import build_graph
             _graph = build_graph(recipes_root)
         gdict = _graph.to_dict()
+        # v1.60.s286 — CSV companion when --csv path provided.
+        csv_path_str = str(csv_out) if "csv_out" in locals() else ""
+        if csv_path_str and csv_path_str != ".":
+            import csv as _csv
+            csv_p = Path(csv_path_str)
+            try:
+                csv_p.parent.mkdir(parents=True, exist_ok=True)
+                with csv_p.open("w", encoding="utf-8", newline="") as fh:
+                    w = _csv.writer(fh)
+                    w.writerow(["kind", "from_id", "to_id"])
+                    # Edges first (sorted for determinism).
+                    for src in sorted(_graph.all_ids):
+                        for tgt in sorted(_graph.out_edges.get(src, set())):
+                            w.writerow(["edge", src, tgt])
+                    # Dangling refs (prefix-marked).
+                    for src in sorted(_graph.dangling.keys()):
+                        for tgt in sorted(_graph.dangling[src]):
+                            w.writerow(["dangling", src, tgt])
+                    # Orphan rows.
+                    for o in sorted(_graph.orphans):
+                        w.writerow(["orphan", o, ""])
+            except Exception as exc:
+                print(f"pack_list_recipes_error=graph_csv_write_failed: {exc}")
+                raise typer.Exit(code=1)
+            row_count = (
+                gdict["total_edges"]
+                + gdict["dangling_count"]
+                + gdict["orphan_count"]
+            )
+            print(f"pack_list_recipes_graph_csv_path={csv_p}")
+            print(f"pack_list_recipes_graph_csv_rows={row_count}")
+            return
         # v1.60.s285 — HTML companion when --html path provided.
         html_str = str(html_out) if "html_out" in locals() else ""
         if html_str and html_str != ".":
