@@ -977,6 +977,26 @@ def wikimedia_fetch_cmd(
             ),
         ),
     ] = "",
+    min_width: Annotated[
+        int,
+        typer.Option(
+            "--min-width",
+            help=(
+                "v1.43.s244: skip files whose width < N px (Wikimedia"
+                " imageinfo size response). 0 (default) = no filter."
+            ),
+        ),
+    ] = 0,
+    min_height: Annotated[
+        int,
+        typer.Option(
+            "--min-height",
+            help=(
+                "v1.43.s244: skip files whose height < N px."
+                " 0 (default) = no filter."
+            ),
+        ),
+    ] = 0,
     pack_id: Annotated[
         str,
         typer.Option("--pack-id", help="Pack id for output dir (default: derived from query)."),
@@ -1034,6 +1054,8 @@ def wikimedia_fetch_cmd(
             count=count,
             category=category_arg,
             license_filter=license_filter_arg,
+            min_width=min_width,
+            min_height=min_height,
             output_dir=out_dir_arg,
             dry_run=dry_run,
         )

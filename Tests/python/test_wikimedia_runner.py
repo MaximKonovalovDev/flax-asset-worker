@@ -315,5 +315,58 @@ class WikimediaRunnerTests(unittest.TestCase):
         self.assertEqual(result.error, "no_matches")
 
 
+class WikimediaMinDimsTests(unittest.TestCase):
+    """v1.43.s244 — min_width / min_height filter on imageinfo size."""
+
+    def setUp(self) -> None:
+        from assetboy.execution import wikimedia_runner
+        self.mod = wikimedia_runner
+
+    def test_min_width_drops_narrow_files(self) -> None:
+        search_payload = _json_response({
+            "query": {"search": [
+                {"title": "File:Small.jpg"}, {"title": "File:Big.jpg"},
+            ]},
+        })
+        small_info = _json_response({
+            "query": {"pages": {"1": {"imageinfo": [{
+                "url": "https://x/small.jpg", "mime": "image/jpeg",
+                "size": 1000, "width": 400, "height": 300,
+                "descriptionurl": "https://commons.wikimedia.org/wiki/File:Small.jpg",
+                "extmetadata": {
+                    "LicenseShortName": {"value": "CC0"},
+                    "Artist": {"value": "Anon"},
+                },
+            }]}}},
+        })
+        big_info = _json_response({
+            "query": {"pages": {"2": {"imageinfo": [{
+                "url": "https://x/big.jpg", "mime": "image/jpeg",
+                "size": 50000, "width": 1920, "height": 1080,
+                "descriptionurl": "https://commons.wikimedia.org/wiki/File:Big.jpg",
+                "extmetadata": {
+                    "LicenseShortName": {"value": "CC0"},
+                    "Artist": {"value": "Anon"},
+                },
+            }]}}},
+        })
+        big_blob = _binary_response(b"fake-big-jpg")
+        responses = iter([search_payload, small_info, big_info, big_blob])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(
+                self.mod.urllib.request, "urlopen",
+                side_effect=lambda *a, **kw: next(responses),
+            ):
+                with patch.object(self.mod.time, "sleep"):
+                    result = self.mod.run_wikimedia_batch(
+                        query="x", pack_id="W", count=5,
+                        min_width=1500,
+                        output_dir=Path(tmp),
+                    )
+        self.assertTrue(result.ok)
+        self.assertEqual(result.files_downloaded, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

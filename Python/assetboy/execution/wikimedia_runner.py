@@ -223,6 +223,8 @@ def run_wikimedia_batch(
     count: int = 6,
     category: str | None = None,
     license_filter: str | None = None,
+    min_width: int = 0,
+    min_height: int = 0,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.2,
     dry_run: bool = False,
@@ -307,6 +309,14 @@ def run_wikimedia_batch(
             result.files_skipped_restricted += 1
             continue
         result.files_accepted_license += 1
+
+        # v1.43.s244 — min_width / min_height filter (iiprop=size returns w/h).
+        if min_width > 0 or min_height > 0:
+            iw = int(info.get("width", 0) or 0)
+            ih = int(info.get("height", 0) or 0)
+            if (min_width > 0 and iw < min_width) or \
+               (min_height > 0 and ih < min_height):
+                continue
 
         image_url = info["url"]
         url_path = urllib.parse.urlparse(image_url).path
