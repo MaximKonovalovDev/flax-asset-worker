@@ -510,6 +510,63 @@ namespace FAW.Routes
             }
         }
 
+        /// <summary>
+        /// v1.64.s294: GET /api/v1/library/recipe-plan
+        /// Wraps `pack list-recipes --plan --json` to surface the
+        /// pipeline execution plan (topo order + depth + depends_on).
+        /// Query params:
+        ///   ?recipes_root=&lt;path&gt; (optional)
+        ///   ?batches=true (emit batches instead of flat plan)
+        /// </summary>
+        public static async Task<JObject> HandleRecipePlanAsync(HttpListenerContext ctx)
+        {
+            try
+            {
+                var recipesRoot = ctx.Request.QueryString["recipes_root"] ?? "";
+                var batches = ctx.Request.QueryString["batches"] ?? "";
+
+                var args = "-m assetboy.cli pack list-recipes --plan --json";
+                if (!string.IsNullOrWhiteSpace(recipesRoot))
+                    args += $" --recipes-root \"{recipesRoot}\"";
+                if (batches.ToLowerInvariant() == "true")
+                    args += " --batches";
+
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "python",
+                    Arguments = args,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8,
+                };
+                var proc = new Process { StartInfo = psi };
+                proc.Start();
+                var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+                var stderrTask = proc.StandardError.ReadToEndAsync();
+                if (!proc.WaitForExit(15000))
+                {
+                    try { proc.Kill(); } catch { }
+                    return Error("timeout: recipe-plan took > 15s");
+                }
+                var stdout = await stdoutTask;
+                var stderr = await stderrTask;
+                if (proc.ExitCode != 0)
+                    return Error($"recipe_plan_failed: exit={proc.ExitCode} stderr={stderr}");
+                JObject parsed;
+                try { parsed = JObject.Parse(stdout); }
+                catch (Exception jx) { return Error($"recipe_plan_unparseable: {jx.Message}"); }
+                parsed["success"] = true;
+                return parsed;
+            }
+            catch (Exception exc)
+            {
+                return Error($"recipe_plan_crashed: {exc.Message}");
+            }
+        }
+
         private static JObject Error(string msg) => new JObject { ["success"] = false, ["error"] = msg };
     }
 }

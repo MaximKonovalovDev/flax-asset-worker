@@ -155,6 +155,13 @@ namespace FAW.Core
                     // Query: ?recipes_root=<path> (optional)
                     result = await LibraryRoutes.HandleRecipeGraphAsync(ctx);
                 }
+                else if (path == "/api/v1/library/recipe-plan" && method == "GET")
+                {
+                    // v1.64.s294 — pipeline execution plan (topo order +
+                    // depth + depends_on).
+                    // Query: ?recipes_root=<path>&batches=true
+                    result = await LibraryRoutes.HandleRecipePlanAsync(ctx);
+                }
                 else if (path.StartsWith("/api/v1/library/asset/") && method == "GET")
                 {
                     // v1.6.s2: single-asset metadata lookup

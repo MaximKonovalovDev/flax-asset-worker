@@ -690,6 +690,155 @@ class TyperCliSmokeTests(unittest.TestCase):
     # v1.64.s293 BIG-SLICE — 7 atomics (--plan pipeline planner)
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # v1.64.s294 BIG-SLICE — 6 atomics (parallel_batches + --batches +
+    # HTTP /library/recipe-plan)
+    # ------------------------------------------------------------------ #
+
+    def test_recipe_graph_parallel_batches_diamond(self) -> None:
+        """s294 atomic-1: diamond a->{b,c}, b->d, c->d returns 3 batches."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [
+                ("a", ["b", "c"]), ("b", ["d"]), ("c", ["d"]), ("d", []),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            g = build_graph(tmp_p)
+        batches = g.parallel_batches()
+        self.assertEqual(batches, [["a"], ["b", "c"], ["d"]])
+
+    def test_recipe_graph_parallel_batches_cycle_returns_none(self) -> None:
+        """s294 atomic-2: cycle -> None."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "x.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "x", "game": "g1",
+                                              "related_recipes": ["y"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "y.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "y", "game": "g1",
+                                              "related_recipes": ["x"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            g = build_graph(tmp_p)
+        self.assertIsNone(g.parallel_batches())
+
+    def test_list_recipes_plan_batches_json_shape(self) -> None:
+        """s294 atomic-3: --plan --batches --json emits batches array."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [
+                ("a", ["b", "c"]), ("b", ["d"]), ("c", ["d"]), ("d", []),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--plan", "--batches", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["total_batches"], 3)
+        self.assertEqual(data["total_recipes"], 4)
+        self.assertEqual(data["batches"][0], ["a"])
+        self.assertEqual(sorted(data["batches"][1]), ["b", "c"])
+        self.assertEqual(data["batches"][2], ["d"])
+
+    def test_list_recipes_plan_batches_text_mode(self) -> None:
+        """s294 atomic-4: --plan --batches text mode prints batch lines."""
+        import tempfile, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [("a", ["b"]), ("b", [])]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--plan", "--batches"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        self.assertIn("pack_list_recipes_plan_batches_total=2", result.stdout)
+        self.assertIn("batch  1", result.stdout)
+        self.assertIn("batch  2", result.stdout)
+
+    def test_list_recipes_plan_batches_with_filter_drops_empty(self) -> None:
+        """s294 atomic-5: --plan --batches + --filter that empties a batch
+        drops that batch (no zero-length batches emitted)."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            # Chain a->b->c; filter keeps only platform=flax (b is unity).
+            for rid, rel, plat in [
+                ("a", ["b"], "flax"),
+                ("b", ["c"], "unity"),
+                ("c", [], "flax"),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1",
+                                    "platform": plat}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "platform:flax",
+                 "--plan", "--batches", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        # 3 raw batches: [a], [b], [c]. After filter keeps {a, c}:
+        # batch [a] survives, batch [b] empty (dropped), batch [c] survives.
+        # Total batches = 2; total recipes = 2.
+        self.assertEqual(data["total_batches"], 2)
+        self.assertEqual(data["batches"][0], ["a"])
+        self.assertEqual(data["batches"][1], ["c"])
+
+    def test_http_recipe_plan_route_registered(self) -> None:
+        """s294 atomic-6: WorkerHttpServer registers /api/v1/library/recipe-plan."""
+        repo_root = Path(__file__).resolve().parents[2]
+        worker_cs = (repo_root / "Source" / "Core" / "WorkerHttpServer.cs").read_text(
+            encoding="utf-8",
+        )
+        # Route path present.
+        self.assertIn("/api/v1/library/recipe-plan", worker_cs)
+        # Handler invocation present.
+        self.assertIn("HandleRecipePlanAsync", worker_cs)
+        # And the C# handler file exists.
+        routes_cs = (repo_root / "Source" / "Routes" / "LibraryRoutes.cs").read_text(
+            encoding="utf-8",
+        )
+        self.assertIn("public static async Task<JObject> HandleRecipePlanAsync",
+                      routes_cs)
+
     def test_list_recipes_plan_linear_chain_orders_topo(self) -> None:
         """s293 atomic-1: --plan on a->b->c gives steps 1,2,3 in topo order."""
         import tempfile, yaml as _yaml, json as _json

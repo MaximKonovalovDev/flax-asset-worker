@@ -155,6 +155,16 @@ def list_recipes_cmd(
             ),
         ),
     ] = False,
+    plan_batches: Annotated[
+        bool,
+        typer.Option(
+            "--batches",
+            help=(
+                "v1.64.s294: with --plan, emit batches (lists of"
+                " parallel-executable recipe ids per depth level)."
+            ),
+        ),
+    ] = False,
     html_out: Annotated[
         Path,
         typer.Option(
@@ -742,6 +752,33 @@ def list_recipes_cmd(
                 "depends_on": sorted(_graph.in_edges.get(rid, set())),
                 "game": e.get("game", ""),
             })
+        # v1.64.s294 — --batches mode: emit parallel-execution groups.
+        if plan_batches:
+            raw_batches = _graph.parallel_batches() or []
+            # Filter each batch to present_ids (respects --filter).
+            filtered: list[list[str]] = []
+            for batch in raw_batches:
+                kept = [rid for rid in batch if rid in present_ids]
+                if kept:
+                    filtered.append(kept)
+            if json_out:
+                json.dump(
+                    {
+                        "ok": True,
+                        "batches": filtered,
+                        "total_batches": len(filtered),
+                        "total_recipes": sum(len(b) for b in filtered),
+                    },
+                    sys.stdout,
+                    indent=None if compact else 2,
+                )
+                sys.stdout.write("\n")
+            else:
+                print(f"pack_list_recipes_plan_batches_total={len(filtered)}")
+                for i, batch in enumerate(filtered, 1):
+                    print(f"  batch {i:2d} ({len(batch)} parallel): "
+                          f"{', '.join(batch)}")
+            return
         # CSV emit when path provided.
         plan_csv_str = str(csv_out) if "csv_out" in locals() else ""
         if plan_csv_str and plan_csv_str != ".":

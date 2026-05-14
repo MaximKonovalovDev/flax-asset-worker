@@ -170,6 +170,37 @@ class RecipeGraph:
             and self.in_edges.get(rid)
         }
 
+    def parallel_batches(self) -> list[list[str]] | None:
+        """v1.64.s294: group ids into parallel-execution levels.
+
+        Returns list of lists where each inner list is a "batch" of ids
+        with the same depth in the DAG (Kahn-style level marking).
+        Recipes in the same batch have no dependencies on each other and
+        may be executed in parallel. Returns None on cycle.
+
+        Example: a->{b,c}, b->d, c->d yields [['a'], ['b', 'c'], ['d']].
+        """
+        if not self.is_acyclic():
+            return None
+        in_deg: dict[str, int] = {
+            rid: len(self.in_edges.get(rid, set())) for rid in self.all_ids
+        }
+        remaining = dict(in_deg)
+        batches: list[list[str]] = []
+        while remaining:
+            # Current ready set: zero in-degree.
+            ready = sorted(rid for rid, d in remaining.items() if d == 0)
+            if not ready:
+                return None  # defensive — shouldn't hit after acyclic check
+            batches.append(ready)
+            # Drop ready from remaining; decrement out-neighbor counts.
+            for rid in ready:
+                for neighbor in self.out_edges.get(rid, set()):
+                    if neighbor in remaining:
+                        remaining[neighbor] -= 1
+                remaining.pop(rid, None)
+        return batches
+
     def path_between(self, src: str, dst: str) -> list[str] | None:
         """v1.62.s290: BFS shortest path from src to dst along out_edges.
 
