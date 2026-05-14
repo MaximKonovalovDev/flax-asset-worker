@@ -133,6 +133,44 @@ class RecipeGraph:
                     return False
         return True
 
+    def entry_points(self) -> set[str]:
+        """v1.61.s287: ids with no incoming edges, but at least one outgoing
+        edge OR present in all_ids (non-orphan roots only).
+
+        An entry point is a recipe nothing references but that itself
+        references something. Pure orphans (no in AND no out) are
+        excluded — those are reported separately via .orphans.
+
+        Returns empty set if the graph is empty.
+        """
+        return {
+            rid for rid in self.all_ids
+            if not self.in_edges.get(rid)
+            and (self.out_edges.get(rid) or self.dangling.get(rid))
+        }
+
+    def depth_from(self, rid: str) -> dict[str, int]:
+        """v1.61.s287: BFS distance map from `rid` along out_edges.
+
+        Returns dict mapping reachable id -> integer hops from `rid`.
+        `rid` itself maps to 0. Unreachable ids are absent.
+        Returns empty dict if `rid` not in graph.
+        """
+        if rid not in self.all_ids:
+            return {}
+        from collections import deque
+        depths: dict[str, int] = {rid: 0}
+        queue = deque([rid])
+        while queue:
+            node = queue.popleft()
+            d = depths[node]
+            for neighbor in self.out_edges.get(node, set()):
+                if neighbor in depths:
+                    continue
+                depths[neighbor] = d + 1
+                queue.append(neighbor)
+        return depths
+
     def topological_sort(self) -> list[str] | None:
         """v1.60.s285: return ids in topological order, or None on cycle.
 

@@ -661,6 +661,172 @@ class TyperCliSmokeTests(unittest.TestCase):
     # v1.60.s286 BIG-SLICE — 6 atomics (graph CSV + compose locks)
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # v1.61.s287 BIG-SLICE — 7 atomics (entry_points + depth_from)
+    # ------------------------------------------------------------------ #
+
+    def test_recipe_graph_entry_points_linear_chain(self) -> None:
+        """s287 atomic-1: entry_points on a->b->c returns {a}."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [("a", ["b"]), ("b", ["c"]), ("c", [])]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            g = build_graph(tmp_p)
+        # Only 'a' has no incoming edges AND has outgoing edges.
+        self.assertEqual(g.entry_points(), {"a"})
+
+    def test_recipe_graph_entry_points_excludes_orphans(self) -> None:
+        """s287 atomic-2: orphans (no-in AND no-out) are NOT entry points."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "hub.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "hub", "game": "g1",
+                                              "related_recipes": ["leaf"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "leaf.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "leaf", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "iso.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "iso", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            g = build_graph(tmp_p)
+        # hub is entry-point; iso is orphan (excluded); leaf has in-edge.
+        self.assertEqual(g.entry_points(), {"hub"})
+        self.assertIn("iso", g.orphans)
+        self.assertNotIn("iso", g.entry_points())
+
+    def test_recipe_graph_depth_from_linear_chain(self) -> None:
+        """s287 atomic-3: depth_from(a) on a->b->c returns {a:0, b:1, c:2}."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [("a", ["b"]), ("b", ["c"]), ("c", [])]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            g = build_graph(tmp_p)
+        self.assertEqual(g.depth_from("a"), {"a": 0, "b": 1, "c": 2})
+        self.assertEqual(g.depth_from("zzz"), {})
+
+    def test_recipe_graph_depth_from_diamond(self) -> None:
+        """s287 atomic-4: diamond a->b, a->c, b->d, c->d gives d:2."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [
+                ("a", ["b", "c"]), ("b", ["d"]), ("c", ["d"]), ("d", []),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            g = build_graph(tmp_p)
+        depths = g.depth_from("a")
+        self.assertEqual(depths["a"], 0)
+        self.assertEqual(depths["b"], 1)
+        self.assertEqual(depths["c"], 1)
+        self.assertEqual(depths["d"], 2)
+
+    def test_list_recipes_filter_is_entry_point_true(self) -> None:
+        """s287 atomic-5: --filter is-entry-point:true returns roots only."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [
+                ("root1", ["mid"]), ("root2", ["mid"]),
+                ("mid", ["leaf"]), ("leaf", []),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "is-entry-point:true", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = {r["recipe_id"] for r in data["recipes"]}
+        self.assertEqual(ids, {"root1", "root2"})
+
+    def test_list_recipes_filter_depth_from_caps_distance(self) -> None:
+        """s287 atomic-6: --filter depth-from:a:1 returns a + immediate children."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [
+                ("a", ["b", "c"]), ("b", ["d"]), ("c", []), ("d", []),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "depth-from:a:1", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = {r["recipe_id"] for r in data["recipes"]}
+        # depth_from(a) = {a:0, b:1, c:1, d:2} — cap at 1 yields a, b, c.
+        self.assertEqual(ids, {"a", "b", "c"})
+
+    def test_list_recipes_filter_depth_from_zero_just_root(self) -> None:
+        """s287 atomic-7: --filter depth-from:a:0 returns only a itself."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "a.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "a", "game": "g1",
+                                              "related_recipes": ["b"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "b.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "b", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "depth-from:a:0", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = {r["recipe_id"] for r in data["recipes"]}
+        self.assertEqual(ids, {"a"})
+
     def test_list_recipes_graph_csv_writes_edges(self) -> None:
         """s286 atomic-1: --graph --csv writes kind,from_id,to_id rows for edges."""
         import tempfile, yaml as _yaml

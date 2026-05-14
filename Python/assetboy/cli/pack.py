@@ -212,7 +212,10 @@ def list_recipes_cmd(
                           "has_dangling",
                           # v1.59.s284 — transitive closure filters.
                           "descendants-of", "descendants_of",
-                          "ancestors-of", "ancestors_of"}
+                          "ancestors-of", "ancestors_of",
+                          # v1.61.s287 — entry-point + depth filters.
+                          "is-entry-point", "is_entry_point",
+                          "depth-from", "depth_from"}
     _needs_graph = graph_out or any(
         fn in _graph_filter_keys for fn, _ in parsed_filters
     )
@@ -332,6 +335,38 @@ def list_recipes_cmd(
             if not isinstance(rid, str):
                 return False
             return rid in _graph.ancestors(value.strip())
+        # v1.61.s287 — is-entry-point:bool matches roots that reference
+        # other recipes but nothing references them.
+        if field_name in ("is-entry-point", "is_entry_point"):
+            wanted = value.strip().lower() in ("true", "yes", "1")
+            if _graph is None:
+                return False
+            recipe_d = doc.get("recipe") or {}
+            rid = recipe_d.get("id")
+            if not isinstance(rid, str):
+                return not wanted
+            is_ep = rid in _graph.entry_points()
+            return is_ep is wanted
+        # v1.61.s287 — depth-from:<root>:<max-depth> matches recipes whose
+        # BFS distance from <root> is <= <max-depth>.
+        if field_name in ("depth-from", "depth_from"):
+            if _graph is None:
+                return False
+            # Value shape: "<root_id>:<max_depth>" (use rsplit because root_id
+            # could contain : in unusual cases — but recipe ids are usually clean).
+            if ":" not in value:
+                return False
+            root_id, _, max_depth_str = value.rpartition(":")
+            try:
+                max_depth = int(max_depth_str)
+            except ValueError:
+                return False
+            recipe_d = doc.get("recipe") or {}
+            rid = recipe_d.get("id")
+            if not isinstance(rid, str):
+                return False
+            depths = _graph.depth_from(root_id.strip())
+            return rid in depths and depths[rid] <= max_depth
         # v1.33.s199 — has-FIELD:true/false presence test (any recipe meta).
         if field_name.startswith("has-") or field_name.startswith("has_"):
             target = field_name[4:].strip().lower()
