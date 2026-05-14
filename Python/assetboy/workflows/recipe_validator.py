@@ -239,6 +239,33 @@ def validate_recipe_doc(doc: Any, source_label: str = "<recipe>") -> ValidationR
                     f"{source_label}: recipe.expected_min_assets must be"
                     f" non-negative; got {ema!r}"
                 )
+        # v1.45.s247 — optional integer expected_max_assets field.
+        # Paired with expected_min_assets to cap upper bound. Both optional;
+        # when both set, max >= min is checked.
+        if "expected_max_assets" in recipe and recipe["expected_max_assets"] is not None:
+            ema_max = recipe["expected_max_assets"]
+            if not isinstance(ema_max, int) or isinstance(ema_max, bool):
+                result.ok = False
+                result.errors.append(
+                    f"{source_label}: recipe.expected_max_assets must be"
+                    f" an integer; got {type(ema_max).__name__}"
+                )
+            elif ema_max < 0:
+                result.ok = False
+                result.errors.append(
+                    f"{source_label}: recipe.expected_max_assets must be"
+                    f" non-negative; got {ema_max!r}"
+                )
+            else:
+                ema_min = recipe.get("expected_min_assets")
+                if (isinstance(ema_min, int) and not isinstance(ema_min, bool)
+                        and ema_max < ema_min):
+                    result.ok = False
+                    result.errors.append(
+                        f"{source_label}: recipe.expected_max_assets"
+                        f" ({ema_max}) must be >= expected_min_assets"
+                        f" ({ema_min})"
+                    )
         # v1.20.s141 — optional min_required_passes (int >= 0).
         if "min_required_passes" in recipe and recipe["min_required_passes"] is not None:
             mrp = recipe["min_required_passes"]

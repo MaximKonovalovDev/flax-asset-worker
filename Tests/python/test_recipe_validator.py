@@ -956,6 +956,67 @@ class CostMinutesMetadataTests(unittest.TestCase):
         self.assertFalse(any("cost_minutes" in w for w in r.warnings))
 
 
+class ExpectedMaxAssetsTests(unittest.TestCase):
+    """v1.45.s247 — optional expected_max_assets field paired with min."""
+
+    def _recipe_with(self, **meta: object) -> dict:
+        doc = _ok_recipe()
+        doc["recipe"].update(meta)
+        return doc
+
+    def test_positive_int_passes(self) -> None:
+        r = validate_recipe_doc(
+            self._recipe_with(expected_max_assets=100), "m.yaml",
+        )
+        self.assertTrue(r.ok)
+        self.assertEqual(r.errors, [])
+
+    def test_zero_passes(self) -> None:
+        r = validate_recipe_doc(
+            self._recipe_with(expected_max_assets=0), "m.yaml",
+        )
+        self.assertTrue(r.ok)
+
+    def test_negative_fails(self) -> None:
+        r = validate_recipe_doc(
+            self._recipe_with(expected_max_assets=-1), "m.yaml",
+        )
+        self.assertFalse(r.ok)
+        self.assertTrue(any("expected_max_assets" in e and "non-negative" in e
+                            for e in r.errors))
+
+    def test_non_int_fails(self) -> None:
+        r = validate_recipe_doc(
+            self._recipe_with(expected_max_assets="lots"), "m.yaml",
+        )
+        self.assertFalse(r.ok)
+        self.assertTrue(any("expected_max_assets" in e and "integer" in e
+                            for e in r.errors))
+
+    def test_max_less_than_min_fails(self) -> None:
+        r = validate_recipe_doc(
+            self._recipe_with(expected_min_assets=10,
+                               expected_max_assets=5),
+            "m.yaml",
+        )
+        self.assertFalse(r.ok)
+        self.assertTrue(any("expected_max_assets" in e and ">=" in e
+                            for e in r.errors))
+
+    def test_max_equals_min_passes(self) -> None:
+        r = validate_recipe_doc(
+            self._recipe_with(expected_min_assets=5,
+                               expected_max_assets=5),
+            "m.yaml",
+        )
+        self.assertTrue(r.ok)
+
+    def test_missing_silent(self) -> None:
+        r = validate_recipe_doc(_ok_recipe(), "m.yaml")
+        self.assertTrue(r.ok)
+        self.assertFalse(any("expected_max_assets" in e for e in r.errors))
+
+
 class EngineVersionMetadataTests(unittest.TestCase):
     """v1.41.s233 — optional engine_version field."""
 
