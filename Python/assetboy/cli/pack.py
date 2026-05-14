@@ -165,6 +165,17 @@ def list_recipes_cmd(
             ),
         ),
     ] = False,
+    mermaid_out: Annotated[
+        Path,
+        typer.Option(
+            "--mermaid",
+            help=(
+                "v1.65.s295: with --graph, write Mermaid graph syntax"
+                " to <path>. Solid arrows for edges, dashed (-.->)"
+                " for dangling refs, standalone nodes for orphans."
+            ),
+        ),
+    ] = Path(""),
     html_out: Annotated[
         Path,
         typer.Option(
@@ -867,6 +878,20 @@ def list_recipes_cmd(
             )
             print(f"pack_list_recipes_graph_csv_path={csv_p}")
             print(f"pack_list_recipes_graph_csv_rows={row_count}")
+            return
+        # v1.65.s295 — Mermaid emit when --mermaid path provided.
+        mermaid_str = str(mermaid_out) if "mermaid_out" in locals() else ""
+        if mermaid_str and mermaid_str != ".":
+            mermaid_path = Path(mermaid_str)
+            try:
+                mermaid_path.parent.mkdir(parents=True, exist_ok=True)
+                mermaid_path.write_text(
+                    _graph.to_mermaid(), encoding="utf-8",
+                )
+            except Exception as exc:
+                print(f"pack_list_recipes_error=mermaid_write_failed: {exc}")
+                raise typer.Exit(code=1)
+            print(f"pack_list_recipes_graph_mermaid_path={mermaid_path}")
             return
         # v1.60.s285 — HTML companion when --html path provided.
         html_str = str(html_out) if "html_out" in locals() else ""
@@ -2219,6 +2244,47 @@ def validate_all_cmd(
                 "errors": result.errors,
                 "warnings": result.warnings,
             })
+
+    # v1.65.s295 — graph-level checks: cycle / dangling refs surface as
+    # warnings on individual recipes. Strict mode promotes to error.
+    try:
+        from assetboy.workflows.recipe_graph import build_graph
+        _vg = build_graph(recipes_root)
+        # Cycle: mark every recipe in any SCC; simpler — flag at top
+        # level by recording a synthetic warning on the FIRST recipe
+        # entry in topo order (or all if cycle).
+        if not _vg.is_acyclic():
+            cycle_msg = (
+                "graph_cycle: recipe.related_recipes contains a cycle"
+                " (no valid topological order)"
+            )
+            for entry in per_recipe:
+                # Mark every recipe involved (defensive — cycle scope
+                # is global since topo_sort failed).
+                entry.setdefault("warnings", []).append(cycle_msg)
+                warn_count += 1
+                if strict:
+                    entry["ok"] = False
+                    aggregate_ok = False
+                    error_count += 1
+        # Dangling: per-recipe surface.
+        for entry in per_recipe:
+            rid = entry.get("recipe_id")
+            if rid in _vg.dangling:
+                missing = sorted(_vg.dangling[rid])
+                dangling_msg = (
+                    f"graph_dangling: related_recipes points to non-existent"
+                    f" id(s): {', '.join(missing)}"
+                )
+                entry.setdefault("warnings", []).append(dangling_msg)
+                warn_count += 1
+                if strict:
+                    entry["ok"] = False
+                    aggregate_ok = False
+                    error_count += 1
+    except Exception:
+        # Graph build is best-effort enhancement; never blocks validation.
+        pass
 
     # v1.56.s278 — --csv preempts HTML/JSON/text.
     csv_str = str(csv_out)

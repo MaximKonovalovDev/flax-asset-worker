@@ -36,13 +36,54 @@ pack list-recipes --graph --html report.html
 # Emit graph as CSV (kind,from_id,to_id with rows for edges/dangling/orphans)
 pack list-recipes --graph --csv graph.csv
 
+# Emit graph as Mermaid (.mmd file; render via Mermaid CLI / GitHub / Notion)
+pack list-recipes --graph --mermaid graph.mmd
+
 # Single-line JSON (for jq pipes / HTTP transport)
 pack list-recipes --graph --compact
 
 # HTTP endpoint (same JSON shape, served on :8790)
 GET /api/v1/library/recipe-graph
 GET /api/v1/library/recipe-graph?recipes_root=/path/to/custom
+GET /api/v1/library/recipe-plan
+GET /api/v1/library/recipe-plan?batches=true
 ```
+
+## Mermaid format
+
+`--mermaid` writes a `graph LR` document (v1.65.s295):
+
+```mermaid
+graph LR;
+  recipe_a --> recipe_b;
+  recipe_a -.-> ghost_id;   %% dashed = dangling reference
+  recipe_c;                  %% orphan (isolated node)
+```
+
+Solid arrows = real edges; dashed = dangling refs; standalone nodes
+= orphans. Ids with non-alphanumeric chars (`-`, `.`, etc.) are
+sanitized to `_` (Mermaid syntax requirement). Renders in GitHub,
+GitLab, Notion, and the Mermaid Live Editor.
+
+## Pipeline execution planner
+
+`pack list-recipes --plan` (v1.64.s293) emits a topo-ordered execution
+plan. Each step record carries `{step, recipe_id, depth, pack_count,
+depends_on, game}`. Cycles cause exit 1.
+
+`--plan --batches` (v1.64.s294) groups recipes into parallel-execution
+levels. Each batch contains zero-in-degree recipes that can execute
+concurrently. Useful for `make -j` style pipelines.
+
+## Validation integration
+
+`pack validate-all` (v1.65.s295) surfaces graph-level issues as
+per-recipe warnings:
+
+- `graph_cycle: ...` — cycle detected across recipes
+- `graph_dangling: ...` — related_recipes points to non-existent id(s)
+
+Use `--strict` to promote these warnings to errors (non-zero exit).
 
 ## JSON contract
 

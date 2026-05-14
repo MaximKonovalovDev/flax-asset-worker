@@ -170,6 +170,41 @@ class RecipeGraph:
             and self.in_edges.get(rid)
         }
 
+    def to_mermaid(self, direction: str = "LR") -> str:
+        """v1.65.s295: emit Mermaid graph syntax.
+
+        Args:
+            direction: graph layout direction (LR, TB, RL, BT).
+
+        Format:
+            graph LR;
+              recipe_a --> recipe_b;
+              recipe_a -.-> ghost_id;   %% dashed = dangling reference
+              recipe_c;                  %% orphan (isolated node)
+
+        Mermaid requires alphanumeric/underscore ids; we sanitize any
+        non-conforming chars to '_'. Edges sorted for stable output.
+        Dangling edges use dashed arrow (-.->).
+        Empty graph returns just 'graph LR;'.
+        """
+        if direction not in {"LR", "TB", "RL", "BT"}:
+            direction = "LR"
+
+        def _safe(rid: str) -> str:
+            return "".join(c if c.isalnum() or c == "_" else "_" for c in rid)
+
+        lines: list[str] = [f"graph {direction};"]
+        # Sorted edges for deterministic output.
+        for src in sorted(self.all_ids):
+            for tgt in sorted(self.out_edges.get(src, set())):
+                lines.append(f"  {_safe(src)} --> {_safe(tgt)};")
+            for tgt in sorted(self.dangling.get(src, set())):
+                lines.append(f"  {_safe(src)} -.-> {_safe(tgt)};")
+        # Orphans as standalone nodes (so the graph renders them).
+        for o in sorted(self.orphans):
+            lines.append(f"  {_safe(o)};")
+        return "\n".join(lines)
+
     def parallel_batches(self) -> list[list[str]] | None:
         """v1.64.s294: group ids into parallel-execution levels.
 
