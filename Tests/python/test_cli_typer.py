@@ -4202,6 +4202,31 @@ class TyperCliSmokeTests(unittest.TestCase):
         names = {p["provider"] for p in data["providers"]}
         self.assertEqual(names, {"unsplash", "jamendo"})
 
+    def test_all_key_html_writes_report(self) -> None:
+        """v1.49.s256: --html writes standalone keyed-fan-out report."""
+        import os, tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            html_path = Path(tmp) / "keyed_fanout.html"
+            with patch.dict(os.environ, {}, clear=False):
+                for k in ("PEXELS_API_KEY", "PIXABAY_API_KEY",
+                          "UNSPLASH_ACCESS_KEY", "RAWG_API_KEY",
+                          "JAMENDO_CLIENT_ID"):
+                    os.environ.pop(k, None)
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "all-key", "--query", "test",
+                     "--dry-run", "--html", str(html_path)],
+                )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertIn("gen_all_key_html_path=", result.stdout)
+            self.assertTrue(html_path.exists())
+            body = html_path.read_text(encoding="utf-8")
+            self.assertIn("<!doctype html>", body)
+            self.assertIn("FAW Fan-out (keyed R1A providers)", body)
+            # With no keys set, all should be skipped (grey).
+            self.assertIn("b-grey", body)
+
     def test_all_key_compact_emits_single_line(self) -> None:
         """v1.35.s204: --compact single-line JSON for all-key."""
         import os
