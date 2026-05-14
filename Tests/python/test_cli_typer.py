@@ -1800,6 +1800,38 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertFalse(by_prefix["proprietary-set"])
         self.assertTrue(by_prefix["game-icons"])
 
+    def test_iconify_list_sets_html_writes_catalog(self) -> None:
+        """v1.51.s259: --html writes standalone iconify-sets catalog."""
+        import tempfile
+        from unittest.mock import patch
+        fake_collections = {
+            "mdi": {
+                "name": "Material Design Icons",
+                "category": "General",
+                "total": 7000,
+                "license": {"spdx": "Apache-2.0", "title": "Apache 2.0", "url": ""},
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            html_path = Path(tmp) / "iconify.html"
+            with patch(
+                "assetboy.execution.iconify_runner.fetch_iconify_collections",
+                return_value=fake_collections,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "iconify", "list-sets",
+                     "--html", str(html_path)],
+                )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertIn("gen_iconify_list_sets_html_path=", result.stdout)
+            self.assertTrue(html_path.exists())
+            body = html_path.read_text(encoding="utf-8")
+            self.assertIn("<!doctype html>", body)
+            self.assertIn("FAW Iconify Sets", body)
+            self.assertIn("mdi", body)
+            self.assertIn("Apache-2.0", body)
+
     def test_iconify_list_sets_accepted_only_filters(self) -> None:
         """--accepted-only excludes proprietary entries."""
         from unittest.mock import patch

@@ -1432,6 +1432,26 @@ def iconify_list_sets_cmd(
         int,
         typer.Option("--limit", help="Max sets to show in plain output (default 50)."),
     ] = 50,
+    html_out: Annotated[
+        Path,
+        typer.Option(
+            "--html",
+            help=(
+                "v1.51.s259: write standalone HTML icon-set catalog"
+                " (prefix, name, license SPDX, accepted badge, total icons)."
+                " Preempts JSON/text."
+            ),
+        ),
+    ] = Path(""),
+    open_html: Annotated[
+        bool,
+        typer.Option(
+            "--open",
+            help=(
+                "v1.51.s259: with --html, auto-open in system browser."
+            ),
+        ),
+    ] = False,
     json_out: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Browse Iconify icon sets with license info (Path B v1.15.s111).
@@ -1494,6 +1514,80 @@ def iconify_list_sets_cmd(
         "accepted_only_filter": accepted_only,
         "sets": rows,
     }
+
+    # v1.51.s259 — HTML preempts JSON/text.
+    html_str = str(html_out)
+    if html_str and html_str != ".":
+        html_path = Path(html_str)
+        try:
+            html_path.parent.mkdir(parents=True, exist_ok=True)
+            rows_html: list[str] = []
+            for r in rows:
+                accepted = r["license_accepted"]
+                accept_badge = (
+                    "<span class='b-green'>accepted</span>"
+                    if accepted else "<span class='b-red'>restricted</span>"
+                )
+                rows_html.append(
+                    "<tr>"
+                    f"<td><code>{r['prefix']}</code></td>"
+                    f"<td>{r['name']}</td>"
+                    f"<td>{r['category']}</td>"
+                    f"<td class='num'>{r['total']:,}</td>"
+                    f"<td><code>{r['license_spdx']}</code></td>"
+                    f"<td>{accept_badge}</td>"
+                    "</tr>"
+                )
+            html = (
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                "<title>FAW Iconify Sets</title>"
+                "<style>"
+                "body{font-family:system-ui,sans-serif;max-width:1100px;margin:2em auto;}"
+                "h1{margin-bottom:.2em}"
+                ".summary{color:#666;margin-bottom:1em}"
+                "table{border-collapse:collapse;width:100%}"
+                "th,td{padding:.4em .6em;border-bottom:1px solid #eee;text-align:left}"
+                "td.num{text-align:right;font-variant-numeric:tabular-nums}"
+                "code{background:#f5f5f5;padding:1px 4px;border-radius:2px;font-size:.9em}"
+                ".b-green,.b-red{color:#fff;padding:2px 8px;"
+                "border-radius:3px;font-size:.8em}"
+                ".b-green{background:#2e7d32}"
+                ".b-red{background:#c62828}"
+                "</style></head><body>"
+                "<h1>FAW Iconify Sets</h1>"
+                "<p class='summary'>"
+                f"Total sets: {len(rows)}"
+                + (" (accepted-only filter)" if accepted_only else "")
+                + "</p>"
+                "<table>"
+                "<thead><tr><th>Prefix</th><th>Name</th><th>Category</th>"
+                "<th>Total icons</th><th>SPDX</th><th>Accepted</th>"
+                "</tr></thead><tbody>"
+                + "".join(rows_html)
+                + "</tbody></table>"
+                "</body></html>"
+            )
+            html_path.write_text(html, encoding="utf-8")
+        except Exception as exc:
+            print(f"gen_iconify_list_sets_error=html_write_failed: {exc}")
+            raise typer.Exit(code=1)
+        print(f"gen_iconify_list_sets_html_path={html_path}")
+        if open_html:
+            import platform
+            import subprocess
+            sys_name = platform.system().lower()
+            try:
+                if sys_name == "windows":
+                    import os
+                    os.startfile(str(html_path.resolve()))  # type: ignore[attr-defined]
+                elif sys_name == "darwin":
+                    subprocess.run(["open", str(html_path.resolve())], check=False)
+                else:
+                    subprocess.run(["xdg-open", str(html_path.resolve())], check=False)
+                print("gen_iconify_list_sets_html_opened=true")
+            except Exception as exc:
+                print(f"gen_iconify_list_sets_html_open_failed={exc}")
+        return
 
     if json_out:
         json.dump(summary, sys.stdout, indent=2)
