@@ -877,8 +877,15 @@ def from_recipe_cmd(
     # v1.19.s132 — honor recipe.expected_min_assets.
     # Parse 'downloaded=N' patterns from each ledger.notes to sum.
     expected_min = recipe_meta.get("expected_min_assets")
+    expected_max = recipe_meta.get("expected_max_assets")  # v1.45.s248
     expected_status: dict | None = None
-    if isinstance(expected_min, int) and not isinstance(expected_min, bool) and expected_min >= 0:
+    has_min = (isinstance(expected_min, int)
+               and not isinstance(expected_min, bool)
+               and expected_min >= 0)
+    has_max = (isinstance(expected_max, int)
+               and not isinstance(expected_max, bool)
+               and expected_max >= 0)
+    if has_min or has_max:
         import re as _re
         _DL_PAT = _re.compile(r"downloaded=(\d+)")
         total_downloaded = 0
@@ -886,12 +893,16 @@ def from_recipe_cmd(
             notes = str(r.get("notes", "") or r.get("source_dir", ""))
             for match in _DL_PAT.finditer(notes):
                 total_downloaded += int(match.group(1))
-        meets = total_downloaded >= expected_min
         expected_status = {
-            "expected_min_assets": expected_min,
             "total_downloaded_seen": total_downloaded,
-            "meets_expected_min": meets,
         }
+        if has_min:
+            expected_status["expected_min_assets"] = expected_min
+            expected_status["meets_expected_min"] = total_downloaded >= expected_min
+        if has_max:
+            # v1.45.s248 — within_expected_max true when seen <= max.
+            expected_status["expected_max_assets"] = expected_max
+            expected_status["within_expected_max"] = total_downloaded <= expected_max
 
     # v1.20.s141 — honor recipe.min_required_passes.
     completed_count = sum(1 for r in results if r["status"] == "completed")
@@ -929,12 +940,24 @@ def from_recipe_cmd(
         print(f"pack_from_recipe_failed={fail_count}")
         print(f"pack_from_recipe_required_failed={'true' if required_fail else 'false'}")
         if expected_status is not None:
-            ok_label = "OK" if expected_status["meets_expected_min"] else "WARN"
-            print(
-                f"pack_from_recipe_expected_min_check=[{ok_label}] "
-                f"downloaded={expected_status['total_downloaded_seen']} "
-                f"expected_min={expected_status['expected_min_assets']}"
-            )
+            seen = expected_status["total_downloaded_seen"]
+            if "expected_min_assets" in expected_status:
+                ok_label = "OK" if expected_status["meets_expected_min"] else "WARN"
+                print(
+                    f"pack_from_recipe_expected_min_check=[{ok_label}] "
+                    f"downloaded={seen} "
+                    f"expected_min={expected_status['expected_min_assets']}"
+                )
+            # v1.45.s248 — also surface max check when present.
+            if "expected_max_assets" in expected_status:
+                ok_label_max = (
+                    "OK" if expected_status["within_expected_max"] else "WARN"
+                )
+                print(
+                    f"pack_from_recipe_expected_max_check=[{ok_label_max}] "
+                    f"downloaded={seen} "
+                    f"expected_max={expected_status['expected_max_assets']}"
+                )
         if min_passes_status is not None:
             ok2 = "OK" if min_passes_status["meets_min_passes"] else "WARN"
             print(
@@ -1858,7 +1881,11 @@ def rerun_failed_cmd(
     expected_status_r: dict | None = None
     min_passes_status_r: dict | None = None
     ema = recipe_meta.get("expected_min_assets")
-    if isinstance(ema, int) and not isinstance(ema, bool) and ema >= 0:
+    ema_max = recipe_meta.get("expected_max_assets")  # v1.45.s248
+    _has_min = isinstance(ema, int) and not isinstance(ema, bool) and ema >= 0
+    _has_max = (isinstance(ema_max, int)
+                and not isinstance(ema_max, bool) and ema_max >= 0)
+    if _has_min or _has_max:
         import re as _re
         _dlp = _re.compile(r"downloaded=(\d+)")
         td = 0
@@ -1867,11 +1894,13 @@ def rerun_failed_cmd(
                         or r.get("current_state", ""))
             for m in _dlp.finditer(notes):
                 td += int(m.group(1))
-        expected_status_r = {
-            "expected_min_assets": ema,
-            "total_downloaded_seen": td,
-            "meets_expected_min": td >= ema,
-        }
+        expected_status_r = {"total_downloaded_seen": td}
+        if _has_min:
+            expected_status_r["expected_min_assets"] = ema
+            expected_status_r["meets_expected_min"] = td >= ema
+        if _has_max:
+            expected_status_r["expected_max_assets"] = ema_max
+            expected_status_r["within_expected_max"] = td <= ema_max
     mrp = recipe_meta.get("min_required_passes")
     if isinstance(mrp, int) and not isinstance(mrp, bool) and mrp >= 0:
         min_passes_status_r = {
