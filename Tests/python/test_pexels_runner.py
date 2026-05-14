@@ -411,5 +411,70 @@ class PexelsVideoMinDurationTests(unittest.TestCase):
         self.assertEqual(result.items_downloaded, 1)
 
 
+class PexelsPhotoMinDimsTests(unittest.TestCase):
+    """v1.40.s226 — min_width / min_height post-filter."""
+
+    def setUp(self) -> None:
+        from assetboy.execution import pexels_runner
+        self.mod = pexels_runner
+
+    def test_min_width_filters_narrow_photos(self) -> None:
+        """min_width=1500 drops 800px-wide photos."""
+        search = _json_response({
+            "photos": [
+                {"id": 1, "width": 800, "height": 600,
+                 "url": "u", "photographer": "p", "photographer_url": "u",
+                 "src": {"large": "https://x/1.jpg"}},
+                {"id": 2, "width": 1920, "height": 1080,
+                 "url": "u", "photographer": "p", "photographer_url": "u",
+                 "src": {"large": "https://x/2.jpg"}},
+            ],
+        })
+        blob = _binary_response(b"fakejpeg")
+        responses = iter([search, blob])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(
+                self.mod.urllib.request, "urlopen",
+                side_effect=lambda *a, **kw: next(responses),
+            ):
+                with patch.object(self.mod.time, "sleep"):
+                    result = self.mod.run_pexels_photo_batch(
+                        query="x", api_key="k", pack_id="P",
+                        count=5, min_width=1500,
+                        output_dir=Path(tmp),
+                    )
+        self.assertTrue(result.ok)
+        self.assertEqual(result.items_downloaded, 1)
+
+    def test_min_height_filters_short_photos(self) -> None:
+        """min_height=900 drops 600px-tall photos."""
+        search = _json_response({
+            "photos": [
+                {"id": 1, "width": 1920, "height": 600,
+                 "url": "u", "photographer": "p", "photographer_url": "u",
+                 "src": {"large": "https://x/1.jpg"}},
+                {"id": 2, "width": 1920, "height": 1080,
+                 "url": "u", "photographer": "p", "photographer_url": "u",
+                 "src": {"large": "https://x/2.jpg"}},
+            ],
+        })
+        blob = _binary_response(b"fakejpeg")
+        responses = iter([search, blob])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(
+                self.mod.urllib.request, "urlopen",
+                side_effect=lambda *a, **kw: next(responses),
+            ):
+                with patch.object(self.mod.time, "sleep"):
+                    result = self.mod.run_pexels_photo_batch(
+                        query="x", api_key="k", pack_id="P",
+                        count=5, min_height=900,
+                        output_dir=Path(tmp),
+                    )
+        self.assertEqual(result.items_downloaded, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

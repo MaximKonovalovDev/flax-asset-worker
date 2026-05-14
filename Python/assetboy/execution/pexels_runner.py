@@ -180,6 +180,8 @@ def run_pexels_photo_batch(
     count: int = 6,
     variant: str = "large",
     orientation: str | None = None,
+    min_width: int = 0,
+    min_height: int = 0,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.1,
     dry_run: bool = False,
@@ -240,6 +242,13 @@ def run_pexels_photo_batch(
             break
         if not isinstance(photo, dict):
             continue
+        # v1.40.s226 — min_width / min_height post-filter (Pexels returns w/h).
+        if min_width > 0 or min_height > 0:
+            ph_w = int(photo.get("width", 0) or 0)
+            ph_h = int(photo.get("height", 0) or 0)
+            if (min_width > 0 and ph_w < min_width) or \
+               (min_height > 0 and ph_h < min_height):
+                continue
         src = photo.get("src", {}) or {}
         image_url = src.get(variant) or src.get("large") or src.get("original")
         if not image_url:

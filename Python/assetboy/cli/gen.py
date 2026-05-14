@@ -1628,6 +1628,26 @@ def pexels_photos_cmd(
             ),
         ),
     ] = "",
+    min_width: Annotated[
+        int,
+        typer.Option(
+            "--min-width",
+            help=(
+                "v1.40.s226: skip photos whose width < N px. 0 (default)"
+                " = no filter. Client-side post-filter (Pexels reports w/h)."
+            ),
+        ),
+    ] = 0,
+    min_height: Annotated[
+        int,
+        typer.Option(
+            "--min-height",
+            help=(
+                "v1.40.s226: skip photos whose height < N px. 0 (default)"
+                " = no filter."
+            ),
+        ),
+    ] = 0,
     pack_id: Annotated[str, typer.Option("--pack-id")] = "",
     output_dir: Annotated[Path, typer.Option("--output-dir")] = Path(""),
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
@@ -1652,6 +1672,8 @@ def pexels_photos_cmd(
         result = run_pexels_photo_batch(
             query=query, pack_id=pack_id_arg, count=count, variant=variant,
             orientation=orientation_arg,
+            min_width=min_width,
+            min_height=min_height,
             output_dir=out_dir_arg, dry_run=dry_run,
         )
     except Exception as exc:
