@@ -276,6 +276,17 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("historical", entry["theme"])
         self.assertIn("smoke-test", entry["tags"])
 
+    def test_pack_list_recipes_sort_last_run_utc(self) -> None:
+        """v1.40.s231: --sort last_run_utc accepts the new key (recipes with no run sort last)."""
+        result = self.runner.invoke(
+            self.app,
+            ["pack", "list-recipes", "--sort", "last_run_utc", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        import json as _json
+        data = _json.loads(result.stdout)
+        self.assertEqual(data["sort"], "last_run_utc")
+
     def test_pack_list_recipes_last_run_utc_surfaces_when_ledger_exists(self) -> None:
         """v1.40.s230: list-recipes derives last_run_utc from pack-pipeline ledger mtime."""
         import tempfile, json as _json, yaml as _yaml, os, time

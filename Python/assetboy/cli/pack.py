@@ -302,8 +302,8 @@ def list_recipes_cmd(
             str(e.get("platform", "")).lower(),
             e["path"],
         ))
-    elif sort_norm in ("updated_utc", "created_utc"):
-        # v1.32.s195 — sort by timestamp field (newest first);
+    elif sort_norm in ("updated_utc", "created_utc", "last_run_utc"):
+        # v1.32.s195 / v1.40.s231 — sort by timestamp field (newest first);
         # entries without that field sort last.
         ts_key = sort_norm
         from datetime import datetime as _dt_now
@@ -339,7 +339,8 @@ def list_recipes_cmd(
         msg = (
             f"unknown_sort_key: {sort_norm!r}"
             " (valid: 'path', 'tier', 'name', 'platform',"
-            " 'updated_utc', 'created_utc', 'cost_minutes')"
+            " 'updated_utc', 'created_utc', 'last_run_utc',"
+            " 'cost_minutes')"
         )
         if json_out:
             json.dump({"error": msg}, sys.stdout, indent=2)
