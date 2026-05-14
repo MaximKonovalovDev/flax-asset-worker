@@ -707,6 +707,126 @@ class TyperCliSmokeTests(unittest.TestCase):
     # v1.66.s297 BIG-SLICE — 8 atomics (pack run-plan executor)
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # v1.66.s298 BIG-SLICE — 6 atomics (wire --filter + HTTP endpoint
+    # + JSON shape + doc updates + close v1.66 wave)
+    # ------------------------------------------------------------------ #
+
+    def test_pack_run_plan_filter_actually_narrows_plan(self) -> None:
+        """s298 atomic-1: --filter platform:flax actually narrows run-plan."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, plat in [("a", "flax"), ("b", "unity"), ("c", "flax")]:
+                doc = {"recipe": {"id": rid, "game": "g1",
+                                    "platform": plat}, "packs": []}
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "run-plan", "--recipes-root", str(tmp_p),
+                 "--filter", "platform:flax", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        self.assertEqual(sorted(data["plan"]), ["a", "c"])
+
+    def test_pack_run_plan_filter_has_field(self) -> None:
+        """s298 atomic-2: --filter has-author:true narrows to recipes w/author."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "writ.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "writ", "game": "g1",
+                                              "author": "J"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "anon.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "anon", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "run-plan", "--recipes-root", str(tmp_p),
+                 "--filter", "has-author:true", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        self.assertEqual(data["plan"], ["writ"])
+
+    def test_pack_run_plan_json_shape_lock(self) -> None:
+        """s298 atomic-3: --json output has all 9 expected keys."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "x.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "x", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "run-plan", "--recipes-root", str(tmp_p),
+                 "--json"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout)
+        for key in (
+            "ok", "dry_run", "fail_fast", "max_parallel",
+            "total_planned", "executed_count", "failed_count",
+            "failed_ids", "errors", "plan",
+        ):
+            self.assertIn(key, data, msg=f"missing key: {key}")
+
+    def test_http_recipe_run_plan_route_registered(self) -> None:
+        """s298 atomic-4: WorkerHttpServer wires /api/v1/library/recipe-run-plan."""
+        repo_root = Path(__file__).resolve().parents[2]
+        worker_cs = (repo_root / "Source" / "Core" / "WorkerHttpServer.cs").read_text(
+            encoding="utf-8",
+        )
+        self.assertIn("/api/v1/library/recipe-run-plan", worker_cs)
+        self.assertIn("HandleRecipeRunPlanAsync", worker_cs)
+        routes_cs = (repo_root / "Source" / "Routes" / "LibraryRoutes.cs").read_text(
+            encoding="utf-8",
+        )
+        self.assertIn("public static async Task<JObject> HandleRecipeRunPlanAsync",
+                      routes_cs)
+
+    def test_recipe_graph_doc_mentions_run_plan_command(self) -> None:
+        """s298 atomic-5: RECIPE_GRAPH.md mentions pack run-plan + new
+        HTTP endpoint."""
+        repo_root = Path(__file__).resolve().parents[2]
+        body = (repo_root / "docs" / "RECIPE_GRAPH.md").read_text(
+            encoding="utf-8",
+        )
+        self.assertIn("pack run-plan", body)
+        self.assertIn("/api/v1/library/recipe-run-plan", body)
+        self.assertIn("--no-dry-run", body)
+
+    def test_pack_run_plan_compact_emits_single_line(self) -> None:
+        """s298 atomic-6: --json --compact emits one line."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "x.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "x", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "run-plan", "--recipes-root", str(tmp_p),
+                 "--json", "--compact"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        stripped = result.stdout.strip()
+        self.assertNotIn("\n", stripped)
+        data = _json.loads(stripped)
+        self.assertTrue(data["ok"])
+
     def test_pack_run_plan_dry_run_prints_topo_steps(self) -> None:
         """s297 atomic-1: run-plan --dry-run lists steps in topo order."""
         import tempfile, yaml as _yaml, json as _json
@@ -870,13 +990,11 @@ class TyperCliSmokeTests(unittest.TestCase):
                 ["pack", "run-plan", "--recipes-root", str(tmp_p),
                  "--filter", "platform:flax", "--json"],
             )
-        # Note: current implementation doesn't apply --filter yet; this
-        # test locks the surface (filter parsed; no crash). Plan still
-        # contains all 3 since filter logic is stubbed at recipe-walk.
+        # v1.66.s298 wired filter: keeps only flax-platform recipes
+        # (a, c) while preserving topo order.
         self.assertEqual(result.exit_code, 0, msg=result.stdout)
         data = _json.loads(result.stdout)
-        # All 3 in topo (filter is parsed but doesn't narrow yet).
-        self.assertEqual(data["plan"], ["a", "b", "c"])
+        self.assertEqual(data["plan"], ["a", "c"])
 
     def test_recipe_graph_stats_has_all_expected_keys(self) -> None:
         """s296 atomic-1: stats() returns all 11 expected metrics."""

@@ -47,6 +47,30 @@ GET /api/v1/library/recipe-graph
 GET /api/v1/library/recipe-graph?recipes_root=/path/to/custom
 GET /api/v1/library/recipe-plan
 GET /api/v1/library/recipe-plan?batches=true
+GET /api/v1/library/recipe-run-plan
+GET /api/v1/library/recipe-run-plan?filter=platform:flax,kind:image
+```
+
+## Run-plan executor (v1.66)
+
+`pack run-plan` actually runs the planned recipes in topo order. Real
+execution path is currently stubbed (emits
+`real_execution_not_implemented_yet` per recipe); the dry-run path is
+fully functional and surfaces what WOULD run.
+
+```pwsh
+# Dry-run (default) — print plan, no side effects
+pack run-plan
+
+# Narrow with --filter (same shape as list-recipes; recipe-level
+# fields + has-FIELD)
+pack run-plan --filter platform:flax --filter has-author:true
+
+# Real exec (stubbed — emits per-recipe error today)
+pack run-plan --no-dry-run
+
+# Halt on first failure (real-exec mode)
+pack run-plan --no-dry-run --fail-fast
 ```
 
 ## Mermaid format

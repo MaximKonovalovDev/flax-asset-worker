@@ -3924,6 +3924,60 @@ def run_plan_cmd(
     # Plan = topo order restricted to recipes we found on disk.
     plan_ids = [rid for rid in topo if rid in rid_to_path]
 
+    # v1.66.s298 — apply --filter to narrow plan to matching recipes.
+    # Reuses the list-recipes filter dispatch by re-loading + matching.
+    if parsed_filters:
+        kept: list[str] = []
+        for rid in plan_ids:
+            yml = rid_to_path[rid]
+            try:
+                doc = yaml.safe_load(yml.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            # Inline filter check using same logic as list-recipes (recipe-level
+            # fields + has-FIELD + min-tier; graph filters not supported here
+            # because the graph is already built).
+            recipe_d = doc.get("recipe") or {} if isinstance(doc, dict) else {}
+            match = True
+            for fn, fv in parsed_filters:
+                if fn.startswith("has-") or fn.startswith("has_"):
+                    target = fn[4:].strip().lower()
+                    wanted = fv.strip().lower() in ("true", "yes", "1")
+                    val = recipe_d.get(target)
+                    is_present = (
+                        val is not None and (
+                            not isinstance(val, str) or val.strip() != ""
+                        )
+                    )
+                    if (is_present is wanted) is False:
+                        match = False
+                        break
+                else:
+                    # Recipe-level exact-match (string or list-entry).
+                    val = recipe_d.get(fn)
+                    if val is None:
+                        match = False
+                        break
+                    target = fv.strip().lower()
+                    if isinstance(val, str):
+                        if val.strip().lower() != target:
+                            match = False
+                            break
+                    elif isinstance(val, list):
+                        if not any(
+                            isinstance(e, str)
+                            and e.strip().lower() == target
+                            for e in val
+                        ):
+                            match = False
+                            break
+                    else:
+                        match = False
+                        break
+            if match:
+                kept.append(rid)
+        plan_ids = kept
+
     # Build executed list (dry-run: just record; real: would invoke pipeline).
     executed: list[dict] = []
     failed_ids: list[str] = []

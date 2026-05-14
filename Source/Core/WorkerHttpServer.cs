@@ -162,6 +162,12 @@ namespace FAW.Core
                     // Query: ?recipes_root=<path>&batches=true
                     result = await LibraryRoutes.HandleRecipePlanAsync(ctx);
                 }
+                else if (path == "/api/v1/library/recipe-run-plan" && method == "GET")
+                {
+                    // v1.66.s298 — what 'pack run-plan --dry-run' would do.
+                    // Query: ?recipes_root=<path>&filter=field:value,...
+                    result = await LibraryRoutes.HandleRecipeRunPlanAsync(ctx);
+                }
                 else if (path.StartsWith("/api/v1/library/asset/") && method == "GET")
                 {
                     // v1.6.s2: single-asset metadata lookup
