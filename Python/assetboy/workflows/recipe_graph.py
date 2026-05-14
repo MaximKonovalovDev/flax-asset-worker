@@ -60,6 +60,44 @@ class RecipeGraph:
             "orphan_count": len(self.orphans),
         }
 
+    def descendants(self, rid: str) -> set[str]:
+        """v1.59.s284: transitive closure of out_edges from `rid` (BFS).
+
+        Returns the set of all ids reachable by walking out_edges.
+        Does NOT include `rid` itself. Cycles handled by visited-set.
+        Returns empty set when `rid` is not in the graph.
+        """
+        if rid not in self.all_ids:
+            return set()
+        visited: set[str] = set()
+        stack = list(self.out_edges.get(rid, set()))
+        while stack:
+            node = stack.pop()
+            if node in visited:
+                continue
+            visited.add(node)
+            stack.extend(self.out_edges.get(node, set()))
+        return visited
+
+    def ancestors(self, rid: str) -> set[str]:
+        """v1.59.s284: transitive closure of in_edges to `rid` (BFS).
+
+        Returns the set of all ids that can reach `rid` via out_edges.
+        Does NOT include `rid` itself. Cycles handled by visited-set.
+        Returns empty set when `rid` is not in the graph.
+        """
+        if rid not in self.all_ids:
+            return set()
+        visited: set[str] = set()
+        stack = list(self.in_edges.get(rid, set()))
+        while stack:
+            node = stack.pop()
+            if node in visited:
+                continue
+            visited.add(node)
+            stack.extend(self.in_edges.get(node, set()))
+        return visited
+
 
 def _safe_recipe_id(doc: dict | None) -> str | None:
     """Extract recipe.id; tolerant of missing/malformed docs."""

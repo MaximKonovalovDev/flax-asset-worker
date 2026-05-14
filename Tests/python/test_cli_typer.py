@@ -649,6 +649,147 @@ class TyperCliSmokeTests(unittest.TestCase):
     # v1.59.s283 BIG-SLICE — 7 atomics (recipe_graph + orphan/dangling)
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # v1.59.s284 BIG-SLICE — 5 atomics (descendants/ancestors + compose)
+    # ------------------------------------------------------------------ #
+
+    def test_recipe_graph_descendants_transitive_closure(self) -> None:
+        """s284 atomic-1: descendants() returns all reachable ids."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            # Chain: a -> b -> c -> d
+            for rid, rel in [
+                ("a", ["b"]), ("b", ["c"]), ("c", ["d"]), ("d", []),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            g = build_graph(tmp_p)
+        # From a, descendants = {b, c, d}; itself not included.
+        self.assertEqual(g.descendants("a"), {"b", "c", "d"})
+        self.assertEqual(g.descendants("b"), {"c", "d"})
+        self.assertEqual(g.descendants("d"), set())
+        # Unknown id returns empty set.
+        self.assertEqual(g.descendants("zzz"), set())
+
+    def test_recipe_graph_ancestors_transitive_closure(self) -> None:
+        """s284 atomic-2: ancestors() returns all ids that lead to <rid>."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [
+                ("a", ["b"]), ("b", ["c"]), ("c", ["d"]), ("d", []),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            g = build_graph(tmp_p)
+        # To d, ancestors = {a, b, c}.
+        self.assertEqual(g.ancestors("d"), {"a", "b", "c"})
+        self.assertEqual(g.ancestors("a"), set())  # root
+        self.assertEqual(g.ancestors("zzz"), set())
+
+    def test_recipe_graph_cycles_handled(self) -> None:
+        """s284 atomic-3: cycles don't infinite-loop (visited set guards)."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            # Cycle: a -> b -> c -> a
+            (tmp_p / "g1" / "a.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "a", "game": "g1",
+                                              "related_recipes": ["b"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "b.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "b", "game": "g1",
+                                              "related_recipes": ["c"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "c.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "c", "game": "g1",
+                                              "related_recipes": ["a"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            g = build_graph(tmp_p)
+        # All three reach all others.
+        self.assertEqual(g.descendants("a"), {"a", "b", "c"})
+        self.assertEqual(g.descendants("b"), {"a", "b", "c"})
+        self.assertEqual(g.ancestors("a"), {"a", "b", "c"})
+
+    def test_list_recipes_filter_descendants_of(self) -> None:
+        """s284 atomic-4: --filter descendants-of:<id> CLI integration."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [
+                ("hub", ["leaf_a", "leaf_b"]),
+                ("leaf_a", ["sub_a"]),
+                ("leaf_b", []),
+                ("sub_a", []),
+                ("isolated", []),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "descendants-of:hub", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = {r["recipe_id"] for r in data["recipes"]}
+        # From hub: leaf_a, leaf_b, sub_a (via leaf_a). hub itself NOT included.
+        self.assertEqual(ids, {"leaf_a", "leaf_b", "sub_a"})
+
+    def test_list_recipes_filter_ancestors_of(self) -> None:
+        """s284 atomic-5: --filter ancestors-of:<id> finds reverse-chain."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [
+                ("root", ["mid"]),
+                ("mid", ["target"]),
+                ("target", []),
+                ("aux_root", ["target"]),
+                ("isolated", []),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "ancestors-of:target", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = {r["recipe_id"] for r in data["recipes"]}
+        # root reaches target via mid; mid reaches target directly;
+        # aux_root reaches target directly. target itself NOT in ancestors.
+        self.assertEqual(ids, {"root", "mid", "aux_root"})
+
     def test_recipe_graph_module_builds_simple_graph(self) -> None:
         """s283 atomic-1: recipe_graph.build_graph builds out_edges/in_edges."""
         import tempfile, yaml as _yaml

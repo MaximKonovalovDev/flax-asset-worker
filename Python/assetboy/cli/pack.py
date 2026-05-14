@@ -194,11 +194,14 @@ def list_recipes_cmd(
         field_name, _, value = f.partition(":")
         parsed_filters.append((field_name.strip(), value.strip()))
 
-    # v1.59.s283 — pre-build cross-recipe graph if any graph-dependent
+    # v1.59.s283 / s284 — pre-build cross-recipe graph if any graph-dependent
     # filter is in play, or if --graph output mode is requested.
     _graph = None
     _graph_filter_keys = {"is-orphan", "is_orphan", "has-dangling",
-                          "has_dangling"}
+                          "has_dangling",
+                          # v1.59.s284 — transitive closure filters.
+                          "descendants-of", "descendants_of",
+                          "ancestors-of", "ancestors_of"}
     _needs_graph = graph_out or any(
         fn in _graph_filter_keys for fn, _ in parsed_filters
     )
@@ -300,6 +303,24 @@ def list_recipes_cmd(
                 return not wanted
             has_dangle = bool(_graph.dangling.get(rid))
             return has_dangle is wanted
+        # v1.59.s284 — descendants-of:<id> matches recipes reachable from <id>.
+        if field_name in ("descendants-of", "descendants_of"):
+            if _graph is None:
+                return False
+            recipe_d = doc.get("recipe") or {}
+            rid = recipe_d.get("id")
+            if not isinstance(rid, str):
+                return False
+            return rid in _graph.descendants(value.strip())
+        # v1.59.s284 — ancestors-of:<id> matches recipes that reach <id>.
+        if field_name in ("ancestors-of", "ancestors_of"):
+            if _graph is None:
+                return False
+            recipe_d = doc.get("recipe") or {}
+            rid = recipe_d.get("id")
+            if not isinstance(rid, str):
+                return False
+            return rid in _graph.ancestors(value.strip())
         # v1.33.s199 — has-FIELD:true/false presence test (any recipe meta).
         if field_name.startswith("has-") or field_name.startswith("has_"):
             target = field_name[4:].strip().lower()
