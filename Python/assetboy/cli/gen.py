@@ -3628,6 +3628,16 @@ def list_providers_cmd(
             ),
         ),
     ] = False,
+    limit: Annotated[
+        int,
+        typer.Option(
+            "--limit",
+            help=(
+                "v1.53.s268: cap output to top N providers (after"
+                " filter+sort). 0 (default) = no limit."
+            ),
+        ),
+    ] = 0,
     compact: Annotated[
         bool,
         typer.Option(
@@ -3845,6 +3855,10 @@ def list_providers_cmd(
         # v1.53.s267 — --reverse flips the order after sort.
         if reverse:
             providers.reverse()
+
+    # v1.53.s268 — --limit caps output after filter+sort+reverse.
+    if limit > 0 and len(providers) > limit:
+        providers = providers[:limit]
 
     no_key_count = sum(1 for p in providers if p["env_var"] is None)
     key_required = [p for p in providers if p["env_var"] is not None]

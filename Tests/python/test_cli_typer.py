@@ -4693,6 +4693,33 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("providers", data)
         self.assertIn("total", data)
 
+    def test_list_providers_limit_caps_output(self) -> None:
+        """v1.53.s268: --limit 3 caps to first 3 providers (after sort)."""
+        import json as _json
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "list-providers", "--sort", "id", "--limit", "3", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        self.assertEqual(data["total"], 3)
+        # First 3 alphabetically.
+        ids = [p["id"] for p in data["providers"]]
+        # All known provider ids sorted.
+        self.assertEqual(len(ids), 3)
+        self.assertEqual(ids, sorted(ids))
+
+    def test_list_providers_limit_zero_no_cap(self) -> None:
+        """--limit 0 (default) returns all providers."""
+        import json as _json
+        result = self.runner.invoke(
+            self.app, ["gen", "list-providers", "--limit", "0", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout)
+        # Catalog has 12+ providers; --limit 0 should not truncate.
+        self.assertGreaterEqual(data["total"], 12)
+
     def test_list_providers_sort_reverse_id(self) -> None:
         """v1.53.s267: --sort id --reverse orders Z->A."""
         import json as _json
