@@ -1153,6 +1153,17 @@ def archive_fetch_cmd(
             ),
         ),
     ] = 0,
+    license_filter: Annotated[
+        str,
+        typer.Option(
+            "--license",
+            help=(
+                "v1.44.s245: narrow accepted licenses to one family:"
+                " 'cc0' | 'pd' | 'cc-by' | 'cc-by-sa'. Default empty"
+                " (accept any of those four)."
+            ),
+        ),
+    ] = "",
     count: Annotated[
         int, typer.Option("--count", "-n", help="Max CC/PD items to download."),
     ] = 4,
@@ -1199,6 +1210,8 @@ def archive_fetch_cmd(
     yr_from: int | None = year_from if year_from > 0 else None  # v1.40.s229
     yr_to: int | None = year_to if year_to > 0 else None
 
+    license_filter_arg: str | None = license_filter.strip().lower() or None  # v1.44.s245
+
     try:
         result = run_archive_org_batch(
             query=query,
@@ -1206,6 +1219,7 @@ def archive_fetch_cmd(
             collection=collection_arg,
             year_from=yr_from,
             year_to=yr_to,
+            license_filter=license_filter_arg,
             pack_id=pack_id_arg,
             count=count,
             output_dir=out_dir_arg,

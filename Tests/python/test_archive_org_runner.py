@@ -266,6 +266,43 @@ class ArchiveOrgRunnerTests(unittest.TestCase):
         self.assertEqual(result.error, "no_matches")
 
 
+class ArchiveOrgLicenseTokenResolutionTests(unittest.TestCase):
+    """v1.44.s245 — resolve_archive_license_tokens maps filter to allow-tuple."""
+
+    def setUp(self) -> None:
+        from assetboy.execution.archive_org_runner import (
+            resolve_archive_license_tokens, is_license_accepted,
+        )
+        self.fn = resolve_archive_license_tokens
+        self.is_ok = is_license_accepted
+
+    def test_empty_returns_none(self) -> None:
+        self.assertIsNone(self.fn(""))
+        self.assertIsNone(self.fn(None))
+
+    def test_cc0_narrows_tuple(self) -> None:
+        result = self.fn("cc0")
+        self.assertIsNotNone(result)
+        # CC0 family includes /publicdomain/zero and /publicdomain/mark.
+        self.assertTrue(any("publicdomain" in t for t in result))
+
+    def test_unknown_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            self.fn("commercial-only")
+
+    def test_is_license_accepted_honors_allow_tokens(self) -> None:
+        """With allow_tokens=cc0 family, CC-BY licenseurl is NOT accepted."""
+        cc0 = ("creativecommons.org/publicdomain/zero",)
+        self.assertTrue(self.is_ok(
+            "https://creativecommons.org/publicdomain/zero/1.0/",
+            allow_tokens=cc0,
+        ))
+        self.assertFalse(self.is_ok(
+            "https://creativecommons.org/licenses/by/4.0/",
+            allow_tokens=cc0,
+        ))
+
+
 class ArchiveOrgYearRangeTests(unittest.TestCase):
     """v1.40.s229 — year_from / year_to URL injection."""
 

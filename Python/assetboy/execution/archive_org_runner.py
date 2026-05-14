@@ -106,12 +106,45 @@ def _download_binary(url: str, dest: Path, *, timeout: float = 60.0) -> int:
 # Public API
 # --------------------------------------------------------------------------- #
 
-def is_license_accepted(licenseurl: str) -> bool:
-    """True if licenseurl matches our CC-BY / CC-BY-SA / CC0 / PD allowlist."""
+def is_license_accepted(
+    licenseurl: str,
+    *,
+    allow_tokens: tuple[str, ...] | None = None,
+) -> bool:
+    """True if licenseurl matches our CC-BY / CC-BY-SA / CC0 / PD allowlist.
+
+    v1.44.s245: allow_tokens overrides the default accept-set so callers can
+    enforce a narrower license family (e.g. CC0-only).
+    """
     if not licenseurl:
         return False
     norm = licenseurl.strip().lower()
-    return any(tok in norm for tok in _ACCEPTED_LICENSE_TOKENS)
+    tokens = allow_tokens if allow_tokens is not None else _ACCEPTED_LICENSE_TOKENS
+    return any(tok in norm for tok in tokens)
+
+
+# v1.44.s245 — license family token sets (parallel to wikimedia s173).
+_ARCHIVE_LICENSE_FAMILIES = {
+    "cc0": ("creativecommons.org/publicdomain/zero",
+             "creativecommons.org/publicdomain/mark"),
+    "pd": ("creativecommons.org/publicdomain/",
+           "creativecommons.org/license/publicdomain"),
+    "cc-by": ("creativecommons.org/licenses/by/",),
+    "cc-by-sa": ("creativecommons.org/licenses/by-sa/",),
+}
+
+
+def resolve_archive_license_tokens(license_filter: str | None) -> tuple[str, ...] | None:
+    """v1.44.s245: map filter to accept-token tuple. None/empty -> default set."""
+    if not license_filter or not license_filter.strip():
+        return None
+    key = license_filter.strip().lower()
+    if key not in _ARCHIVE_LICENSE_FAMILIES:
+        raise ValueError(
+            f"invalid license_filter {license_filter!r};"
+            f" valid: {sorted(_ARCHIVE_LICENSE_FAMILIES)}"
+        )
+    return _ARCHIVE_LICENSE_FAMILIES[key]
 
 
 def search_archive_items(
@@ -192,6 +225,7 @@ def run_archive_org_batch(
     collection: str | None = None,
     year_from: int | None = None,
     year_to: int | None = None,
+    license_filter: str | None = None,
     pack_id: str | None = None,
     count: int = 4,
     output_dir: str | Path | None = None,
@@ -223,6 +257,14 @@ def run_archive_org_batch(
         dry_run=dry_run,
     )
 
+    # v1.44.s245 — resolve license_filter -> allow_tokens (None=default set).
+    try:
+        allow_tokens = resolve_archive_license_tokens(license_filter)
+    except ValueError as exc:
+        result.ok = False
+        result.error = f"license_filter_invalid: {exc}"
+        return result
+
     try:
         docs = search_archive_items(
             query, mediatype=mediatype, collection=collection,
@@ -249,7 +291,7 @@ def run_archive_org_batch(
         licenseurl = str(doc.get("licenseurl", "") or "")
         item_mediatype = str(doc.get("mediatype", "") or "")
 
-        if not is_license_accepted(licenseurl):
+        if not is_license_accepted(licenseurl, allow_tokens=allow_tokens):
             result.items_skipped_restricted += 1
             continue
         result.items_accepted_license += 1
@@ -347,6 +389,7 @@ __all__ = [
     "ARCHIVE_BASE",
     "ArchiveOrgResult",
     "is_license_accepted",
+    "resolve_archive_license_tokens",
     "search_archive_items",
     "fetch_archive_metadata",
     "pick_download_file",
