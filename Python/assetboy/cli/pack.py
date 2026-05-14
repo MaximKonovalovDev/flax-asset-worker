@@ -196,6 +196,18 @@ def list_recipes_cmd(
             if not isinstance(cm, int) or isinstance(cm, bool):
                 return False
             return cm <= budget
+        # v1.46.s251 — min-cost-minutes:N -> recipe.cost_minutes >= N
+        # (inverse of max-cost; recipes without cost_minutes do NOT match).
+        if field_name in ("min-cost-minutes", "min_cost_minutes"):
+            try:
+                floor = int(value)
+            except ValueError:
+                return False
+            recipe_d = doc.get("recipe") or {}
+            cm = recipe_d.get("cost_minutes")
+            if not isinstance(cm, int) or isinstance(cm, bool):
+                return False
+            return cm >= floor
         # v1.33.s199 — has-FIELD:true/false presence test (any recipe meta).
         if field_name.startswith("has-") or field_name.startswith("has_"):
             target = field_name[4:].strip().lower()
