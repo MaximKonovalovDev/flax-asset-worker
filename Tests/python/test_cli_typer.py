@@ -4737,6 +4737,25 @@ class TyperCliSmokeTests(unittest.TestCase):
             # met-museum should be present in at least one data row.
             self.assertTrue(any("met-museum" in l for l in lines[1:]))
 
+    def test_list_providers_html_composes_with_limit(self) -> None:
+        """v1.54.s273: --html + --sort id + --limit 2 writes top-2 alpha HTML rows."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            html_path = Path(tmp) / "top2.html"
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "list-providers", "--sort", "id", "--limit", "2",
+                 "--html", str(html_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertTrue(html_path.exists())
+            body = html_path.read_text(encoding="utf-8")
+            # First provider alphabetically should appear.
+            self.assertIn("archive-org", body)
+            # 5th+ alphabetic providers should NOT appear (limit=2).
+            self.assertNotIn("met-museum", body)
+            self.assertNotIn("unsplash", body)
+
     def test_list_providers_csv_composes_with_sort_limit(self) -> None:
         """v1.54.s272: --csv + --sort id + --limit 2 writes top-2 alpha rows."""
         import tempfile
