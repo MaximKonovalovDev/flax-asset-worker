@@ -686,6 +686,191 @@ class TyperCliSmokeTests(unittest.TestCase):
     # v1.63.s292 BIG-SLICE — 6 atomics (RECIPE_GRAPH.md doc + index)
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # v1.64.s293 BIG-SLICE — 7 atomics (--plan pipeline planner)
+    # ------------------------------------------------------------------ #
+
+    def test_list_recipes_plan_linear_chain_orders_topo(self) -> None:
+        """s293 atomic-1: --plan on a->b->c gives steps 1,2,3 in topo order."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [("a", ["b"]), ("b", ["c"]), ("c", [])]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--plan", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["total_steps"], 3)
+        ids = [p["recipe_id"] for p in data["plan"]]
+        self.assertEqual(ids, ["a", "b", "c"])
+        steps = [p["step"] for p in data["plan"]]
+        self.assertEqual(steps, [1, 2, 3])
+
+    def test_list_recipes_plan_includes_depth_and_depends_on(self) -> None:
+        """s293 atomic-2: plan entries carry depth + depends_on fields."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [
+                ("root", ["mid"]), ("mid", ["leaf"]), ("leaf", []),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--plan", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        by_id = {p["recipe_id"]: p for p in data["plan"]}
+        self.assertEqual(by_id["root"]["depth"], 0)
+        self.assertEqual(by_id["root"]["depends_on"], [])
+        self.assertEqual(by_id["mid"]["depth"], 1)
+        self.assertEqual(by_id["mid"]["depends_on"], ["root"])
+        self.assertEqual(by_id["leaf"]["depth"], 2)
+        self.assertEqual(by_id["leaf"]["depends_on"], ["mid"])
+
+    def test_list_recipes_plan_cycle_exits_1(self) -> None:
+        """s293 atomic-3: cycle -> exit 1 with error message."""
+        import tempfile, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "x.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "x", "game": "g1",
+                                              "related_recipes": ["y"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "y.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "y", "game": "g1",
+                                              "related_recipes": ["x"]},
+                                  "packs": []}), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--plan"],
+            )
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("cycle detected", result.stdout)
+
+    def test_list_recipes_plan_csv_writes_file(self) -> None:
+        """s293 atomic-4: --plan --csv writes plan with 6-col header."""
+        import tempfile, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [("a", ["b"]), ("b", [])]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            csv_path = tmp_p / "plan.csv"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--plan", "--csv", str(csv_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertIn("pack_list_recipes_plan_csv_path=", result.stdout)
+            self.assertTrue(csv_path.exists())
+            body = csv_path.read_text(encoding="utf-8")
+            lines = [l for l in body.splitlines() if l.strip()]
+            self.assertEqual(
+                lines[0],
+                "step,recipe_id,depth,pack_count,depends_on,game",
+            )
+            # Two data rows.
+            self.assertEqual(len(lines), 3)
+            self.assertIn("1,a,0", lines[1])
+            self.assertIn("2,b,1", lines[2])
+
+    def test_list_recipes_plan_text_mode_prints_steps(self) -> None:
+        """s293 atomic-5: --plan text mode prints step lines."""
+        import tempfile, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "solo.yaml").write_text(
+                _yaml.safe_dump({"recipe": {"id": "solo", "game": "g1"},
+                                  "packs": []}), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--plan"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        self.assertIn("pack_list_recipes_plan_total=1", result.stdout)
+        self.assertIn("solo", result.stdout)
+
+    def test_list_recipes_plan_with_filter_narrows_steps(self) -> None:
+        """s293 atomic-6: --plan + --filter narrows plan to filtered set
+        but preserves topo order among survivors."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel, plat in [
+                ("a", ["b"], "flax"),
+                ("b", ["c"], "unity"),
+                ("c", [], "flax"),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1",
+                                    "platform": plat}, "packs": []}
+                if rel:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "platform:flax", "--plan", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        # Filter keeps a and c (both flax); b dropped. Plan respects
+        # topo order: a before c.
+        ids = [p["recipe_id"] for p in data["plan"]]
+        self.assertEqual(ids, ["a", "c"])
+
+    def test_list_recipes_plan_empty_dir(self) -> None:
+        """s293 atomic-7: empty recipes dir -> plan with 0 steps."""
+        import tempfile, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--plan", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["total_steps"], 0)
+        self.assertEqual(data["plan"], [])
+
     def test_recipe_graph_doc_exists_and_substantial(self) -> None:
         """s292 atomic-1: docs/RECIPE_GRAPH.md ships and is non-trivial."""
         repo_root = Path(__file__).resolve().parents[2]

@@ -144,6 +144,17 @@ def list_recipes_cmd(
             ),
         ),
     ] = False,
+    plan_out: Annotated[
+        bool,
+        typer.Option(
+            "--plan",
+            help=(
+                "v1.64.s293: emit pipeline execution plan honoring topo"
+                " order (per recipe: id, depth, pack_count, depends_on)."
+                " Cycle -> exit 1 with error. Preempts --json/--csv/text."
+            ),
+        ),
+    ] = False,
     html_out: Annotated[
         Path,
         typer.Option(
@@ -223,8 +234,12 @@ def list_recipes_cmd(
     # v1.62.s289 — graph-aware sort keys also trigger graph build.
     _graph_sort_keys = {"topo", "depth", "in_degree", "out_degree"}
     _sort_needs_graph = sort.strip().lower() in _graph_sort_keys
-    _needs_graph = graph_out or _sort_needs_graph or any(
-        fn in _graph_filter_keys for fn, _ in parsed_filters
+    # v1.64.s293 — --plan triggers graph build too.
+    _needs_graph = (
+        graph_out
+        or plan_out
+        or _sort_needs_graph
+        or any(fn in _graph_filter_keys for fn, _ in parsed_filters)
     )
     if _needs_graph:
         from assetboy.workflows.recipe_graph import build_graph
@@ -685,6 +700,91 @@ def list_recipes_cmd(
     # v1.53.s270 — --limit caps output after filter+sort+reverse.
     if limit > 0 and len(entries) > limit:
         entries = entries[:limit]
+
+    # v1.64.s293 — --plan emits pipeline execution plan (topo order +
+    # per-recipe depth + dependency list). Preempts --graph/--csv/JSON/text.
+    # Cycle -> exit 1. Filters apply (entries already trimmed).
+    if plan_out:
+        if _graph is None:
+            from assetboy.workflows.recipe_graph import build_graph
+            _graph = build_graph(recipes_root)
+        topo = _graph.topological_sort()
+        if topo is None:
+            msg = "pipeline_plan_failed: cycle detected; topological sort impossible"
+            if json_out:
+                json.dump({"ok": False, "error": msg},
+                          sys.stdout, indent=None if compact else 2)
+                sys.stdout.write("\n")
+            else:
+                print(f"pack_list_recipes_plan_error={msg}")
+            raise typer.Exit(code=1)
+        # Compute per-recipe depth (max from any entry point).
+        per_depth: dict[str, int] = {}
+        for entry in _graph.entry_points():
+            for rid, d in _graph.depth_from(entry).items():
+                if d > per_depth.get(rid, -1):
+                    per_depth[rid] = d
+        for rid in _graph.all_ids - per_depth.keys():
+            per_depth[rid] = 0
+        # Build plan entries: filter to those present in `entries` set
+        # (so --filter applies), keep topo order.
+        present_ids = {e.get("recipe_id"): e for e in entries}
+        plan: list[dict] = []
+        for rid in topo:
+            if rid not in present_ids:
+                continue
+            e = present_ids[rid]
+            plan.append({
+                "step": len(plan) + 1,
+                "recipe_id": rid,
+                "depth": per_depth.get(rid, 0),
+                "pack_count": int(e.get("pack_count", 0) or 0),
+                "depends_on": sorted(_graph.in_edges.get(rid, set())),
+                "game": e.get("game", ""),
+            })
+        # CSV emit when path provided.
+        plan_csv_str = str(csv_out) if "csv_out" in locals() else ""
+        if plan_csv_str and plan_csv_str != ".":
+            import csv as _csv
+            plan_csv_path = Path(plan_csv_str)
+            try:
+                plan_csv_path.parent.mkdir(parents=True, exist_ok=True)
+                with plan_csv_path.open("w", encoding="utf-8", newline="") as fh:
+                    w = _csv.writer(fh)
+                    w.writerow([
+                        "step", "recipe_id", "depth", "pack_count",
+                        "depends_on", "game",
+                    ])
+                    for p in plan:
+                        w.writerow([
+                            p["step"], p["recipe_id"], p["depth"],
+                            p["pack_count"],
+                            ";".join(p["depends_on"]),
+                            p["game"],
+                        ])
+            except Exception as exc:
+                print(f"pack_list_recipes_plan_error=csv_write_failed: {exc}")
+                raise typer.Exit(code=1)
+            print(f"pack_list_recipes_plan_csv_path={plan_csv_path}")
+            print(f"pack_list_recipes_plan_csv_rows={len(plan)}")
+            return
+        # JSON emit.
+        if json_out:
+            json.dump(
+                {"ok": True, "plan": plan, "total_steps": len(plan)},
+                sys.stdout, indent=None if compact else 2,
+            )
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_list_recipes_plan_total={len(plan)}")
+            for p in plan:
+                deps = ",".join(p["depends_on"]) if p["depends_on"] else "-"
+                print(
+                    f"  step={p['step']:2d}  depth={p['depth']:2d}"
+                    f"  packs={p['pack_count']:3d}"
+                    f"  recipe={p['recipe_id']}  depends_on={deps}"
+                )
+        return
 
     # v1.59.s283 — --graph emits cross-recipe adjacency map as JSON.
     # v1.60.s285 — when --graph combined with --html, render HTML report.
