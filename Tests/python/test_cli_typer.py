@@ -4392,6 +4392,26 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn("bad_filter_shape", result.stdout)
 
+    def test_list_providers_html_composes_with_kind_filter(self) -> None:
+        """v1.47.s253: --html + --filter kind:audio narrows HTML rows."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            html_path = Path(tmp) / "audio_only.html"
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "list-providers",
+                 "--filter", "kind:audio",
+                 "--html", str(html_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertTrue(html_path.exists())
+            body = html_path.read_text(encoding="utf-8")
+            # Jamendo is the only audio provider; should appear.
+            self.assertIn("jamendo", body)
+            # Image-only providers should NOT appear.
+            self.assertNotIn("scryfall", body)
+            self.assertNotIn("iconify", body)
+
     def test_list_providers_html_writes_catalog(self) -> None:
         """v1.40.s224: --html writes provider catalog with asset_class badges."""
         import tempfile
