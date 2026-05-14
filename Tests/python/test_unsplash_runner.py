@@ -277,5 +277,45 @@ class UnsplashRunnerTests(unittest.TestCase):
         self.assertFalse(result)
 
 
+class UnsplashMinDimsTests(unittest.TestCase):
+    """v1.40.s228 — min_width / min_height post-filter."""
+
+    def setUp(self) -> None:
+        from assetboy.execution import unsplash_runner
+        self.mod = unsplash_runner
+
+    def test_min_width_filters_narrow_photos(self) -> None:
+        search = _json_response({
+            "results": [
+                {"id": "a", "width": 800, "height": 600,
+                 "urls": {"regular": "https://x/a.jpg"},
+                 "user": {"name": "U", "username": "u"},
+                 "links": {"html": "h", "download_location": "d"}},
+                {"id": "b", "width": 1920, "height": 1080,
+                 "urls": {"regular": "https://x/b.jpg"},
+                 "user": {"name": "U", "username": "u"},
+                 "links": {"html": "h", "download_location": "d"}},
+            ],
+        })
+        blob = _binary_response(b"fake")
+        # 1 search + 1 binary + 1 download-ping (the trigger).
+        ping = _json_response({"url": "x"})
+        responses = iter([search, blob, ping])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(
+                self.mod.urllib.request, "urlopen",
+                side_effect=lambda *a, **kw: next(responses),
+            ):
+                with patch.object(self.mod.time, "sleep"):
+                    result = self.mod.run_unsplash_photo_batch(
+                        query="x", access_key="k", pack_id="U",
+                        count=5, min_width=1500,
+                        output_dir=Path(tmp),
+                    )
+        self.assertTrue(result.ok)
+        self.assertEqual(result.photos_downloaded, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

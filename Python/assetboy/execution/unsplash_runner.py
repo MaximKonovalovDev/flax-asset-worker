@@ -171,6 +171,8 @@ def run_unsplash_photo_batch(
     variant: str = "regular",
     orientation: str | None = None,
     collections: str | None = None,
+    min_width: int = 0,
+    min_height: int = 0,
     output_dir: str | Path | None = None,
     polite_sleep_s: float = 0.2,
     dry_run: bool = False,
@@ -241,6 +243,14 @@ def run_unsplash_photo_batch(
             break
         if not isinstance(photo, dict):
             continue
+        # v1.40.s228 — min_width / min_height post-filter (Unsplash reports
+        # width / height at top level).
+        if min_width > 0 or min_height > 0:
+            pw = int(photo.get("width", 0) or 0)
+            ph = int(photo.get("height", 0) or 0)
+            if (min_width > 0 and pw < min_width) or \
+               (min_height > 0 and ph < min_height):
+                continue
         urls = photo.get("urls", {}) or {}
         image_url = urls.get(variant) or urls.get("regular") or urls.get("small")
         if not image_url:

@@ -2266,6 +2266,26 @@ def unsplash_photos_cmd(
             help="v1.19.s133: comma-separated Unsplash collection IDs to scope search to.",
         ),
     ] = "",
+    min_width: Annotated[
+        int,
+        typer.Option(
+            "--min-width",
+            help=(
+                "v1.40.s228: skip photos whose width < N px. 0 (default)"
+                " = no filter. Client-side post-filter on Unsplash w/h."
+            ),
+        ),
+    ] = 0,
+    min_height: Annotated[
+        int,
+        typer.Option(
+            "--min-height",
+            help=(
+                "v1.40.s228: skip photos whose height < N px. 0 (default)"
+                " = no filter."
+            ),
+        ),
+    ] = 0,
     pack_id: Annotated[str, typer.Option("--pack-id")] = "",
     output_dir: Annotated[Path, typer.Option("--output-dir")] = Path(""),
     skip_download_ping: Annotated[
@@ -2305,6 +2325,8 @@ def unsplash_photos_cmd(
             query=query, pack_id=pack_id_arg, count=count, variant=variant,
             orientation=orientation_arg,
             collections=collection_arg,
+            min_width=min_width,
+            min_height=min_height,
             output_dir=out_dir_arg, dry_run=dry_run,
             skip_download_ping=skip_download_ping,
         )
