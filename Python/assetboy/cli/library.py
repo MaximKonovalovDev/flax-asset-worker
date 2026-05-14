@@ -789,6 +789,16 @@ def r1a_status_cmd(
             ),
         ),
     ] = 0,
+    limit: Annotated[
+        int,
+        typer.Option(
+            "--limit",
+            help=(
+                "v1.53.s269: cap dashboard to top N providers (after"
+                " filter+sort). 0 (default) = no cap."
+            ),
+        ),
+    ] = 0,
     compact: Annotated[
         bool,
         typer.Option(
@@ -1109,6 +1119,10 @@ def r1a_status_cmd(
             )
         elif sort_norm == "id":
             providers_state.sort(key=lambda p: str(p.get("id", "")).lower())
+
+    # v1.53.s269 — --limit caps dashboard rows after filter+sort.
+    if limit > 0 and len(providers_state) > limit:
+        providers_state = providers_state[:limit]
 
     no_key_count = sum(1 for p in providers_state if p["env_var"] is None)
     key_set = sum(1 for p in providers_state if p["env_set"] is True)

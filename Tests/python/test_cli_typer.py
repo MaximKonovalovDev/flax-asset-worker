@@ -5572,6 +5572,18 @@ class TyperCliSmokeTests(unittest.TestCase):
             self.assertTrue(val is None or isinstance(val, str),
                             f"unexpected type for {p['id']}: {type(val).__name__}")
 
+    def test_library_r1a_status_limit_caps_rows(self) -> None:
+        """v1.53.s269: --limit 3 caps dashboard to 3 providers."""
+        import json as _json
+        result = self.runner.invoke(
+            self.app,
+            ["library", "r1a-status", "--sort", "id", "--limit", "3", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["providers_total"], 3)
+        self.assertEqual(len(data["providers"]), 3)
+
     def test_library_r1a_status_sort_id_alpha_order(self) -> None:
         """v1.26.s176: --sort id orders providers alphabetically."""
         import json as _json
