@@ -228,6 +228,32 @@ def list_recipes_cmd(
             if not isinstance(cm, int) or isinstance(cm, bool):
                 return False
             return cm >= floor
+        # v1.58.s281 — related-recipe:<id> -> recipe.related_recipes
+        # contains <id> (exact-match within list, case-insensitive).
+        if field_name in ("related-recipe", "related_recipe"):
+            recipe_d = doc.get("recipe") or {}
+            rr = recipe_d.get("related_recipes")
+            if not isinstance(rr, list):
+                return False
+            target = value.strip().lower()
+            return any(
+                isinstance(x, str) and x.strip().lower() == target
+                for x in rr
+            )
+        # v1.58.s281 — related-count:N -> recipe has >=N related entries.
+        if field_name in ("related-count", "related_count"):
+            try:
+                threshold = int(value)
+            except ValueError:
+                return False
+            recipe_d = doc.get("recipe") or {}
+            rr = recipe_d.get("related_recipes")
+            if not isinstance(rr, list):
+                return False
+            count = len(
+                [x for x in rr if isinstance(x, str) and x.strip()]
+            )
+            return count >= threshold
         # v1.33.s199 — has-FIELD:true/false presence test (any recipe meta).
         if field_name.startswith("has-") or field_name.startswith("has_"):
             target = field_name[4:].strip().lower()
@@ -293,14 +319,23 @@ def list_recipes_cmd(
                 if tier_values:
                     entry_data["min_tier"] = min(tier_values)
                 # v1.23.s160 / v1.25.s172 / v1.30.s189 / v1.38.s210 /
-                # v1.41.s233 / v1.45.s247 / v1.56.s277: misc metadata.
+                # v1.41.s233 / v1.45.s247 / v1.56.s277 / v1.58.s281: misc metadata.
                 for meta_key in ("genre", "theme", "style", "tags",
                                   "created_utc", "updated_utc",
                                   "author", "contact", "platform",
                                   "cost_minutes", "engine_version",
-                                  "expected_max_assets", "notes"):
+                                  "expected_max_assets", "notes",
+                                  "related_recipes"):
                     if meta_key in recipe:
                         entry_data[meta_key] = recipe[meta_key]
+                # v1.58.s281 — derived related_count from related_recipes list.
+                _rr = recipe.get("related_recipes")
+                if isinstance(_rr, list):
+                    entry_data["related_count"] = len(
+                        [x for x in _rr if isinstance(x, str) and x.strip()]
+                    )
+                else:
+                    entry_data["related_count"] = 0
                 # v1.40.s230 — last_run_utc derived from pack-pipeline ledger
                 # mtimes (most recent across all packs in this recipe).
                 try:
@@ -368,6 +403,12 @@ def list_recipes_cmd(
             str(e.get("author", "")).lower(),
             e["path"],
         ))
+    elif sort_norm == "related_count":
+        # v1.58.s281 — most-connected first (DESC); zero/missing sort last.
+        entries.sort(key=lambda e: (
+            -int(e.get("related_count", 0) or 0),
+            e["path"],
+        ))
     elif sort_norm in ("updated_utc", "created_utc", "last_run_utc"):
         # v1.32.s195 / v1.40.s231 — sort by timestamp field (newest first);
         # entries without that field sort last.
@@ -406,7 +447,7 @@ def list_recipes_cmd(
             f"unknown_sort_key: {sort_norm!r}"
             " (valid: 'path', 'tier', 'name', 'platform',"
             " 'updated_utc', 'created_utc', 'last_run_utc',"
-            " 'cost_minutes', 'author')"
+            " 'cost_minutes', 'author', 'related_count')"
         )
         if json_out:
             json.dump({"error": msg}, sys.stdout, indent=2)
@@ -453,7 +494,7 @@ def list_recipes_cmd(
                 w.writerow([
                     "path", "game", "recipe_id", "pack_count", "min_tier",
                     "cost_minutes", "engine_version", "platform", "author",
-                    "notes",
+                    "notes", "related_count",
                 ])
                 for e in entries:
                     # v1.56.s277 — notes truncated to 80 chars + newline-
@@ -473,6 +514,7 @@ def list_recipes_cmd(
                         str(e.get("platform", "") or ""),
                         str(e.get("author", "") or ""),
                         notes_csv,
+                        int(e.get("related_count", 0) or 0),
                     ])
         except Exception as exc:
             print(f"pack_list_recipes_error=csv_write_failed: {exc}")

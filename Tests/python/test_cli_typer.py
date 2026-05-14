@@ -637,6 +637,183 @@ class TyperCliSmokeTests(unittest.TestCase):
     # v1.57.s280 BIG-SLICE — 5 atomic compose locks + release-notes doc
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # v1.58.s281 BIG-SLICE — 7 atomics (recipe.related_recipes + filters)
+    # ------------------------------------------------------------------ #
+
+    def test_recipe_related_recipes_surfaces_in_json(self) -> None:
+        """s281 atomic-1: related_recipes list surfaces in list-recipes JSON +
+        derived related_count == len of valid entries."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "parent.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {
+                        "id": "parent", "game": "g1",
+                        "related_recipes": ["child_a", "child_b", "child_c"],
+                    },
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        r = next(x for x in data["recipes"] if x["recipe_id"] == "parent")
+        self.assertEqual(r["related_recipes"],
+                         ["child_a", "child_b", "child_c"])
+        self.assertEqual(r["related_count"], 3)
+
+    def test_recipe_related_recipes_validator_warns_non_list(self) -> None:
+        """s281 atomic-2: related_recipes as non-list yields warning (not error)."""
+        from assetboy.workflows.recipe_validator import validate_recipe_doc
+        doc = {
+            "recipe": {"id": "bad", "game": "g1",
+                        "related_recipes": "child_a"},
+            "packs": [],
+        }
+        r = validate_recipe_doc(doc, "rr.yaml")
+        self.assertTrue(r.ok)
+        self.assertTrue(any("related_recipes" in w and "list" in w
+                            for w in r.warnings))
+
+    def test_recipe_related_recipes_validator_warns_non_string_entry(self) -> None:
+        """s281 atomic-3: list-entry types validated; non-string -> warning."""
+        from assetboy.workflows.recipe_validator import validate_recipe_doc
+        doc = {
+            "recipe": {"id": "bad", "game": "g1",
+                        "related_recipes": ["ok", 42, ""]},
+            "packs": [],
+        }
+        r = validate_recipe_doc(doc, "rr.yaml")
+        self.assertTrue(r.ok)
+        # Two issues: [1]=non-string, [2]=empty.
+        rr_warnings = [w for w in r.warnings if "related_recipes" in w]
+        self.assertGreaterEqual(len(rr_warnings), 2)
+
+    def test_list_recipes_filter_related_recipe_finds_referrer(self) -> None:
+        """s281 atomic-4: --filter related-recipe:child_a finds recipes pointing
+        to child_a."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "parent.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "parent", "game": "g1",
+                                "related_recipes": ["child_a", "child_b"]},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "sibling.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "sibling", "game": "g1",
+                                "related_recipes": ["child_a"]},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "stranger.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "stranger", "game": "g1"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "related-recipe:child_a", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = {r["recipe_id"] for r in data["recipes"]}
+        self.assertEqual(ids, {"parent", "sibling"})
+
+    def test_list_recipes_filter_related_count_threshold(self) -> None:
+        """s281 atomic-5: --filter related-count:2 keeps recipes with >=2 links."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, rel in [
+                ("hub", ["a", "b", "c", "d"]),
+                ("link", ["a", "b"]),
+                ("leaf", ["a"]),
+                ("isolated", None),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if rel is not None:
+                    doc["recipe"]["related_recipes"] = rel
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "related-count:2", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = {r["recipe_id"] for r in data["recipes"]}
+        # >=2 related: hub (4), link (2). leaf (1) and isolated (0) drop.
+        self.assertEqual(ids, {"hub", "link"})
+
+    def test_list_recipes_sort_related_count_desc(self) -> None:
+        """s281 atomic-6: --sort related_count most-connected first; zero last."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, n in [("a_2", 2), ("b_5", 5), ("c_0", 0), ("d_3", 3)]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if n > 0:
+                    doc["recipe"]["related_recipes"] = [
+                        f"link_{i}" for i in range(n)
+                    ]
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--sort", "related_count", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = [r["recipe_id"] for r in data["recipes"]]
+        # Most-connected first: b_5(5), d_3(3), a_2(2), c_0(0).
+        self.assertEqual(ids, ["b_5", "d_3", "a_2", "c_0"])
+
+    def test_list_recipes_csv_has_related_count_column(self) -> None:
+        """s281 atomic-7: --csv header includes related_count; values populate."""
+        import tempfile, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "hub.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "hub", "game": "g1",
+                                "related_recipes": ["a", "b", "c"]},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            csv_path = tmp_p / "h.csv"
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--csv", str(csv_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            body = csv_path.read_text(encoding="utf-8")
+            lines = [l for l in body.splitlines() if l.strip()]
+            self.assertIn("related_count", lines[0])
+            # Last column on the hub data row should be 3.
+            self.assertTrue(lines[1].rstrip().endswith(",3"))
+
     def test_list_providers_html_filter_limit_triple(self) -> None:
         """s280 atomic-1: --html + --filter kind:audio + --limit 1 triple."""
         import tempfile

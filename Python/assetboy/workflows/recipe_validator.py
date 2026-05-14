@@ -219,6 +219,34 @@ def validate_recipe_doc(doc: Any, source_label: str = "<recipe>") -> ValidationR
                     f"{source_label}: recipe.notes should be a string;"
                     f" got {type(nv).__name__}"
                 )
+        # v1.58.s281 — optional recipe.related_recipes list[str] for
+        # cross-recipe discovery (e.g. parent->child or theme-shared sets).
+        # Warns on non-list / empty-string entries; never errors.
+        if ("related_recipes" in recipe
+                and recipe["related_recipes"] is not None):
+            rr = recipe["related_recipes"]
+            if not isinstance(rr, list):
+                result.warnings.append(
+                    f"{source_label}: recipe.related_recipes should be a"
+                    f" list of recipe ids (strings); got {type(rr).__name__}"
+                )
+            elif not rr:
+                result.warnings.append(
+                    f"{source_label}: recipe.related_recipes is an empty list;"
+                    " consider removing the field"
+                )
+            else:
+                for i, entry in enumerate(rr):
+                    if not isinstance(entry, str):
+                        result.warnings.append(
+                            f"{source_label}: recipe.related_recipes[{i}]"
+                            f" must be a string; got {type(entry).__name__}"
+                        )
+                    elif not entry.strip():
+                        result.warnings.append(
+                            f"{source_label}: recipe.related_recipes[{i}]"
+                            " is empty/whitespace"
+                        )
         # v1.41.s233 — optional engine_version string (e.g. '1.6', '6.0',
         # '2026.1'). Warn on non-string; non-empty soft check; never error.
         if "engine_version" in recipe and recipe["engine_version"] is not None:
