@@ -786,6 +786,25 @@ def comfy_submit_workflow_cmd(
 
 @met_app.command("departments")
 def met_departments_cmd(
+    html_out: Annotated[
+        Path,
+        typer.Option(
+            "--html",
+            help=(
+                "v1.51.s260: write standalone HTML Met department catalog."
+                " Preempts JSON/text."
+            ),
+        ),
+    ] = Path(""),
+    open_html: Annotated[
+        bool,
+        typer.Option(
+            "--open",
+            help=(
+                "v1.51.s260: with --html, auto-open in system browser."
+            ),
+        ),
+    ] = False,
     json_out: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """List all Met Museum departments (v1.23.s158).
@@ -805,6 +824,61 @@ def met_departments_cmd(
         else:
             print(f"gen_met_museum_departments_error={msg}")
         raise typer.Exit(code=1)
+
+    # v1.51.s260 — HTML preempts JSON/text.
+    html_str = str(html_out)
+    if html_str and html_str != ".":
+        html_path = Path(html_str)
+        try:
+            html_path.parent.mkdir(parents=True, exist_ok=True)
+            rows_html: list[str] = []
+            for d in depts:
+                did = d.get("departmentId", "?")
+                name = d.get("displayName", "")
+                rows_html.append(
+                    f"<tr><td class='num'>{did}</td><td>{name}</td></tr>"
+                )
+            html = (
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                "<title>FAW Met Departments</title>"
+                "<style>"
+                "body{font-family:system-ui,sans-serif;max-width:900px;margin:2em auto;}"
+                "h1{margin-bottom:.2em}"
+                ".summary{color:#666;margin-bottom:1em}"
+                "table{border-collapse:collapse;width:100%}"
+                "th,td{padding:.4em .6em;border-bottom:1px solid #eee;text-align:left}"
+                "td.num{text-align:right;font-variant-numeric:tabular-nums;width:5em}"
+                "</style></head><body>"
+                "<h1>FAW Met Museum Departments</h1>"
+                "<p class='summary'>"
+                f"Total: {len(depts)} &middot; "
+                "Use the dept id with <code>gen met-museum fetch --department N</code>."
+                "</p>"
+                "<table><thead><tr><th>Dept ID</th><th>Name</th></tr></thead>"
+                "<tbody>" + "".join(rows_html) + "</tbody></table>"
+                "</body></html>"
+            )
+            html_path.write_text(html, encoding="utf-8")
+        except Exception as exc:
+            print(f"gen_met_museum_departments_error=html_write_failed: {exc}")
+            raise typer.Exit(code=1)
+        print(f"gen_met_museum_departments_html_path={html_path}")
+        if open_html:
+            import platform
+            import subprocess
+            sys_name = platform.system().lower()
+            try:
+                if sys_name == "windows":
+                    import os
+                    os.startfile(str(html_path.resolve()))  # type: ignore[attr-defined]
+                elif sys_name == "darwin":
+                    subprocess.run(["open", str(html_path.resolve())], check=False)
+                else:
+                    subprocess.run(["xdg-open", str(html_path.resolve())], check=False)
+                print("gen_met_museum_departments_html_opened=true")
+            except Exception as exc:
+                print(f"gen_met_museum_departments_html_open_failed={exc}")
+        return
 
     if json_out:
         json.dump({"departments": depts, "count": len(depts)},

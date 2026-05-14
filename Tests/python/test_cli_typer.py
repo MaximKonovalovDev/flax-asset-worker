@@ -1409,6 +1409,34 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["count"], 2)
         self.assertEqual(data["departments"][0]["departmentId"], 11)
 
+    def test_met_museum_departments_html_writes_catalog(self) -> None:
+        """v1.51.s260: --html writes standalone Met department catalog."""
+        import tempfile
+        from unittest.mock import patch
+        fake = [
+            {"departmentId": 11, "displayName": "European Paintings"},
+            {"departmentId": 6, "displayName": "Asian Art"},
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            html_path = Path(tmp) / "met_depts.html"
+            with patch(
+                "assetboy.execution.met_museum_runner.list_met_departments",
+                return_value=fake,
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["gen", "met-museum", "departments",
+                     "--html", str(html_path)],
+                )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertIn("gen_met_museum_departments_html_path=", result.stdout)
+            self.assertTrue(html_path.exists())
+            body = html_path.read_text(encoding="utf-8")
+            self.assertIn("<!doctype html>", body)
+            self.assertIn("FAW Met Museum Departments", body)
+            self.assertIn("European Paintings", body)
+            self.assertIn("Asian Art", body)
+
     def test_met_museum_departments_text_renders(self) -> None:
         from unittest.mock import patch
         fake_payload = [{"departmentId": 6, "displayName": "Asian Art"}]
