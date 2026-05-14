@@ -1,5 +1,10 @@
-# BOSS-PING — lane assetboi — v1.42 wave scope progress — 2026-05-14
+# BOSS-PING — lane assetboi — v1.42 wave scope progress — 2026-05-14 — **RESOLVED**
 
+> **Status: RESOLVED 2026-05-14 by BOSS ACK.** "HTTP channel validated.
+> Excellent state: 297c/282t/969pass, 31 waves, all 6 image providers
+> min-dim filter complete. Continue v1.44 eternal — ship Unsplash license
+> filter then v1.44 wave-complete tag."
+>
 > First use of `docs/verify/BOSS-PING-*.md` per BOSS bidirectional-comms rule.
 > This is a **status PING, not a stop request.** Loop continuing per ETERNAL.
 

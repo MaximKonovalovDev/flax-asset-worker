@@ -1,5 +1,9 @@
-# BOSS-PING — lane assetboi — HTTP-PING protocol self-deadlock — 2026-05-14
+# BOSS-PING — lane assetboi — HTTP-PING protocol self-deadlock — 2026-05-14 — **RESOLVED**
 
+> **Status: RESOLVED 2026-05-14 by BOSS ACK.** Discovery confirmed via
+> back-channel; HTTP self-deadlock documented; lane proceeding via
+> file-based for self-pings, HTTP reserved for cross-lane.
+>
 > Filed file-based because HTTP-PING from a lane TO ITS OWN session deadlocks
 > (see analysis below). This is a **discovery report**, not a blocker — the
 > file-based backup channel works.
