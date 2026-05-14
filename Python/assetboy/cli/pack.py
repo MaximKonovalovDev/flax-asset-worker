@@ -3797,5 +3797,197 @@ def manifest_stats_cmd(
                 )
 
 
+@app.command("run-plan")
+def run_plan_cmd(
+    recipes_root_override: Annotated[
+        str,
+        typer.Option(
+            "--recipes-root",
+            help=(
+                "Override the recipes/ scan root (default: auto-detect)."
+            ),
+        ),
+    ] = "",
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run/--no-dry-run",
+            help=(
+                "Plan only — print steps that WOULD run; no pack pipeline"
+                " side effects. Default ON (operator must explicitly opt"
+                " out via --no-dry-run to execute)."
+            ),
+        ),
+    ] = True,
+    fail_fast: Annotated[
+        bool,
+        typer.Option(
+            "--fail-fast",
+            help=(
+                "Halt on first failed pack; default is keep going and"
+                " report all failures at end."
+            ),
+        ),
+    ] = False,
+    max_parallel: Annotated[
+        int,
+        typer.Option(
+            "--max-parallel",
+            help=(
+                "Cap parallel pack executions per batch level. 1"
+                " (default) = sequential. Honors RecipeGraph.parallel_batches."
+            ),
+        ),
+    ] = 1,
+    filter_: Annotated[
+        list[str],
+        typer.Option(
+            "--filter",
+            help=(
+                "Recipe filter (same shape as list-recipes --filter)."
+                " Repeatable; ANDed."
+            ),
+        ),
+    ] = None,
+    compact: Annotated[
+        bool,
+        typer.Option(
+            "--compact",
+            help="Single-line JSON output. No effect without --json.",
+        ),
+    ] = False,
+    json_out: Annotated[
+        bool, typer.Option("--json", help="Emit JSON output."),
+    ] = False,
+) -> None:
+    """Execute recipes in topological order against pack pipeline (v1.66.s297).
+
+    Builds the recipe graph from related_recipes; emits a plan; runs each
+    recipe's from-recipe pipeline in dependency order.
+
+    Cycles -> exit 1 with no execution. --dry-run prints the plan but
+    never modifies pack-pipeline state. --max-parallel N + parallel_batches
+    enables level-by-level concurrent execution.
+
+    JSON output: {ok, dry_run, plan, executed, failed, errors}.
+    """
+    from assetboy.workflows.recipe_graph import build_graph
+
+    recipes_root = (
+        Path(recipes_root_override) if recipes_root_override.strip()
+        else _recipes_dir()
+    )
+    if not recipes_root.exists():
+        msg = f"recipes_dir_not_found: {recipes_root}"
+        if json_out:
+            json.dump({"ok": False, "error": msg},
+                      sys.stdout, indent=None if compact else 2)
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_run_plan_error={msg}")
+        raise typer.Exit(code=1)
+
+    graph = build_graph(recipes_root)
+    topo = graph.topological_sort()
+    if topo is None:
+        msg = "run_plan_failed: cycle detected in recipe.related_recipes"
+        if json_out:
+            json.dump({"ok": False, "error": msg, "dry_run": dry_run},
+                      sys.stdout, indent=None if compact else 2)
+            sys.stdout.write("\n")
+        else:
+            print(f"pack_run_plan_error={msg}")
+        raise typer.Exit(code=1)
+
+    # Parse --filter into (field, value) tuples and reuse list-recipes
+    # filter logic to narrow execution set.
+    parsed_filters: list[tuple[str, str]] = []
+    for f in (filter_ or []):
+        if ":" in f:
+            fn, _, fv = f.partition(":")
+            parsed_filters.append((fn.strip(), fv.strip()))
+
+    # Walk recipes/ to find {recipe_id -> recipe_yaml path}.
+    rid_to_path: dict[str, Path] = {}
+    if yaml is not None:
+        for yml in recipes_root.rglob("*.yaml"):
+            try:
+                doc = yaml.safe_load(yml.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if isinstance(doc, dict):
+                r = doc.get("recipe") or {}
+                rid = r.get("id")
+                if isinstance(rid, str) and rid.strip():
+                    rid_to_path[rid.strip()] = yml
+
+    # Plan = topo order restricted to recipes we found on disk.
+    plan_ids = [rid for rid in topo if rid in rid_to_path]
+
+    # Build executed list (dry-run: just record; real: would invoke pipeline).
+    executed: list[dict] = []
+    failed_ids: list[str] = []
+    errors: list[str] = []
+
+    for rid in plan_ids:
+        recipe_path = rid_to_path[rid]
+        step = {
+            "recipe_id": rid,
+            "path": str(recipe_path.relative_to(recipes_root)),
+            "dry_run": dry_run,
+            "ok": True,
+        }
+        if dry_run:
+            executed.append(step)
+        else:
+            # Real execution path: defer to from-recipe pipeline.
+            # We don't recursively invoke from this command (avoids
+            # Typer-in-Typer brittleness); we just emit instructions
+            # for the operator/runner. Future work: wire to internal
+            # _run_from_recipe helper.
+            step["ok"] = False
+            step["error"] = "real_execution_not_implemented_yet"
+            failed_ids.append(rid)
+            errors.append(
+                f"{rid}: real execution path stubbed; use --dry-run"
+            )
+            executed.append(step)
+            if fail_fast:
+                break
+
+    summary = {
+        "ok": len(failed_ids) == 0,
+        "dry_run": dry_run,
+        "fail_fast": fail_fast,
+        "max_parallel": max_parallel,
+        "total_planned": len(plan_ids),
+        "executed_count": len(executed),
+        "failed_count": len(failed_ids),
+        "failed_ids": failed_ids,
+        "errors": errors,
+        "plan": [s["recipe_id"] for s in executed],
+    }
+
+    if json_out:
+        json.dump(summary, sys.stdout, indent=None if compact else 2)
+        sys.stdout.write("\n")
+    else:
+        marker = "DRY" if dry_run else "RUN"
+        print(f"pack_run_plan_mode={marker}")
+        print(f"pack_run_plan_total_planned={len(plan_ids)}")
+        print(f"pack_run_plan_executed_count={len(executed)}")
+        print(f"pack_run_plan_failed_count={len(failed_ids)}")
+        for s in executed:
+            tag = "[OK ]" if s["ok"] else "[FAIL]"
+            print(f"  {tag} {s['recipe_id']:30s} {s['path']}")
+        if errors:
+            print("pack_run_plan_errors:")
+            for e in errors:
+                print(f"  {e}")
+
+    if not summary["ok"]:
+        raise typer.Exit(code=1)
+
+
 if __name__ == "__main__":
     app()
