@@ -112,6 +112,16 @@ def list_recipes_cmd(
             ),
         ),
     ] = 0,
+    limit: Annotated[
+        int,
+        typer.Option(
+            "--limit",
+            help=(
+                "v1.53.s270: cap output to top N recipes (after filter+"
+                "sort+reverse). 0 (default) = no cap."
+            ),
+        ),
+    ] = 0,
     compact: Annotated[
         bool,
         typer.Option(
@@ -405,6 +415,10 @@ def list_recipes_cmd(
     # v1.17.s121 — reverse after sort.
     if reverse:
         entries.reverse()
+
+    # v1.53.s270 — --limit caps output after filter+sort+reverse.
+    if limit > 0 and len(entries) > limit:
+        entries = entries[:limit]
 
     if json_out:
         out = {

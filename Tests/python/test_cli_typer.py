@@ -411,6 +411,30 @@ class TyperCliSmokeTests(unittest.TestCase):
             # No ledger on disk for this pack id => no last_run_utc.
             self.assertNotIn("last_run_utc", r1)
 
+    def test_pack_list_recipes_limit_caps_output(self) -> None:
+        """v1.53.s270: --limit 2 caps to first 2 recipes (after sort)."""
+        import tempfile, json as _json, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid in ["r_a", "r_b", "r_c", "r_d", "r_e"]:
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump({
+                        "recipe": {"id": rid, "game": "g1"},
+                        "packs": [],
+                    }), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--sort", "name", "--limit", "2", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        self.assertEqual(data["count"], 2)
+        ids = [r["recipe_id"] for r in data["recipes"]]
+        self.assertEqual(ids, ["r_a", "r_b"])
+
     def test_pack_list_recipes_sort_cost_minutes_cheapest_first(self) -> None:
         """v1.38.s211: --sort cost_minutes orders cheapest-first; untagged last."""
         import tempfile, json as _json, yaml as _yaml
