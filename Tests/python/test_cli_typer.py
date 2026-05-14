@@ -3950,6 +3950,27 @@ class TyperCliSmokeTests(unittest.TestCase):
         data = _json.loads(body)
         self.assertIn("providers", data)
 
+    def test_all_key_retry_flag_in_summary(self) -> None:
+        """v1.42.s236: --retry surfaces in JSON summary."""
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {}, clear=False):
+            for k in ("PEXELS_API_KEY", "PIXABAY_API_KEY",
+                      "UNSPLASH_ACCESS_KEY", "RAWG_API_KEY",
+                      "JAMENDO_CLIENT_ID"):
+                os.environ.pop(k, None)
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "all-key", "--query", "q",
+                 "--retry", "3", "--dry-run", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        import json as _json
+        data = _json.loads(result.stdout.strip())
+        self.assertEqual(data["retry"], 3)
+        # No keys set -> all skipped -> retries_used stays 0.
+        self.assertEqual(data["retries_used"], 0)
+
     def test_all_key_bail_on_error_help_lists_flag(self) -> None:
         """v1.28.s182: --bail-on-error visible in help."""
         result = self.runner.invoke(self.app, ["gen", "all-key", "--help"])

@@ -2788,6 +2788,17 @@ def all_key_cmd(
             ),
         ),
     ] = False,
+    retry: Annotated[
+        int,
+        typer.Option(
+            "--retry",
+            help=(
+                "v1.42.s236: retry each failed provider up to N times"
+                " (sequential mode only). Mirrors all-no-key flag."
+                " 0 (default) = single attempt."
+            ),
+        ),
+    ] = 0,
     compact: Annotated[
         bool,
         typer.Option(
@@ -2978,18 +2989,26 @@ def all_key_cmd(
             providers_run.append(results_by_idx[i])
     else:
         bailed = False  # v1.28.s182
+        retries_used = 0  # v1.42.s236
         for pid, key_getter, fn, kwargs in tasks:
             key = key_getter()
             if not key:
                 providers_run.append(_skipped_record(pid))
                 continue
-            try:
-                r = fn(**kwargs)
-                rec = _ok_record(pid, r)
-            except Exception as exc:
-                rec = _crashed_record(pid, exc)
+            # v1.42.s236 — try up to (retry + 1) attempts.
+            rec = None
+            for attempt in range(max(retry, 0) + 1):
+                try:
+                    r = fn(**kwargs)
+                    rec = _ok_record(pid, r)
+                except Exception as exc:
+                    rec = _crashed_record(pid, exc)
+                if rec.get("ok", False):
+                    break
+                if attempt < max(retry, 0):
+                    retries_used += 1
             providers_run.append(rec)
-            # v1.28.s182 — bail on first failure (sequential only).
+            # v1.28.s182 — bail on first failure (after retries exhausted).
             if bail_on_error and not rec.get("ok", False) and not rec.get("skipped", False):
                 bailed = True
                 break
@@ -3006,6 +3025,8 @@ def all_key_cmd(
         "dry_run": dry_run,
         "bail_on_error": bail_on_error,
         "bailed": locals().get("bailed", False),
+        "retry": retry,
+        "retries_used": locals().get("retries_used", 0),
         "include_video": include_video,
         "parallel": parallel,
         "providers_run": len(providers_run),
