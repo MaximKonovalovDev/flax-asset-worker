@@ -629,6 +629,167 @@ class TyperCliSmokeTests(unittest.TestCase):
     # v1.56.s278 BIG-SLICE — 6 atomics (4 CSV exports + 2 compose locks)
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # v1.57.s279 BIG-SLICE — 6 atomics (filter/sort polish + compose)
+    # ------------------------------------------------------------------ #
+
+    def test_pack_list_recipes_filter_has_notes(self) -> None:
+        """s279 atomic-1: --filter has-notes:true narrows to recipes with notes."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "r_with.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "r_with", "game": "g1",
+                                "notes": "see https://example.com"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "r_without.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "r_without", "game": "g1"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "has-notes:true", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = {r["recipe_id"] for r in data["recipes"]}
+        self.assertEqual(ids, {"r_with"})
+
+    def test_list_providers_filter_has_env_var(self) -> None:
+        """s279 atomic-2: --filter env_var:<name> matches specific env var."""
+        import json as _json
+        result = self.runner.invoke(
+            self.app,
+            ["gen", "list-providers",
+             "--filter", "env_var:PEXELS_API_KEY", "--json"],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        # Exactly 1 provider uses PEXELS_API_KEY (pexels).
+        self.assertEqual(data["total"], 1)
+        self.assertEqual(data["providers"][0]["id"], "pexels")
+
+    def test_pack_list_recipes_sort_author(self) -> None:
+        """s279 atomic-3: --sort author orders by recipe.author; untagged last."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, author in [
+                ("r_zoe", "Zoe Smith"),
+                ("r_alice", "Alice Doe"),
+                ("r_bob", "Bob Jones"),
+                ("r_none", None),
+            ]:
+                doc = {"recipe": {"id": rid, "game": "g1"}, "packs": []}
+                if author:
+                    doc["recipe"]["author"] = author
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump(doc), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--sort", "author", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = [r["recipe_id"] for r in data["recipes"]]
+        # Alice < Bob < Zoe; r_none has no author -> last.
+        self.assertEqual(ids, ["r_alice", "r_bob", "r_zoe", "r_none"])
+
+    def test_pack_list_recipes_quad_filter_sort_limit(self) -> None:
+        """s279 atomic-4: --filter platform + --sort cost + --limit triple."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            for rid, plat, cm in [
+                ("r_flax_30", "flax", 30),
+                ("r_flax_10", "flax", 10),
+                ("r_unity_15", "unity", 15),
+                ("r_flax_60", "flax", 60),
+            ]:
+                (tmp_p / "g1" / f"{rid}.yaml").write_text(
+                    _yaml.safe_dump({
+                        "recipe": {"id": rid, "game": "g1",
+                                    "platform": plat,
+                                    "cost_minutes": cm},
+                        "packs": [],
+                    }), encoding="utf-8",
+                )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "platform:flax",
+                 "--sort", "cost_minutes",
+                 "--limit", "2",
+                 "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = [r["recipe_id"] for r in data["recipes"]]
+        # Filter: flax only -> 3 recipes; sort cheap-first -> r_flax_10,
+        # r_flax_30, r_flax_60; limit 2 -> first 2.
+        self.assertEqual(ids, ["r_flax_10", "r_flax_30"])
+
+    def test_library_r1a_status_provider_since_days_compose(self) -> None:
+        """s279 atomic-5: --provider + --since-days compose; since-days
+        drops a provider with no last_manifest_utc."""
+        import json as _json
+        # No manifests on disk -> last_manifest_utc=None for all providers;
+        # --since-days 1 with --provider met-museum should drop met-museum.
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch(
+                "assetboy.execution.comfyui_runner.manual_drop_dir",
+                return_value=Path(tmp),
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["library", "r1a-status",
+                     "--provider", "met-museum",
+                     "--since-days", "1",
+                     "--json"],
+                )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout.strip())
+        # Provider filter accepts met-museum (1), then since-days drops it (0).
+        self.assertEqual(data["providers_total"], 0)
+
+    def test_recipe_notes_long_text_preserved_in_json(self) -> None:
+        """s279 atomic-6: long notes preserve full text in JSON (no truncation)."""
+        import tempfile, yaml as _yaml, json as _json
+        long_text = ("X" * 250) + "_end"
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "ln.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "ln", "game": "g1",
+                                "notes": long_text},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        r = next(x for x in data["recipes"] if x["recipe_id"] == "ln")
+        # Full 254-char notes preserved (vs CSV truncation).
+        self.assertEqual(r["notes"], long_text)
+
     def test_all_key_csv_writes_summary(self) -> None:
         """s278 atomic-1: gen all-key --csv writes per-provider summary."""
         import os, tempfile

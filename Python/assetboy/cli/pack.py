@@ -360,6 +360,14 @@ def list_recipes_cmd(
             str(e.get("platform", "")).lower(),
             e["path"],
         ))
+    elif sort_norm == "author":
+        # v1.57.s279 — alphabetical by author; untagged sort last.
+        entries.sort(key=lambda e: (
+            e.get("author") is None
+            or not str(e.get("author") or "").strip(),
+            str(e.get("author", "")).lower(),
+            e["path"],
+        ))
     elif sort_norm in ("updated_utc", "created_utc", "last_run_utc"):
         # v1.32.s195 / v1.40.s231 — sort by timestamp field (newest first);
         # entries without that field sort last.
@@ -398,7 +406,7 @@ def list_recipes_cmd(
             f"unknown_sort_key: {sort_norm!r}"
             " (valid: 'path', 'tier', 'name', 'platform',"
             " 'updated_utc', 'created_utc', 'last_run_utc',"
-            " 'cost_minutes')"
+            " 'cost_minutes', 'author')"
         )
         if json_out:
             json.dump({"error": msg}, sys.stdout, indent=2)
