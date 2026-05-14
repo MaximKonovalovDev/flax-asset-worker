@@ -215,7 +215,9 @@ def list_recipes_cmd(
                           "ancestors-of", "ancestors_of",
                           # v1.61.s287 — entry-point + depth filters.
                           "is-entry-point", "is_entry_point",
-                          "depth-from", "depth_from"}
+                          "depth-from", "depth_from",
+                          # v1.61.s288 — leaf filter.
+                          "is-leaf", "is_leaf"}
     _needs_graph = graph_out or any(
         fn in _graph_filter_keys for fn, _ in parsed_filters
     )
@@ -347,6 +349,18 @@ def list_recipes_cmd(
                 return not wanted
             is_ep = rid in _graph.entry_points()
             return is_ep is wanted
+        # v1.61.s288 — is-leaf:bool matches terminal nodes with incoming
+        # edges but no outgoing (or dangling) edges.
+        if field_name in ("is-leaf", "is_leaf"):
+            wanted = value.strip().lower() in ("true", "yes", "1")
+            if _graph is None:
+                return False
+            recipe_d = doc.get("recipe") or {}
+            rid = recipe_d.get("id")
+            if not isinstance(rid, str):
+                return not wanted
+            is_leaf = rid in _graph.leaves()
+            return is_leaf is wanted
         # v1.61.s287 — depth-from:<root>:<max-depth> matches recipes whose
         # BFS distance from <root> is <= <max-depth>.
         if field_name in ("depth-from", "depth_from"):

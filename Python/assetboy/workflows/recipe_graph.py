@@ -62,6 +62,10 @@ class RecipeGraph:
             # v1.60.s285 — cycle detection + topo order.
             "is_acyclic": topo is not None,
             "topo_order": topo,  # None if cycle exists
+            # v1.61.s288 — entry points, leaves, max depth.
+            "entry_points": sorted(self.entry_points()),
+            "leaves": sorted(self.leaves()),
+            "max_depth": self.max_depth(),
         }
 
     def descendants(self, rid: str) -> set[str]:
@@ -148,6 +152,48 @@ class RecipeGraph:
             if not self.in_edges.get(rid)
             and (self.out_edges.get(rid) or self.dangling.get(rid))
         }
+
+    def leaves(self) -> set[str]:
+        """v1.61.s288: terminal nodes — ids with no out_edges AND no
+        dangling refs AND at least one incoming edge.
+
+        A leaf is a recipe that depends on nothing but is depended-upon
+        by at least one other recipe. Pure orphans (no in AND no out)
+        are excluded — those are in .orphans.
+
+        Returns empty set if the graph has no terminal connected nodes.
+        """
+        return {
+            rid for rid in self.all_ids
+            if not self.out_edges.get(rid)
+            and not self.dangling.get(rid)
+            and self.in_edges.get(rid)
+        }
+
+    def max_depth(self) -> int | None:
+        """v1.61.s288: longest path length in the DAG.
+
+        Returns max number of edges in any path (0 if all isolated;
+        1 for two-node single-edge graph; etc.). Returns None if the
+        graph is cyclic.
+
+        Uses dynamic programming over topo_order: depth[v] = max(
+        depth[u] for u in predecessors) + 1.
+        """
+        order = self.topological_sort()
+        if order is None:
+            return None
+        if not order:
+            return 0
+        # depth[rid] = longest path ending at rid.
+        depth: dict[str, int] = {rid: 0 for rid in order}
+        for node in order:
+            for neighbor in self.out_edges.get(node, set()):
+                if neighbor in depth:
+                    candidate = depth[node] + 1
+                    if candidate > depth[neighbor]:
+                        depth[neighbor] = candidate
+        return max(depth.values()) if depth else 0
 
     def depth_from(self, rid: str) -> dict[str, int]:
         """v1.61.s287: BFS distance map from `rid` along out_edges.
