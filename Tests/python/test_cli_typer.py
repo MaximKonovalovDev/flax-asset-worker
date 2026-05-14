@@ -651,6 +651,64 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(data["count"], 1)
         self.assertEqual(data["recipes"][0]["recipe_id"], "r2")
 
+    def test_pack_list_recipes_filter_has_expected_max(self) -> None:
+        """v1.52.s264: --filter has-expected_max_assets:true keeps capped recipes."""
+        import tempfile, json as _json, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "r_cap.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "r_cap", "game": "g1",
+                                "expected_max_assets": 100},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "r_uncapped.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "r_uncapped", "game": "g1"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "has-expected_max_assets:true", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["recipes"][0]["recipe_id"], "r_cap")
+
+    def test_pack_list_recipes_filter_has_cost_minutes(self) -> None:
+        """--filter has-cost_minutes:true narrows to budgeted recipes."""
+        import tempfile, json as _json, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "r1.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "r1", "game": "g1",
+                                "cost_minutes": 30},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "r2.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "r2", "game": "g1"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "has-cost_minutes:true", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0)
+        data = _json.loads(result.stdout)
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["recipes"][0]["recipe_id"], "r1")
+
     def test_pack_list_recipes_filter_author_substring(self) -> None:
         """v1.29.s185: --filter author:Jane substring-matches recipe.author."""
         import tempfile, json as _json, yaml as _yaml
