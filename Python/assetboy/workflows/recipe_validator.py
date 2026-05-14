@@ -210,6 +210,20 @@ def validate_recipe_doc(doc: Any, source_label: str = "<recipe>") -> ValidationR
                     f"{source_label}: recipe.cost_minutes is negative"
                     f" ({cm}); should be >= 0"
                 )
+        # v1.41.s233 — optional engine_version string (e.g. '1.6', '6.0',
+        # '2026.1'). Warn on non-string; non-empty soft check; never error.
+        if "engine_version" in recipe and recipe["engine_version"] is not None:
+            ev = recipe["engine_version"]
+            if not isinstance(ev, str):
+                result.warnings.append(
+                    f"{source_label}: recipe.engine_version should be a"
+                    f" string; got {type(ev).__name__}"
+                )
+            elif not ev.strip():
+                result.warnings.append(
+                    f"{source_label}: recipe.engine_version is empty;"
+                    " consider removing the field"
+                )
         # v1.18.s130 — optional integer expected_min_assets field.
         if "expected_min_assets" in recipe and recipe["expected_min_assets"] is not None:
             ema = recipe["expected_min_assets"]

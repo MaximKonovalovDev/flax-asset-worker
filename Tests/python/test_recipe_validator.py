@@ -956,6 +956,40 @@ class CostMinutesMetadataTests(unittest.TestCase):
         self.assertFalse(any("cost_minutes" in w for w in r.warnings))
 
 
+class EngineVersionMetadataTests(unittest.TestCase):
+    """v1.41.s233 — optional engine_version field."""
+
+    def _recipe_with(self, **meta: object) -> dict:
+        doc = _ok_recipe()
+        doc["recipe"].update(meta)
+        return doc
+
+    def test_string_silent(self) -> None:
+        r = validate_recipe_doc(self._recipe_with(engine_version="1.6"),
+                                 "ev.yaml")
+        self.assertTrue(r.ok)
+        self.assertFalse(any("engine_version" in w for w in r.warnings))
+
+    def test_non_string_warns(self) -> None:
+        r = validate_recipe_doc(self._recipe_with(engine_version=1.6),
+                                 "ev.yaml")
+        self.assertTrue(r.ok)
+        self.assertTrue(any("engine_version" in w and "string" in w
+                            for w in r.warnings))
+
+    def test_empty_warns(self) -> None:
+        r = validate_recipe_doc(self._recipe_with(engine_version="  "),
+                                 "ev.yaml")
+        self.assertTrue(r.ok)
+        self.assertTrue(any("engine_version" in w and "empty" in w
+                            for w in r.warnings))
+
+    def test_missing_silent(self) -> None:
+        r = validate_recipe_doc(_ok_recipe(), "ev.yaml")
+        self.assertTrue(r.ok)
+        self.assertFalse(any("engine_version" in w for w in r.warnings))
+
+
 class PlatformMetadataTests(unittest.TestCase):
     """v1.30.s189 — optional platform field; known set warns on unknown."""
 

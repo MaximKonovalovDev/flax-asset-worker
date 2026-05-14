@@ -247,11 +247,12 @@ def list_recipes_cmd(
                             tier_values.append(t)
                 if tier_values:
                     entry_data["min_tier"] = min(tier_values)
-                # v1.23.s160 / v1.25.s172 / v1.30.s189 / v1.38.s210: misc metadata.
+                # v1.23.s160 / v1.25.s172 / v1.30.s189 / v1.38.s210 /
+                # v1.41.s233: misc metadata.
                 for meta_key in ("genre", "theme", "style", "tags",
                                   "created_utc", "updated_utc",
                                   "author", "contact", "platform",
-                                  "cost_minutes"):
+                                  "cost_minutes", "engine_version"):
                     if meta_key in recipe:
                         entry_data[meta_key] = recipe[meta_key]
                 # v1.40.s230 — last_run_utc derived from pack-pipeline ledger
