@@ -2527,6 +2527,25 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn("unknown_kind", result.stdout)
 
+    def test_scout_by_license_html_writes_report(self) -> None:
+        """v1.48.s254: --html writes standalone scout-report dashboard."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            html_path = Path(tmp) / "scout.html"
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "scout-by-license", "--license", "cc0",
+                 "--query", "test", "--max-providers", "1",
+                 "--dry-run", "--html", str(html_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertIn("gen_scout_by_license_html_path=", result.stdout)
+            self.assertTrue(html_path.exists())
+            body = html_path.read_text(encoding="utf-8")
+            self.assertIn("<!doctype html>", body)
+            self.assertIn("FAW Scout by License", body)
+            self.assertIn("cc0", body)
+
     def test_scout_by_license_compact_emits_single_line(self) -> None:
         """v1.36.s205: --compact single-line JSON for scout-by-license."""
         result = self.runner.invoke(

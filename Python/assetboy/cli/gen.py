@@ -3906,6 +3906,25 @@ def scout_by_license_cmd(
             ),
         ),
     ] = 0,
+    html_out: Annotated[
+        Path,
+        typer.Option(
+            "--html",
+            help=(
+                "v1.48.s254: write standalone HTML scout-report (per-provider"
+                " rows: matched, downloaded, ok, skipped). Preempts JSON/text."
+            ),
+        ),
+    ] = Path(""),
+    open_html: Annotated[
+        bool,
+        typer.Option(
+            "--open",
+            help=(
+                "v1.48.s254: with --html, auto-open in system browser."
+            ),
+        ),
+    ] = False,
     compact: Annotated[
         bool,
         typer.Option(
@@ -4050,6 +4069,87 @@ def scout_by_license_cmd(
         "total_downloaded": sum(r["downloaded"] for r in results),
         "providers": results,
     }
+
+    # v1.48.s254 — HTML preempts JSON/text.
+    html_str = str(html_out)
+    if html_str and html_str != ".":
+        html_path = Path(html_str)
+        try:
+            html_path.parent.mkdir(parents=True, exist_ok=True)
+            rows_html: list[str] = []
+            for r in results:
+                if r.get("ok"):
+                    status_class = "b-green"
+                    status_text = "ok"
+                elif r.get("skipped"):
+                    status_class = "b-grey"
+                    status_text = "skipped"
+                else:
+                    status_class = "b-red"
+                    status_text = "failed"
+                rows_html.append(
+                    "<tr>"
+                    f"<td>{r.get('provider','?')}</td>"
+                    f"<td><span class='{status_class}'>{status_text}</span></td>"
+                    f"<td class='num'>{int(r.get('matched',0) or 0)}</td>"
+                    f"<td class='num'>{int(r.get('downloaded',0) or 0)}</td>"
+                    f"<td>{r.get('error','') or ''}</td>"
+                    "</tr>"
+                )
+            html = (
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                "<title>FAW Scout by License</title>"
+                "<style>"
+                "body{font-family:system-ui,sans-serif;max-width:1100px;margin:2em auto;}"
+                "h1{margin-bottom:.2em}"
+                ".summary{color:#666;margin-bottom:1em}"
+                "table{border-collapse:collapse;width:100%}"
+                "th,td{padding:.4em .6em;border-bottom:1px solid #eee;text-align:left}"
+                "td.num{text-align:right;font-variant-numeric:tabular-nums}"
+                ".b-green,.b-red,.b-grey{color:#fff;padding:2px 8px;"
+                "border-radius:3px;font-size:.8em}"
+                ".b-green{background:#2e7d32}"
+                ".b-red{background:#c62828}"
+                ".b-grey{background:#9e9e9e}"
+                "</style></head><body>"
+                "<h1>FAW Scout by License</h1>"
+                "<p class='summary'>"
+                f"Token: <code>{token}</code> &middot; Query: <code>{query}</code> "
+                f"&middot; matched-by-license: {summary['providers_matched_by_license']} "
+                f"&middot; ok: {summary['providers_ok']}/{len(results)} "
+                f"&middot; skipped: {summary['providers_skipped']} "
+                f"&middot; total matched: {summary['total_matched']} "
+                f"&middot; total downloaded: {summary['total_downloaded']}"
+                "</p>"
+                "<table>"
+                "<thead><tr><th>Provider</th><th>Status</th>"
+                "<th>Matched</th><th>Downloaded</th><th>Error</th>"
+                "</tr></thead><tbody>"
+                + "".join(rows_html)
+                + "</tbody></table>"
+                "</body></html>"
+            )
+            html_path.write_text(html, encoding="utf-8")
+        except Exception as exc:
+            print(f"gen_scout_by_license_error=html_write_failed: {exc}")
+            raise typer.Exit(code=1)
+        print(f"gen_scout_by_license_html_path={html_path}")
+        if open_html:
+            import platform
+            import subprocess
+            sys_name = platform.system().lower()
+            try:
+                if sys_name == "windows":
+                    import os
+                    os.startfile(str(html_path.resolve()))  # type: ignore[attr-defined]
+                elif sys_name == "darwin":
+                    subprocess.run(["open", str(html_path.resolve())], check=False)
+                else:
+                    subprocess.run(["xdg-open", str(html_path.resolve())], check=False)
+                print("gen_scout_by_license_html_opened=true")
+            except Exception as exc:
+                print(f"gen_scout_by_license_html_open_failed={exc}")
+        return
 
     if json_out:
         # v1.36.s205 — --compact emits single-line JSON.
