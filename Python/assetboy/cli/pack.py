@@ -243,6 +243,37 @@ def list_recipes_cmd(
                                   "cost_minutes"):
                     if meta_key in recipe:
                         entry_data[meta_key] = recipe[meta_key]
+                # v1.40.s230 — last_run_utc derived from pack-pipeline ledger
+                # mtimes (most recent across all packs in this recipe).
+                try:
+                    from assetboy.workflows.pack_pipeline import (
+                        _pipeline_state_path as _pipe_path,
+                    )
+                    game_scope = str(recipe.get("game", game_dir.name))
+                    max_mtime = 0.0
+                    for pack in (doc.get("packs") or []):
+                        if not isinstance(pack, dict):
+                            continue
+                        pid_p = str(pack.get("id", "") or "")
+                        if not pid_p:
+                            continue
+                        try:
+                            led_path = _pipe_path(game_scope, pid_p)
+                            if led_path.exists():
+                                m = led_path.stat().st_mtime
+                                if m > max_mtime:
+                                    max_mtime = m
+                        except Exception:
+                            pass
+                    if max_mtime > 0:
+                        from datetime import datetime as _dt, timezone as _tz
+                        entry_data["last_run_utc"] = (
+                            _dt.fromtimestamp(max_mtime, tz=_tz.utc)
+                            .isoformat(timespec="seconds")
+                        )
+                except Exception:
+                    # If anything fails, silently omit the field; non-critical.
+                    pass
                 entries.append(entry_data)
             except Exception as exc:
                 # Skip malformed recipes silently in list (validate-all reports them).

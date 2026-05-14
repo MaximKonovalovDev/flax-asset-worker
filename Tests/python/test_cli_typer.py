@@ -276,6 +276,81 @@ class TyperCliSmokeTests(unittest.TestCase):
         self.assertIn("historical", entry["theme"])
         self.assertIn("smoke-test", entry["tags"])
 
+    def test_pack_list_recipes_last_run_utc_surfaces_when_ledger_exists(self) -> None:
+        """v1.40.s230: list-recipes derives last_run_utc from pack-pipeline ledger mtime."""
+        import tempfile, json as _json, yaml as _yaml, os, time
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            # 1) Recipe with one pack id.
+            recipes_dir = tmp_p / "recipes"
+            (recipes_dir / "g1").mkdir(parents=True)
+            (recipes_dir / "g1" / "r.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "r", "game": "g1"},
+                    "packs": [{"id": "P_X", "provider": "iconify",
+                                "acquisition_method": "direct_url",
+                                "search_terms": ["x"]}],
+                }), encoding="utf-8",
+            )
+            # 2) Synthetic pack-pipeline ledger at state/pack_pipeline/g1/P_X.json
+            state_dir = tmp_p / "state" / "pack_pipeline" / "g1"
+            state_dir.mkdir(parents=True)
+            ledger = state_dir / "P_X.json"
+            ledger.write_text(_json.dumps({"status": "complete"}),
+                              encoding="utf-8")
+            # Backdate to known epoch for deterministic check.
+            fixed_t = time.time() - 3600  # 1 hr ago
+            os.utime(ledger, (fixed_t, fixed_t))
+
+            # 3) Patch state_root() in both modules (workflows.pack_pipeline
+            # imports the symbol by name, so the library.paths patch alone
+            # doesn't reach it under full-suite execution).
+            with patch(
+                "assetboy.library.paths.state_root",
+                return_value=tmp_p / "state",
+            ), patch(
+                "assetboy.workflows.pack_pipeline.state_root",
+                return_value=tmp_p / "state",
+            ):
+                result = self.runner.invoke(
+                    self.app,
+                    ["pack", "list-recipes",
+                     "--recipes-root", str(recipes_dir),
+                     "--json"],
+                )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            data = _json.loads(result.stdout)
+            r1 = next(r for r in data["recipes"] if r["recipe_id"] == "r")
+            # Field present (ISO 8601 UTC).
+            self.assertIn("last_run_utc", r1)
+            self.assertTrue(r1["last_run_utc"].endswith("+00:00"))
+
+    def test_pack_list_recipes_last_run_utc_absent_when_no_ledger(self) -> None:
+        """No ledger -> last_run_utc field absent."""
+        import tempfile, json as _json, yaml as _yaml
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "r.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "r", "game": "g1"},
+                    "packs": [{"id": "P_Y", "provider": "iconify",
+                                "acquisition_method": "direct_url",
+                                "search_terms": ["y"]}],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--json"],
+            )
+            self.assertEqual(result.exit_code, 0)
+            data = _json.loads(result.stdout)
+            r1 = next(r for r in data["recipes"] if r["recipe_id"] == "r")
+            # No ledger on disk for this pack id => no last_run_utc.
+            self.assertNotIn("last_run_utc", r1)
+
     def test_pack_list_recipes_sort_cost_minutes_cheapest_first(self) -> None:
         """v1.38.s211: --sort cost_minutes orders cheapest-first; untagged last."""
         import tempfile, json as _json, yaml as _yaml
