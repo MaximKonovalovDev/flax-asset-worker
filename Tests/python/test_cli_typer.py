@@ -4737,6 +4737,32 @@ class TyperCliSmokeTests(unittest.TestCase):
             # met-museum should be present in at least one data row.
             self.assertTrue(any("met-museum" in l for l in lines[1:]))
 
+    def test_list_providers_csv_filter_sort_limit_triple(self) -> None:
+        """v1.54.s274: --csv + --filter kind:image + --sort id + --limit 2."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "img2.csv"
+            result = self.runner.invoke(
+                self.app,
+                ["gen", "list-providers",
+                 "--filter", "kind:image",
+                 "--sort", "id",
+                 "--limit", "2",
+                 "--csv", str(csv_path)],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.stdout)
+            self.assertTrue(csv_path.exists())
+            body = csv_path.read_text(encoding="utf-8")
+            lines = [l for l in body.splitlines() if l.strip()]
+            # Header + 2 data rows.
+            self.assertEqual(len(lines), 3)
+            # Every data row must contain "image" in asset_class column.
+            for line in lines[1:]:
+                self.assertIn("image", line.lower())
+            # Should be sorted alphabetically — first image provider is
+            # archive-org (since asset_class is "image|audio|video|texts").
+            self.assertTrue(lines[1].startswith("archive-org,"))
+
     def test_list_providers_html_composes_with_limit(self) -> None:
         """v1.54.s273: --html + --sort id + --limit 2 writes top-2 alpha HTML rows."""
         import tempfile
