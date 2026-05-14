@@ -132,6 +132,18 @@ def list_recipes_cmd(
             ),
         ),
     ] = Path(""),
+    graph_out: Annotated[
+        bool,
+        typer.Option(
+            "--graph",
+            help=(
+                "v1.59.s283: emit cross-recipe relation graph (built from"
+                " recipe.related_recipes fields) as JSON. Includes"
+                " out_edges, in_edges, dangling refs, orphans."
+                " Preempts --json/--csv/text."
+            ),
+        ),
+    ] = False,
     compact: Annotated[
         bool,
         typer.Option(
@@ -181,6 +193,18 @@ def list_recipes_cmd(
             raise typer.Exit(code=1)
         field_name, _, value = f.partition(":")
         parsed_filters.append((field_name.strip(), value.strip()))
+
+    # v1.59.s283 — pre-build cross-recipe graph if any graph-dependent
+    # filter is in play, or if --graph output mode is requested.
+    _graph = None
+    _graph_filter_keys = {"is-orphan", "is_orphan", "has-dangling",
+                          "has_dangling"}
+    _needs_graph = graph_out or any(
+        fn in _graph_filter_keys for fn, _ in parsed_filters
+    )
+    if _needs_graph:
+        from assetboy.workflows.recipe_graph import build_graph
+        _graph = build_graph(recipes_root)
 
     def _matches_filter(doc: dict, field_name: str, value: str) -> bool:
         """True if filter matches.
@@ -254,6 +278,28 @@ def list_recipes_cmd(
                 [x for x in rr if isinstance(x, str) and x.strip()]
             )
             return count >= threshold
+        # v1.59.s283 — is-orphan / has-dangling read from the pre-built
+        # _graph; require _needs_graph to have triggered graph build.
+        if field_name in ("is-orphan", "is_orphan"):
+            wanted = value.strip().lower() in ("true", "yes", "1")
+            if _graph is None:
+                return False
+            recipe_d = doc.get("recipe") or {}
+            rid = recipe_d.get("id")
+            if not isinstance(rid, str):
+                return not wanted
+            is_orph = rid in _graph.orphans
+            return is_orph is wanted
+        if field_name in ("has-dangling", "has_dangling"):
+            wanted = value.strip().lower() in ("true", "yes", "1")
+            if _graph is None:
+                return False
+            recipe_d = doc.get("recipe") or {}
+            rid = recipe_d.get("id")
+            if not isinstance(rid, str):
+                return not wanted
+            has_dangle = bool(_graph.dangling.get(rid))
+            return has_dangle is wanted
         # v1.33.s199 — has-FIELD:true/false presence test (any recipe meta).
         if field_name.startswith("has-") or field_name.startswith("has_"):
             target = field_name[4:].strip().lower()
@@ -478,6 +524,22 @@ def list_recipes_cmd(
     # v1.53.s270 — --limit caps output after filter+sort+reverse.
     if limit > 0 and len(entries) > limit:
         entries = entries[:limit]
+
+    # v1.59.s283 — --graph emits cross-recipe adjacency map as JSON.
+    # Preempts --csv / --json / text. Uses pre-built _graph (built once
+    # at parse time, before per-recipe scan). Always emits even if
+    # entries filtered away (graph is a global view of the catalog).
+    if graph_out:
+        if _graph is None:
+            # Should not happen — _needs_graph triggered build — but
+            # defensively rebuild if absent (e.g. operator passed --graph
+            # alone without any graph-using filter).
+            from assetboy.workflows.recipe_graph import build_graph
+            _graph = build_graph(recipes_root)
+        json.dump(_graph.to_dict(),
+                  sys.stdout, indent=None if compact else 2)
+        sys.stdout.write("\n")
+        return
 
     # v1.55.s275 — --csv preempts JSON/text.
     csv_str = str(csv_out)

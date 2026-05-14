@@ -1,0 +1,151 @@
+"""recipe_graph — build adjacency map from recipe.related_recipes fields.
+
+Adds in v1.59.s283 (BIG-SLICE).
+
+Each recipe id maps to a set of ids it points TO (outgoing edges).
+The inverse direction (incoming edges) and orphan/dangling detection
+are derived from the same scan.
+
+Tolerant of:
+- malformed YAML files (skipped silently; can't ID -> can't relate)
+- non-string entries in related_recipes (filtered out)
+- recipes without related_recipes (empty out-edge set)
+
+This is purely a static analysis pass; no recipe execution required.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+try:
+    import yaml as _yaml
+except ImportError:  # pragma: no cover
+    _yaml = None  # type: ignore[assignment]
+
+
+@dataclass
+class RecipeGraph:
+    """Recipe relation graph.
+
+    Attributes:
+        out_edges: maps recipe_id -> set of ids it points TO via related_recipes.
+        in_edges:  maps recipe_id -> set of ids that point TO it.
+        all_ids:   set of recipe ids actually loaded (the universe).
+        dangling:  maps recipe_id -> set of ids it points to that DO NOT
+                   exist in all_ids (broken references).
+        orphans:   set of recipe ids with both empty out_edges AND empty
+                   in_edges (completely disconnected from the graph).
+    """
+
+    out_edges: dict[str, set[str]] = field(default_factory=dict)
+    in_edges: dict[str, set[str]] = field(default_factory=dict)
+    all_ids: set[str] = field(default_factory=set)
+    dangling: dict[str, set[str]] = field(default_factory=dict)
+    orphans: set[str] = field(default_factory=set)
+
+    def to_dict(self) -> dict[str, Any]:
+        """JSON-friendly serialization (sets -> sorted lists)."""
+        return {
+            "out_edges": {k: sorted(v) for k, v in self.out_edges.items()},
+            "in_edges": {k: sorted(v) for k, v in self.in_edges.items()},
+            "all_ids": sorted(self.all_ids),
+            "dangling": {k: sorted(v) for k, v in self.dangling.items()},
+            "orphans": sorted(self.orphans),
+            "total_recipes": len(self.all_ids),
+            "total_edges": sum(len(v) for v in self.out_edges.values()),
+            "dangling_count": sum(len(v) for v in self.dangling.values()),
+            "orphan_count": len(self.orphans),
+        }
+
+
+def _safe_recipe_id(doc: dict | None) -> str | None:
+    """Extract recipe.id; tolerant of missing/malformed docs."""
+    if not isinstance(doc, dict):
+        return None
+    recipe = doc.get("recipe")
+    if not isinstance(recipe, dict):
+        return None
+    rid = recipe.get("id")
+    if not isinstance(rid, str) or not rid.strip():
+        return None
+    return rid.strip()
+
+
+def _safe_related(doc: dict | None) -> list[str]:
+    """Extract recipe.related_recipes as a list[str]; filter non-strings."""
+    if not isinstance(doc, dict):
+        return []
+    recipe = doc.get("recipe")
+    if not isinstance(recipe, dict):
+        return []
+    rr = recipe.get("related_recipes")
+    if not isinstance(rr, list):
+        return []
+    return [x.strip() for x in rr if isinstance(x, str) and x.strip()]
+
+
+def build_graph(recipes_root: Path) -> RecipeGraph:
+    """Walk recipes_root/**/*.yaml; build adjacency map.
+
+    Args:
+        recipes_root: directory containing <game>/<recipe>.yaml files.
+
+    Returns:
+        RecipeGraph with out_edges, in_edges, all_ids, dangling, orphans
+        all populated. Silent on parse errors.
+    """
+    graph = RecipeGraph()
+    if _yaml is None:  # pragma: no cover
+        return graph
+    if not recipes_root.exists() or not recipes_root.is_dir():
+        return graph
+
+    # Pass 1: collect ids + outgoing edges.
+    docs: dict[str, list[str]] = {}
+    for yml in recipes_root.rglob("*.yaml"):
+        try:
+            doc = _yaml.safe_load(yml.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        rid = _safe_recipe_id(doc)
+        if rid is None:
+            continue
+        docs[rid] = _safe_related(doc)
+        graph.all_ids.add(rid)
+
+    # Pass 2: build edges, detect dangling + orphans.
+    for rid, targets in docs.items():
+        graph.out_edges.setdefault(rid, set())
+        targets_clean: set[str] = set()
+        dangling_set: set[str] = set()
+        for tgt in targets:
+            if tgt in graph.all_ids:
+                targets_clean.add(tgt)
+                graph.in_edges.setdefault(tgt, set()).add(rid)
+            else:
+                dangling_set.add(tgt)
+        graph.out_edges[rid] = targets_clean
+        if dangling_set:
+            graph.dangling[rid] = dangling_set
+
+    # Ensure in_edges has an entry for every id (even if empty).
+    for rid in graph.all_ids:
+        graph.in_edges.setdefault(rid, set())
+
+    # Orphans: ids with no out AND no in edges.
+    for rid in graph.all_ids:
+        if (not graph.out_edges.get(rid)
+                and not graph.in_edges.get(rid)
+                and not graph.dangling.get(rid)):
+            graph.orphans.add(rid)
+
+    return graph
+
+
+__all__ = [
+    "RecipeGraph",
+    "build_graph",
+]

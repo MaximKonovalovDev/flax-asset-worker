@@ -645,6 +645,222 @@ class TyperCliSmokeTests(unittest.TestCase):
     # v1.58.s282 BIG-SLICE — 5 atomics (has-FIELD generic for providers)
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # v1.59.s283 BIG-SLICE — 7 atomics (recipe_graph + orphan/dangling)
+    # ------------------------------------------------------------------ #
+
+    def test_recipe_graph_module_builds_simple_graph(self) -> None:
+        """s283 atomic-1: recipe_graph.build_graph builds out_edges/in_edges."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "parent.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "parent", "game": "g1",
+                                "related_recipes": ["child"]},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "child.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "child", "game": "g1"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            g = build_graph(tmp_p)
+        self.assertEqual(g.all_ids, {"parent", "child"})
+        self.assertEqual(g.out_edges["parent"], {"child"})
+        self.assertEqual(g.out_edges["child"], set())
+        self.assertEqual(g.in_edges["child"], {"parent"})
+        self.assertEqual(g.in_edges["parent"], set())
+        # No dangling, no orphans.
+        self.assertEqual(g.dangling, {})
+        self.assertEqual(g.orphans, set())
+
+    def test_recipe_graph_detects_dangling(self) -> None:
+        """s283 atomic-2: related_recipes pointing to non-existent id flagged."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "p.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "p", "game": "g1",
+                                "related_recipes": ["ghost", "phantom"]},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            g = build_graph(tmp_p)
+        self.assertEqual(g.dangling.get("p"), {"ghost", "phantom"})
+
+    def test_recipe_graph_detects_orphans(self) -> None:
+        """s283 atomic-3: recipes with no in/out edges flagged as orphans."""
+        import tempfile, yaml as _yaml
+        from assetboy.workflows.recipe_graph import build_graph
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "iso.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "iso", "game": "g1"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "linked.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "linked", "game": "g1",
+                                "related_recipes": ["other"]},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "other.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "other", "game": "g1"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            g = build_graph(tmp_p)
+        # iso has no in/out -> orphan; linked has out; other has in.
+        self.assertEqual(g.orphans, {"iso"})
+
+    def test_list_recipes_graph_emits_json_adjacency(self) -> None:
+        """s283 atomic-4: --graph emits the graph as JSON."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "a.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "a", "game": "g1",
+                                "related_recipes": ["b"]},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "b.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "b", "game": "g1"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--graph"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        self.assertEqual(set(data["all_ids"]), {"a", "b"})
+        self.assertEqual(data["out_edges"]["a"], ["b"])
+        self.assertEqual(data["in_edges"]["b"], ["a"])
+        self.assertEqual(data["total_edges"], 1)
+
+    def test_list_recipes_filter_is_orphan_true(self) -> None:
+        """s283 atomic-5: --filter is-orphan:true narrows to disconnected
+        recipes; pre-builds graph to evaluate."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "iso.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "iso", "game": "g1"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "hub.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "hub", "game": "g1",
+                                "related_recipes": ["leaf"]},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "leaf.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "leaf", "game": "g1"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "is-orphan:true", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = {r["recipe_id"] for r in data["recipes"]}
+        self.assertEqual(ids, {"iso"})
+
+    def test_list_recipes_filter_has_dangling_true(self) -> None:
+        """s283 atomic-6: --filter has-dangling:true finds recipes with
+        related_recipes pointing to non-existent ids."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "ghost_ref.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "ghost_ref", "game": "g1",
+                                "related_recipes": ["nonexistent"]},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "clean.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "clean", "game": "g1"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--filter", "has-dangling:true", "--json"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        ids = {r["recipe_id"] for r in data["recipes"]}
+        self.assertEqual(ids, {"ghost_ref"})
+
+    def test_list_recipes_graph_summary_counts(self) -> None:
+        """s283 atomic-7: --graph emits total_recipes / total_edges /
+        dangling_count / orphan_count summary counters."""
+        import tempfile, yaml as _yaml, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            (tmp_p / "g1").mkdir()
+            (tmp_p / "g1" / "a.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "a", "game": "g1",
+                                "related_recipes": ["b", "ghost"]},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "b.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "b", "game": "g1"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            (tmp_p / "g1" / "c.yaml").write_text(
+                _yaml.safe_dump({
+                    "recipe": {"id": "c", "game": "g1"},
+                    "packs": [],
+                }), encoding="utf-8",
+            )
+            result = self.runner.invoke(
+                self.app,
+                ["pack", "list-recipes", "--recipes-root", str(tmp_p),
+                 "--graph"],
+            )
+        self.assertEqual(result.exit_code, 0, msg=result.stdout)
+        data = _json.loads(result.stdout)
+        self.assertEqual(data["total_recipes"], 3)
+        self.assertEqual(data["total_edges"], 1)  # a->b
+        self.assertEqual(data["dangling_count"], 1)  # ghost
+        self.assertEqual(data["orphan_count"], 1)  # c
+
     def test_list_providers_filter_has_cli_true(self) -> None:
         """s282 atomic-1: --filter has-cli:true matches all providers (all
         carry cli column)."""
