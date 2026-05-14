@@ -1100,6 +1100,25 @@ def archive_fetch_cmd(
             ),
         ),
     ] = "",
+    year_from: Annotated[
+        int,
+        typer.Option(
+            "--year-from",
+            help=(
+                "v1.40.s229: lower bound (inclusive) on Archive.org 'year'"
+                " facet. 0 = unset. Compose with --year-to for ranges."
+            ),
+        ),
+    ] = 0,
+    year_to: Annotated[
+        int,
+        typer.Option(
+            "--year-to",
+            help=(
+                "v1.40.s229: upper bound (inclusive). 0 = unset."
+            ),
+        ),
+    ] = 0,
     count: Annotated[
         int, typer.Option("--count", "-n", help="Max CC/PD items to download."),
     ] = 4,
@@ -1143,11 +1162,16 @@ def archive_fetch_cmd(
     mediatype_arg: str | None = mediatype.strip().lower() if mediatype.strip() else None
     collection_arg: str | None = collection.strip() or None  # v1.20.s140
 
+    yr_from: int | None = year_from if year_from > 0 else None  # v1.40.s229
+    yr_to: int | None = year_to if year_to > 0 else None
+
     try:
         result = run_archive_org_batch(
             query=query,
             mediatype=mediatype_arg,
             collection=collection_arg,
+            year_from=yr_from,
+            year_to=yr_to,
             pack_id=pack_id_arg,
             count=count,
             output_dir=out_dir_arg,

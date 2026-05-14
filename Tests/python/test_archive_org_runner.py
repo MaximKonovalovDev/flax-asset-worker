@@ -266,5 +266,80 @@ class ArchiveOrgRunnerTests(unittest.TestCase):
         self.assertEqual(result.error, "no_matches")
 
 
+class ArchiveOrgYearRangeTests(unittest.TestCase):
+    """v1.40.s229 — year_from / year_to URL injection."""
+
+    def setUp(self) -> None:
+        from assetboy.execution import archive_org_runner
+        self.mod = archive_org_runner
+
+    def test_year_range_appears_in_url(self) -> None:
+        captured: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured.append(str(req.full_url))
+            return _json_response({"response": {"docs": []}})
+
+        with patch.object(
+            self.mod.urllib.request, "urlopen", side_effect=capture
+        ):
+            self.mod.search_archive_items(
+                "x", year_from=1900, year_to=1950,
+            )
+        joined = " ".join(captured)
+        # year clause encoded with year:[1900 TO 1950] (URL-encoded brackets).
+        self.assertTrue(
+            "year" in joined and "1900" in joined and "1950" in joined,
+            f"missing year clause; got {joined}",
+        )
+
+    def test_year_from_only_open_ended_high(self) -> None:
+        captured: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured.append(str(req.full_url))
+            return _json_response({"response": {"docs": []}})
+
+        with patch.object(
+            self.mod.urllib.request, "urlopen", side_effect=capture
+        ):
+            self.mod.search_archive_items("x", year_from=2000)
+        joined = " ".join(captured)
+        self.assertIn("2000", joined)
+        # `*` may be URL-encoded as %2A
+        self.assertTrue("*" in joined or "%2A" in joined,
+                        f"missing open-ended upper bound: {joined}")
+
+    def test_year_to_only_open_ended_low(self) -> None:
+        captured: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured.append(str(req.full_url))
+            return _json_response({"response": {"docs": []}})
+
+        with patch.object(
+            self.mod.urllib.request, "urlopen", side_effect=capture
+        ):
+            self.mod.search_archive_items("x", year_to=1800)
+        joined = " ".join(captured)
+        self.assertIn("1800", joined)
+
+    def test_no_year_no_clause(self) -> None:
+        captured: list[str] = []
+
+        def capture(req, *a, **kw):
+            captured.append(str(req.full_url))
+            return _json_response({"response": {"docs": []}})
+
+        with patch.object(
+            self.mod.urllib.request, "urlopen", side_effect=capture
+        ):
+            self.mod.search_archive_items("x")
+        joined = " ".join(captured)
+        # Neither year: nor [ TO ] should appear in the query.
+        self.assertNotIn("year%3A", joined)
+        self.assertNotIn("year:", joined)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -119,6 +119,8 @@ def search_archive_items(
     *,
     mediatype: str | None = None,
     collection: str | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
     rows: int = 20,
     timeout: float = 20.0,
 ) -> list[dict]:
@@ -127,12 +129,19 @@ def search_archive_items(
     v1.20.s140: optional collection= filter (e.g. 'prelinger',
     'librivoxaudio', 'image_collection'). Appended as
     'AND collection:<id>' clause.
+    v1.40.s229: optional year_from/year_to inclusive range filter
+    (Archive.org 'year' facet). Either bound may be None for open-ended.
     """
     q = query
     if mediatype:
         q = f"({q}) AND mediatype:{mediatype}"
     if collection and collection.strip():
         q = f"({q}) AND collection:{collection.strip()}"
+    # v1.40.s229 — year range clause; Archive.org accepts year:[1500 TO 2000].
+    if year_from is not None or year_to is not None:
+        lo = str(year_from) if year_from is not None else "*"
+        hi = str(year_to) if year_to is not None else "*"
+        q = f"({q}) AND year:[{lo} TO {hi}]"
     params = [
         ("q", q),
         ("fl[]", "identifier"),
@@ -181,6 +190,8 @@ def run_archive_org_batch(
     query: str,
     mediatype: str | None = None,
     collection: str | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
     pack_id: str | None = None,
     count: int = 4,
     output_dir: str | Path | None = None,
@@ -215,6 +226,7 @@ def run_archive_org_batch(
     try:
         docs = search_archive_items(
             query, mediatype=mediatype, collection=collection,
+            year_from=year_from, year_to=year_to,
             rows=max(count * 4, 20),
         )
     except (urllib.error.URLError, ValueError, TimeoutError) as exc:
