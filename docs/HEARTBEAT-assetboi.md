@@ -1,30 +1,31 @@
 # HEARTBEAT — assetboi (operator hibernation read-back)
 
-> **Last update:** 2026-05-13 (continuous loop, **271 commits + 254 tags
-> shipped this run** (origin), **926 tests**; latest tag
-> v1.39.4-fanout-provider-skip)
+> **Last update:** 2026-05-14 (continuous loop, **288 commits + 274 tags
+> shipped this run** (origin), **956 tests**; latest tag
+> v1.42-WAVE-COMPLETE)
 > **Repo:** `flax-asset-worker` (this repo; assetboi commits freely here)
-> **Loop status:** Operator-handoff ready (loop pausable on command)
+> **Loop status:** ETERNAL mode active per BOSS v1.40 mandate
 
-## TL;DR — top-of-loop milestone (v1.39.4, post-documentation-pass)
+## TL;DR — top-of-loop milestone (v1.42.3, eternal mode)
 
-**271 commits since baseline `0b1ad7d`, 254 tags pushed, 926 tests
-passing. 12 R1A providers + 18 HTTP endpoints + 26 wave milestones
-shipped (v1.10..v1.38 complete; v1.39 in flight). 26 consecutive
-waves (v1.13->v1.38) with 0 RULE violations. Recent waves: v1.38
-recipe.cost_minutes + --cost-budget guard rail, v1.39 from-recipe
---provider-skip + fan-out --provider-skip mirror + completed
---compact rollout across all 11 commands (list-recipes/list-providers/
-r1a-status/all-no-key/all-key/scout-by-license/manifest-stats/
-history-tail + from-recipe/validate-all/rerun-failed). Documentation
-pass shipped RELEASE_NOTES_v1.21_v1.39.md (208-line summary of 19
-waves) + _INDEX.md routing updates + .gitignore additions for
-test-artifact dirs.**
+**288 commits since baseline `0b1ad7d`, 274 tags pushed, 956 tests
+passing. 12 R1A providers + 18 HTTP endpoints + 30 wave milestones
+shipped (v1.10..v1.42 complete). 30 consecutive waves (v1.13->v1.42)
+with 0 RULE violations. Recent waves: v1.40 HTML/dashboard surface
+(manifest-stats/history-tail/list-providers --html) + provider depth
+(Iconify --style, Pexels/Pixabay/Unsplash --min-width/height,
+Archive.org --year-from/to); v1.41 list-recipes --since-days, recipe.
+engine_version metadata, validate-all --html; v1.42 all-no-key/all-key
+--retry, history-tail --format csv|markdown. Surfaces: 11 commands
+with --compact, 5 commands with --html (r1a-status / manifest-stats /
+history-tail / list-providers / validate-all), recipe metadata fields
+(author, contact, platform, engine_version, cost_minutes, created_utc,
+updated_utc, last_run_utc derived).**
 
-Daemon restarted once mid-loop (~30s downtime); buffer survived; loop
-resumed without intervention. Operator returned during documentation
-pass; loop continued shipping the called-out backlog (--compact trio,
-fan-out --provider-skip, .gitignore cleanup, this HEARTBEAT bump).
+Daemon restarted once mid-loop in earlier session (~30s downtime);
+buffer survived; loop resumed without intervention. Operator BOSS
+v1.40 mandate received and 16 slices shipped continuously across
+v1.40/v1.41/v1.42.
 
 This is the single doc to read first if you (operator) just woke up.
 Everything else (PATH_B_DAY11_PLAN.md, COMMIT_READY-assetboi.md, README,
