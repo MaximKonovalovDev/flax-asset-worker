@@ -627,67 +627,6 @@ def bulk_install_cmd(
 # library readiness  (v1.7.s13)
 # --------------------------------------------------------------------------- #
 
-@app.command("readiness")
-def readiness_cmd(
-    timeout: Annotated[
-        float,
-        typer.Option("--timeout", help="Per-provider probe timeout in seconds."),
-    ] = 15.0,
-    json_out: Annotated[
-        bool,
-        typer.Option("--json", help="Emit JSON output."),
-    ] = False,
-) -> None:
-    """Show per-provider readiness (Path B v1.7.s13).
-
-    Wraps `providers.provider_readiness.build_provider_readiness_report`
-    so operators can see at a glance what's set up vs missing across:
-      - Fab / Mixamo / Unity / Epic (manual_browser lane auth)
-      - PolyHaven / Kenney / AmbientCG / FreeSound (direct_url; usually OK)
-      - ComfyUI / sd.cpp / Stable Audio (generator lane runtime)
-      - generator_profiles (Colab JSON registry)
-
-    Status per provider: ready_now / partial / setup_required.
-    """
-    from assetboy.providers.provider_readiness import build_provider_readiness_report
-
-    try:
-        report = build_provider_readiness_report(timeout_seconds=timeout)
-    except Exception as exc:
-        msg = f"readiness_failed: {exc}"
-        if json_out:
-            json.dump({"ok": False, "error": msg}, sys.stdout, indent=2)
-            sys.stdout.write("\n")
-        else:
-            print(f"library_readiness_error={msg}")
-        raise typer.Exit(code=1)
-
-    if json_out:
-        json.dump(report, sys.stdout, indent=2, default=str)
-        sys.stdout.write("\n")
-        return
-
-    summary = report.get("summary") or {}
-    providers = report.get("providers") or []
-    print(f"library_readiness_total={summary.get('total', 0)}")
-    print(f"library_readiness_ready_now={summary.get('ready_now', 0)}")
-    print(f"library_readiness_partial={summary.get('partial', 0)}")
-    print(f"library_readiness_setup_required={summary.get('setup_required', 0)}")
-    for idx, prov in enumerate(providers, start=1):
-        pid = prov.get("provider_id", "?")
-        status = prov.get("status", "?")
-        lane = prov.get("lane", "?")
-        next_action = prov.get("next_action", "")
-        # Truncate next_action to keep one-line readable
-        if isinstance(next_action, str) and len(next_action) > 80:
-            next_action = next_action[:77] + "..."
-        print(
-            f"library_readiness_provider={idx:2d}  "
-            f"id={pid:30}  status={status:15}  lane={lane}  "
-            f"next={next_action}"
-        )
-
-
 # --------------------------------------------------------------------------- #
 # library r1a-status  (v1.12.s75)
 # --------------------------------------------------------------------------- #

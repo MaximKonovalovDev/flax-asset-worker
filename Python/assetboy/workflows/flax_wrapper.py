@@ -29,7 +29,6 @@ from typing import Any, Iterable, Sequence
 #   - vehicle_runner.VEHICLE_PRESETS, run_vehicle_batch              (DEAD)
 
 from assetboy.execution.ambientcg_runner import AMBIENTCG_PRESETS, run_ambientcg_pack
-from assetboy.execution.blender_runner import run_blender_cleanup
 from assetboy.execution.comfyui_runner import ROMAN_MATERIAL_PRESETS, run_comfyui_batch
 from assetboy.execution.freesound_runner import ROMAN_SFX_PRESETS, run_freesound_batch
 from assetboy.execution.kenney_runner import KENNEY_PRESETS, run_kenney_batch
@@ -300,22 +299,6 @@ def _run_cleanup_impl(
     output_dir: str | Path | None,
     dry_run: bool,
 ) -> dict[str, Any]:
-    input_path = Path(input_dir).resolve()
-    if not input_path.exists():
-        raise FileNotFoundError(f"Cleanup input_dir not found: {input_path}")
-
-    result = run_blender_cleanup(
-        pack_id=pack_id,
-        input_dir=input_path,
-        asset_kind=asset_kind,
-        animated=animated,
-        output_dir=output_dir,
-        dry_run=dry_run,
-    )
-    artifact_paths = [
-        str(Path(result.output_dir) / f"{pack_id}.{fmt}")
-        for fmt in result.export_formats
-    ]
     return {
         "pack_id": pack_id,
         "game_scope": game_scope,
@@ -323,13 +306,12 @@ def _run_cleanup_impl(
             "asset_kind": asset_kind,
             "animated": animated,
         },
-        "input_dir": str(input_path),
-        "output_dir": str(result.output_dir),
-        "steps_run": list(result.steps_run),
-        "export_formats": list(result.export_formats),
-        "artifact_paths": artifact_paths,
-        "expected_publish_path": str(_expected_publish_dir(game_scope, pack_id)),
-        "dry_run": dry_run,
+        "input_dir": str(input_dir),
+        "output_dir": str(output_dir or ""),
+        "steps_run": [],
+        "export_formats": [],
+        "artifact_paths": [],
+        "error": "Blender cleanup delegated to flax-blender-bridge plugin",
     }
 
 

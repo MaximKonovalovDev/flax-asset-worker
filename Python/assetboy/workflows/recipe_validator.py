@@ -61,7 +61,7 @@ DIRECT_URL_PROVIDERS = {
 MANUAL_BROWSER_PROVIDERS = {
     "fab", "mixamo", "unity", "epic",
     # Aliases the router accepts:
-    "unity_asset_store", "epic_games", "epic_vault",
+    "unity_asset_store", "epic_games",
 }
 GENERATOR_PROVIDERS = {
     "comfyui",
@@ -737,7 +737,7 @@ _DEFAULT_MANUAL_BROWSER_URLS = {
     "unity_asset_store": "https://assetstore.unity.com/",
     "epic": "https://store.epicgames.com/",
     "epic_games": "https://store.epicgames.com/",
-    "epic_vault": "https://www.fab.com/vault",
+
 }
 
 # Default license-block shape per provider. Sensible commercial_ok defaults.

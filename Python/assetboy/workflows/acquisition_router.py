@@ -35,6 +35,7 @@ Used by ``cli/pack.py:from_recipe_cmd`` between recipe-parse and
 
 from __future__ import annotations
 
+import importlib
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -58,12 +59,221 @@ class AcquisitionResult:
     provider: str = ""
     notes: str = ""
     error: str = ""
-    awaiting_manual: bool = False  # True when method=manual_browser + files not yet dropped
+    awaiting_manual: bool = False
 
 
 class AcquisitionError(Exception):
     """Raised when an acquisition attempt fails in a way the caller should
     surface to the operator (e.g. unsupported method, dead provider)."""
+
+
+# --------------------------------------------------------------------------- #
+# Shared error wrappers (Phase 3M: extracted from per-driver duplication)
+# --------------------------------------------------------------------------- #
+
+def _import_runner(module_name: str) -> tuple[Any, AcquisitionResult | None]:
+    """Import a runner module. Returns (module, None) or (None, error)."""
+    try:
+        return importlib.import_module(f"assetboy.execution.{module_name}"), None
+    except ImportError as exc:
+        return None, AcquisitionResult(ok=False, error=f"import_failed: {exc}")
+
+
+def _run_batch(fn, **kwargs) -> tuple[Any, AcquisitionResult | None]:
+    """Call a runner function. Returns (result, None) or (None, error)."""
+    try:
+        return fn(**kwargs), None
+    except Exception as exc:
+        return None, AcquisitionResult(ok=False, error=f"runner_crashed: {exc}")
+
+
+# --------------------------------------------------------------------------- #
+# Generic driver dispatch (Phase 3M: consolidated 11 simple _drive_* functions)
+# --------------------------------------------------------------------------- #
+
+_DRIVERS: dict[str, tuple[str, str, int, dict[str, Any]]] = {
+    # (module_name, fn_name, default_count, extra_kwargs)
+    "met_museum":       ("met_museum_runner",  "run_met_museum_batch",  4, {}),
+    "met-museum":       ("met_museum_runner",  "run_met_museum_batch",  4, {}),
+    "wikimedia":        ("wikimedia_runner",   "run_wikimedia_batch",   6, {}),
+    "wikimedia_commons":("wikimedia_runner",   "run_wikimedia_batch",   6, {}),
+    "archive_org":      ("archive_org_runner", "run_archive_org_batch", 4, {}),
+    "archive-org":      ("archive_org_runner", "run_archive_org_batch", 4, {}),
+    "archiveorg":       ("archive_org_runner", "run_archive_org_batch", 4, {}),
+    "scryfall":         ("scryfall_runner",    "run_scryfall_batch",    6, {}),
+    "iconify":          ("iconify_runner",     "run_iconify_batch",    16, {}),
+    "pexels":           ("pexels_runner",      "run_pexels_photo_batch", 4, {}),
+    "pexels_photos":    ("pexels_runner",      "run_pexels_photo_batch", 4, {}),
+    "pexels_videos":    ("pexels_runner",      "run_pexels_video_batch", 2, {}),
+    "pixabay":          ("pixabay_runner",     "run_pixabay_photo_batch", 4, {}),
+    "pixabay_photos":   ("pixabay_runner",     "run_pixabay_photo_batch", 4, {}),
+    "pixabay_videos":   ("pixabay_runner",     "run_pixabay_video_batch", 2, {}),
+    "unsplash":         ("unsplash_runner",    "run_unsplash_photo_batch", 4, {}),
+    "rawg":             ("rawg_runner",        "run_rawg_games_batch",    4, {}),
+    "jamendo":          ("jamendo_runner",     "run_jamendo_tracks_batch", 3, {}),
+    "inaturalist":      ("inaturalist_runner", "run_inaturalist_batch",   4, {}),
+    "inat":             ("inaturalist_runner", "run_inaturalist_batch",   4, {}),
+}
+
+
+def _drive_generic(
+    pack: dict[str, Any], *, pack_id: str, out_dir: Path, provider: str,
+) -> AcquisitionResult:
+    """Generic driver for simple providers that follow the
+    query/count/output_dir pattern.
+
+    Each entry in ``_DRIVERS`` maps provider → (module_name, fn_name, default_count, {}).
+    Per-provider extra kwargs that depend on the pack dict are built inline here.
+    """
+    entry = _DRIVERS.get(provider)
+    if entry is None:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider=provider,
+            error=f"unsupported_provider: {provider!r}",
+        )
+    module_name, fn_name, default_count, _extra = entry
+
+    mod, err = _import_runner(module_name)
+    if err:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider=provider,
+            error=err.error,
+        )
+
+    fn = getattr(mod, fn_name)
+    query = _pack_search_query(pack)
+    count = _pack_count(pack, default=default_count)
+
+    # Build per-provider kwargs (the small variations between providers)
+    kwargs: dict[str, Any] = {
+        "query": query,
+        "pack_id": pack_id,
+        "count": count,
+        "output_dir": out_dir,
+    }
+
+    if provider in ("pexels", "pexels_photos", "pexels_videos"):
+        kwargs["max_height"] = int(pack.get("pexels_max_height", 1080) or 1080)
+        if "video" in fn_name:
+            pass  # pexels_video_batch takes same query/count/output_dir
+        else:
+            kwargs["variant"] = str(pack.get("pexels_variant", "large"))
+    elif provider in ("pixabay", "pixabay_photos", "pixabay_videos"):
+        if "video" in fn_name:
+            kwargs["variant"] = str(pack.get("pixabay_variant", "medium"))
+        else:
+            kwargs["image_type"] = str(pack.get("pixabay_image_type", "photo"))
+            kwargs["variant"] = str(pack.get("pixabay_variant", "largeImageURL"))
+    elif provider == "unsplash":
+        orientation = pack.get("unsplash_orientation")
+        kwargs["variant"] = str(pack.get("unsplash_variant", "regular"))
+        if orientation:
+            kwargs["orientation"] = str(orientation).lower()
+    elif provider == "rawg":
+        kwargs["genres"] = pack.get("rawg_genres")
+        kwargs["max_screenshots_per_game"] = int(pack.get("rawg_max_screenshots", 3) or 3)
+        kwargs["include_screenshots"] = bool(pack.get("rawg_include_screenshots", True))
+    elif provider == "jamendo":
+        kwargs["allow_restrictive"] = bool(pack.get("jamendo_allow_restrictive", False))
+    elif provider == "inaturalist" or provider == "inat":
+        kwargs["allow_restrictive"] = bool(pack.get("inaturalist_allow_restrictive", False))
+    elif provider in ("met_museum", "met-museum"):
+        department = pack.get("met_department_id")
+        if department is not None:
+            kwargs["department_id"] = int(department)
+    elif provider in ("archive_org", "archive-org", "archiveorg"):
+        mediatype = pack.get("archive_mediatype") or pack.get("mediatype")
+        if mediatype:
+            kwargs["mediatype"] = str(mediatype).lower()
+    elif provider == "scryfall":
+        kwargs["variant"] = str(pack.get("scryfall_variant", "art_crop")).strip().lower()
+    elif provider == "iconify":
+        kwargs["width"] = int(pack.get("iconify_width", 64) or 64)
+        color = pack.get("iconify_color")
+        if color:
+            kwargs["color"] = str(color)
+
+    result, err = _run_batch(fn, **kwargs)
+    if err:
+        return AcquisitionResult(
+            ok=False, method="direct_url", provider=provider,
+            error=err.error,
+        )
+
+    # Build a descriptive notes string from the result
+    notes = _build_notes(provider, fn_name, result)
+    return AcquisitionResult(
+        ok=result.ok, method="direct_url", provider=provider,
+        source_dir=out_dir, notes=notes,
+        error=result.error if not result.ok else None,
+    )
+
+
+def _build_notes(provider: str, fn_name: str, result) -> str:
+    """Extract a human-readable notes string from a runner result."""
+    m = getattr(result, "items_matched", None)
+    d = getattr(result, "items_downloaded", None)
+    if provider == "pexels":
+        kind = "video" if "video" in fn_name else "photo"
+        return f"pexels_{kind}: matched={m} downloaded={d}"
+    if provider == "pixabay":
+        kind = "video" if "video" in fn_name else "photo"
+        return f"pixabay_{kind}: matched={m} downloaded={d}"
+    if provider == "unsplash":
+        return (
+            f"unsplash: matched={getattr(result, 'photos_matched', m)} "
+            f"downloaded={getattr(result, 'photos_downloaded', d)} "
+            f"pings={getattr(result, 'download_pings', 0)}"
+        )
+    if provider == "rawg":
+        return (
+            f"rawg: matched={getattr(result, 'games_matched', m)} "
+            f"covers={getattr(result, 'games_downloaded', d)} "
+            f"screenshots={getattr(result, 'screenshots_downloaded', 0)} (REFERENCE-ONLY)"
+        )
+    if provider == "jamendo":
+        return (
+            f"jamendo: matched={getattr(result, 'tracks_matched', m)} "
+            f"downloaded={getattr(result, 'tracks_downloaded', d)} "
+            f"skipped_restricted={getattr(result, 'tracks_skipped_restricted', 0)}"
+        )
+    if provider in ("inaturalist", "inat"):
+        return (
+            f"inaturalist: matched={getattr(result, 'observations_matched', m)} "
+            f"downloaded={getattr(result, 'photos_downloaded', d)} "
+            f"skipped_restricted={getattr(result, 'photos_skipped_restricted', 0)}"
+        )
+    if provider in ("met_museum", "met-museum"):
+        return (
+            f"met_museum: matched={getattr(result, 'objects_matched', m)} "
+            f"downloaded={getattr(result, 'objects_downloaded', d)} "
+            f"skipped_non_pd={getattr(result, 'objects_skipped_non_pd', 0)}"
+        )
+    if provider in ("wikimedia", "wikimedia_commons"):
+        return (
+            f"wikimedia: matched={getattr(result, 'files_matched', m)} "
+            f"downloaded={getattr(result, 'files_downloaded', d)} "
+            f"skipped_restricted={getattr(result, 'files_skipped_restricted', 0)}"
+        )
+    if provider in ("archive_org", "archive-org", "archiveorg"):
+        return (
+            f"archive_org: matched={getattr(result, 'items_matched', m)} "
+            f"downloaded={getattr(result, 'items_downloaded', d)} "
+            f"skipped_restricted={getattr(result, 'items_skipped_restricted', 0)}"
+        )
+    if provider == "scryfall":
+        return (
+            f"scryfall: matched={getattr(result, 'cards_matched', m)} "
+            f"downloaded={getattr(result, 'cards_downloaded', d)} "
+            f"variant={getattr(result, 'variant', '')}"
+        )
+    if provider == "iconify":
+        return (
+            f"iconify: matched={getattr(result, 'icons_matched', m)} "
+            f"downloaded={getattr(result, 'icons_downloaded', d)} "
+            f"skipped_restricted={getattr(result, 'icons_skipped_restricted', 0)}"
+        )
+    return f"{provider}: matched={m} downloaded={d}"
 
 
 # --------------------------------------------------------------------------- #
@@ -110,7 +320,6 @@ def acquire_source_dir(
     if method == "generator":
         return _acquire_generator(pack, recipe, pack_id=pack_id, provider=provider, dry_run=dry_run)
 
-    # Shouldn't reach (method check above is exhaustive) but defensive:
     return AcquisitionResult(ok=False, method=method, provider=provider, error="unreachable")
 
 
@@ -133,6 +342,11 @@ def _acquire_direct_url(
     "unsupported_provider" error so the recipe author can adjust the
     method or wait for an adapter to ship.
     """
+    # Phase 3M: simple providers (met_museum, wikimedia, archive_org,
+    # scryfall, iconify, pexels, pixabay, unsplash, rawg, jamendo,
+    # inaturalist) are handled by _drive_generic. The remaining 5
+    # complex providers (polyhaven, kenney, ambientcg, freesound,
+    # quaternius) have custom iteration/param logic and stay explicit.
     game_scope = str((recipe.get("recipe") or {}).get("game", "unknown"))
     try:
         out_dir = _resolve_source_staging_dir(pack_id, game_scope, lane="direct_url", dry_run=dry_run)
@@ -151,6 +365,9 @@ def _acquire_direct_url(
             notes=f"dry_run: would invoke {provider} runner -> {out_dir}",
         )
 
+    if provider in _DRIVERS:
+        return _drive_generic(pack, pack_id=pack_id, out_dir=out_dir, provider=provider)
+
     if provider == "polyhaven":
         return _drive_polyhaven(pack, pack_id=pack_id, out_dir=out_dir)
     if provider == "kenney":
@@ -161,35 +378,6 @@ def _acquire_direct_url(
         return _drive_freesound(pack, pack_id=pack_id, out_dir=out_dir)
     if provider == "quaternius":
         return _drive_quaternius(pack, pack_id=pack_id, out_dir=out_dir)
-    # v1.11.s41: R1A no-key providers
-    if provider in ("met_museum", "met-museum"):
-        return _drive_met_museum(pack, pack_id=pack_id, out_dir=out_dir)
-    if provider in ("wikimedia", "wikimedia_commons"):
-        return _drive_wikimedia(pack, pack_id=pack_id, out_dir=out_dir)
-    if provider in ("archive_org", "archive-org", "archiveorg"):
-        return _drive_archive_org(pack, pack_id=pack_id, out_dir=out_dir)
-    if provider == "scryfall":
-        return _drive_scryfall(pack, pack_id=pack_id, out_dir=out_dir)
-    if provider == "iconify":
-        return _drive_iconify(pack, pack_id=pack_id, out_dir=out_dir)
-    # v1.11.s43: R1A key-required providers
-    if provider in ("pexels", "pexels_photos"):
-        return _drive_pexels(pack, pack_id=pack_id, out_dir=out_dir, kind="photos")
-    if provider == "pexels_videos":
-        return _drive_pexels(pack, pack_id=pack_id, out_dir=out_dir, kind="videos")
-    if provider in ("pixabay", "pixabay_photos"):
-        return _drive_pixabay(pack, pack_id=pack_id, out_dir=out_dir, kind="photos")
-    if provider == "pixabay_videos":
-        return _drive_pixabay(pack, pack_id=pack_id, out_dir=out_dir, kind="videos")
-    if provider == "unsplash":
-        return _drive_unsplash(pack, pack_id=pack_id, out_dir=out_dir)
-    if provider == "rawg":
-        return _drive_rawg(pack, pack_id=pack_id, out_dir=out_dir)
-    if provider == "jamendo":
-        return _drive_jamendo(pack, pack_id=pack_id, out_dir=out_dir)
-    # v1.13.s85: iNaturalist
-    if provider in ("inaturalist", "inat"):
-        return _drive_inaturalist(pack, pack_id=pack_id, out_dir=out_dir)
 
     return AcquisitionResult(
         ok=False,
@@ -207,234 +395,8 @@ def _acquire_direct_url(
 
 
 # --------------------------------------------------------------------------- #
-# v1.11.s43 — R1A key-required provider drivers
-# Each returns ok=False with error='missing_env_key' if the env var is unset,
-# rather than crashing the pipeline.
-# --------------------------------------------------------------------------- #
-
-def _drive_pexels(
-    pack: dict[str, Any], *, pack_id: str, out_dir: Path, kind: str,
-) -> AcquisitionResult:
-    try:
-        from assetboy.execution.pexels_runner import (
-            run_pexels_photo_batch, run_pexels_video_batch,
-        )
-    except ImportError as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider=f"pexels_{kind}",
-            error=f"import_failed: {exc}",
-        )
-    query = _pack_search_query(pack)
-    count = _pack_count(pack, default=4 if kind == "photos" else 2)
-    try:
-        if kind == "videos":
-            result = run_pexels_video_batch(
-                query=query, pack_id=pack_id, count=count,
-                max_height=int(pack.get("pexels_max_height", 1080) or 1080),
-                output_dir=out_dir,
-            )
-        else:
-            result = run_pexels_photo_batch(
-                query=query, pack_id=pack_id, count=count,
-                variant=str(pack.get("pexels_variant", "large")),
-                output_dir=out_dir,
-            )
-    except Exception as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider=f"pexels_{kind}",
-            error=f"runner_crashed: {exc}",
-        )
-    return AcquisitionResult(
-        ok=result.ok, method="direct_url", provider=f"pexels_{kind}",
-        source_dir=out_dir,
-        notes=f"pexels_{kind}: matched={result.items_matched} downloaded={result.items_downloaded}",
-        error=result.error if not result.ok else None,
-    )
-
-
-def _drive_pixabay(
-    pack: dict[str, Any], *, pack_id: str, out_dir: Path, kind: str,
-) -> AcquisitionResult:
-    try:
-        from assetboy.execution.pixabay_runner import (
-            run_pixabay_photo_batch, run_pixabay_video_batch,
-        )
-    except ImportError as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider=f"pixabay_{kind}",
-            error=f"import_failed: {exc}",
-        )
-    query = _pack_search_query(pack)
-    count = _pack_count(pack, default=4 if kind == "photos" else 2)
-    try:
-        if kind == "videos":
-            result = run_pixabay_video_batch(
-                query=query, pack_id=pack_id, count=count,
-                variant=str(pack.get("pixabay_variant", "medium")),
-                output_dir=out_dir,
-            )
-        else:
-            result = run_pixabay_photo_batch(
-                query=query, pack_id=pack_id, count=count,
-                image_type=str(pack.get("pixabay_image_type", "photo")),
-                variant=str(pack.get("pixabay_variant", "largeImageURL")),
-                output_dir=out_dir,
-            )
-    except Exception as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider=f"pixabay_{kind}",
-            error=f"runner_crashed: {exc}",
-        )
-    return AcquisitionResult(
-        ok=result.ok, method="direct_url", provider=f"pixabay_{kind}",
-        source_dir=out_dir,
-        notes=f"pixabay_{kind}: matched={result.items_matched} downloaded={result.items_downloaded}",
-        error=result.error if not result.ok else None,
-    )
-
-
-def _drive_unsplash(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
-    try:
-        from assetboy.execution.unsplash_runner import run_unsplash_photo_batch
-    except ImportError as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider="unsplash",
-            error=f"import_failed: {exc}",
-        )
-    query = _pack_search_query(pack)
-    count = _pack_count(pack, default=4)
-    orientation = pack.get("unsplash_orientation")
-    try:
-        result = run_unsplash_photo_batch(
-            query=query, pack_id=pack_id, count=count,
-            variant=str(pack.get("unsplash_variant", "regular")),
-            orientation=(str(orientation).lower() if orientation else None),
-            output_dir=out_dir,
-        )
-    except Exception as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider="unsplash",
-            error=f"runner_crashed: {exc}",
-        )
-    return AcquisitionResult(
-        ok=result.ok, method="direct_url", provider="unsplash",
-        source_dir=out_dir,
-        notes=(
-            f"unsplash: matched={result.photos_matched} "
-            f"downloaded={result.photos_downloaded} pings={result.download_pings}"
-        ),
-        error=result.error if not result.ok else None,
-    )
-
-
-def _drive_rawg(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
-    try:
-        from assetboy.execution.rawg_runner import run_rawg_games_batch
-    except ImportError as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider="rawg",
-            error=f"import_failed: {exc}",
-        )
-    query = _pack_search_query(pack)
-    count = _pack_count(pack, default=4)
-    try:
-        result = run_rawg_games_batch(
-            query=query, pack_id=pack_id, count=count,
-            genres=pack.get("rawg_genres"),
-            max_screenshots_per_game=int(pack.get("rawg_max_screenshots", 3) or 3),
-            include_screenshots=bool(pack.get("rawg_include_screenshots", True)),
-            output_dir=out_dir,
-        )
-    except Exception as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider="rawg",
-            error=f"runner_crashed: {exc}",
-        )
-    return AcquisitionResult(
-        ok=result.ok, method="direct_url", provider="rawg",
-        source_dir=out_dir,
-        notes=(
-            f"rawg: matched={result.games_matched} "
-            f"covers={result.games_downloaded} "
-            f"screenshots={result.screenshots_downloaded} (REFERENCE-ONLY)"
-        ),
-        error=result.error if not result.ok else None,
-    )
-
-
-def _drive_jamendo(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
-    try:
-        from assetboy.execution.jamendo_runner import run_jamendo_tracks_batch
-    except ImportError as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider="jamendo",
-            error=f"import_failed: {exc}",
-        )
-    query = _pack_search_query(pack)
-    count = _pack_count(pack, default=3)
-    try:
-        result = run_jamendo_tracks_batch(
-            query=query, pack_id=pack_id, count=count,
-            allow_restrictive=bool(pack.get("jamendo_allow_restrictive", False)),
-            output_dir=out_dir,
-        )
-    except Exception as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider="jamendo",
-            error=f"runner_crashed: {exc}",
-        )
-    return AcquisitionResult(
-        ok=result.ok, method="direct_url", provider="jamendo",
-        source_dir=out_dir,
-        notes=(
-            f"jamendo: matched={result.tracks_matched} "
-            f"downloaded={result.tracks_downloaded} "
-            f"skipped_restricted={result.tracks_skipped_restricted}"
-        ),
-        error=result.error if not result.ok else None,
-    )
-
-
-def _drive_inaturalist(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
-    """v1.13.s85 — iNaturalist driver. No env key required."""
-    try:
-        from assetboy.execution.inaturalist_runner import run_inaturalist_batch
-    except ImportError as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider="inaturalist",
-            error=f"import_failed: {exc}",
-        )
-    query = _pack_search_query(pack)
-    count = _pack_count(pack, default=4)
-    try:
-        result = run_inaturalist_batch(
-            query=query, pack_id=pack_id, count=count,
-            allow_restrictive=bool(pack.get("inaturalist_allow_restrictive", False)),
-            output_dir=out_dir,
-        )
-    except Exception as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider="inaturalist",
-            error=f"runner_crashed: {exc}",
-        )
-    return AcquisitionResult(
-        ok=result.ok, method="direct_url", provider="inaturalist",
-        source_dir=out_dir,
-        notes=(
-            f"inaturalist: matched={result.observations_matched} "
-            f"downloaded={result.photos_downloaded} "
-            f"skipped_restricted={result.photos_skipped_restricted}"
-        ),
-        error=result.error if not result.ok else None,
-    )
-
-
-# --------------------------------------------------------------------------- #
-# v1.11.s41 — R1A no-key provider drivers
-#
-# Each driver follows the same shape: collect a search query from the pack's
-# `search_terms` (first) or `assets[].asset_id`, default count = len(assets)
-# or 4, call the runner, map back to AcquisitionResult.
+# Complex direct_url provider drivers
+# (kept explicit because of custom iteration / param logic)
 # --------------------------------------------------------------------------- #
 
 def _pack_search_query(pack: dict[str, Any]) -> str:
@@ -475,185 +437,19 @@ def _pack_count(pack: dict[str, Any], default: int = 4) -> int:
     return default
 
 
-def _drive_met_museum(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
-    try:
-        from assetboy.execution.met_museum_runner import run_met_museum_batch
-    except ImportError as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider="met_museum",
-            error=f"import_failed: {exc}",
-        )
-    query = _pack_search_query(pack)
-    count = _pack_count(pack, default=4)
-    department = pack.get("met_department_id")
-    try:
-        result = run_met_museum_batch(
-            query=query, pack_id=pack_id, count=count,
-            department_id=int(department) if department is not None else None,
-            output_dir=out_dir,
-        )
-    except Exception as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider="met_museum",
-            error=f"runner_crashed: {exc}",
-        )
-    return AcquisitionResult(
-        ok=result.ok, method="direct_url", provider="met_museum",
-        source_dir=out_dir,
-        notes=(
-            f"met_museum: matched={result.objects_matched} "
-            f"downloaded={result.objects_downloaded} "
-            f"skipped_non_pd={result.objects_skipped_non_pd}"
-        ),
-        error=result.error if not result.ok else None,
-    )
-
-
-def _drive_wikimedia(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
-    try:
-        from assetboy.execution.wikimedia_runner import run_wikimedia_batch
-    except ImportError as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider="wikimedia",
-            error=f"import_failed: {exc}",
-        )
-    query = _pack_search_query(pack)
-    count = _pack_count(pack, default=6)
-    try:
-        result = run_wikimedia_batch(
-            query=query, pack_id=pack_id, count=count, output_dir=out_dir,
-        )
-    except Exception as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider="wikimedia",
-            error=f"runner_crashed: {exc}",
-        )
-    return AcquisitionResult(
-        ok=result.ok, method="direct_url", provider="wikimedia",
-        source_dir=out_dir,
-        notes=(
-            f"wikimedia: matched={result.files_matched} "
-            f"downloaded={result.files_downloaded} "
-            f"skipped_restricted={result.files_skipped_restricted}"
-        ),
-        error=result.error if not result.ok else None,
-    )
-
-
-def _drive_archive_org(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
-    try:
-        from assetboy.execution.archive_org_runner import run_archive_org_batch
-    except ImportError as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider="archive_org",
-            error=f"import_failed: {exc}",
-        )
-    query = _pack_search_query(pack)
-    count = _pack_count(pack, default=4)
-    mediatype = pack.get("archive_mediatype") or pack.get("mediatype")
-    try:
-        result = run_archive_org_batch(
-            query=query, mediatype=(str(mediatype).lower() if mediatype else None),
-            pack_id=pack_id, count=count, output_dir=out_dir,
-        )
-    except Exception as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider="archive_org",
-            error=f"runner_crashed: {exc}",
-        )
-    return AcquisitionResult(
-        ok=result.ok, method="direct_url", provider="archive_org",
-        source_dir=out_dir,
-        notes=(
-            f"archive_org: matched={result.items_matched} "
-            f"downloaded={result.items_downloaded} "
-            f"skipped_restricted={result.items_skipped_restricted}"
-        ),
-        error=result.error if not result.ok else None,
-    )
-
-
-def _drive_scryfall(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
-    try:
-        from assetboy.execution.scryfall_runner import run_scryfall_batch
-    except ImportError as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider="scryfall",
-            error=f"import_failed: {exc}",
-        )
-    query = _pack_search_query(pack)
-    count = _pack_count(pack, default=6)
-    variant = str(pack.get("scryfall_variant", "art_crop")).strip().lower()
-    try:
-        result = run_scryfall_batch(
-            query=query, pack_id=pack_id, count=count,
-            variant=variant, output_dir=out_dir,
-        )
-    except Exception as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider="scryfall",
-            error=f"runner_crashed: {exc}",
-        )
-    return AcquisitionResult(
-        ok=result.ok, method="direct_url", provider="scryfall",
-        source_dir=out_dir,
-        notes=(
-            f"scryfall: matched={result.cards_matched} "
-            f"downloaded={result.cards_downloaded} "
-            f"variant={result.variant}"
-        ),
-        error=result.error if not result.ok else None,
-    )
-
-
-def _drive_iconify(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
-    try:
-        from assetboy.execution.iconify_runner import run_iconify_batch
-    except ImportError as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider="iconify",
-            error=f"import_failed: {exc}",
-        )
-    query = _pack_search_query(pack)
-    count = _pack_count(pack, default=16)
-    width = int(pack.get("iconify_width", 64) or 64)
-    color = pack.get("iconify_color") or None
-    try:
-        result = run_iconify_batch(
-            query=query, pack_id=pack_id, count=count,
-            width=width, color=str(color) if color else None,
-            output_dir=out_dir,
-        )
-    except Exception as exc:
-        return AcquisitionResult(
-            ok=False, method="direct_url", provider="iconify",
-            error=f"runner_crashed: {exc}",
-        )
-    return AcquisitionResult(
-        ok=result.ok, method="direct_url", provider="iconify",
-        source_dir=out_dir,
-        notes=(
-            f"iconify: matched={result.icons_matched} "
-            f"downloaded={result.icons_downloaded} "
-            f"skipped_restricted={result.icons_skipped_restricted}"
-        ),
-        error=result.error if not result.ok else None,
-    )
-
-
 def _drive_polyhaven(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
     """Drive polyhaven_runner with the pack's asset list.
 
     polyhaven_runner expects a single ``search`` query (string), not a list,
     so we iterate the pack's assets and call once per asset_id.
     """
-    try:
-        from assetboy.execution.polyhaven_runner import run_polyhaven_batch
-    except ImportError as exc:
+    mod, err = _import_runner("polyhaven_runner")
+    if err:
         return AcquisitionResult(
-            ok=False, method="direct_url", provider="polyhaven",
-            error=f"import_failed: {exc}",
+            ok=False, method="direct_url", provider="polyhaven", error=err.error,
         )
+    run_polyhaven_batch = getattr(mod, "run_polyhaven_batch")
+
     assets = pack.get("assets") or []
     asset_ids = [a.get("asset_id") if isinstance(a, dict) else str(a) for a in assets]
     asset_ids = [a for a in asset_ids if a]
@@ -662,8 +458,6 @@ def _drive_polyhaven(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> Ac
             ok=False, method="direct_url", provider="polyhaven",
             error="no_assets_in_pack",
         )
-    # Categorize: HDRIs go to "hdris", textures to "textures", models to "models".
-    # v1.8.s20: per-pack `polyhaven_category` field overrides asset_kind inference.
     explicit_category = str(pack.get("polyhaven_category", "")).strip().lower()
     if explicit_category in ("textures", "models", "hdris"):
         category = explicit_category
@@ -698,13 +492,13 @@ def _drive_polyhaven(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> Ac
 def _drive_kenney(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
     """Drive kenney_runner. Each Kenney asset is a ZIP URL; the runner takes
     one ``source_url`` per call. Iterate the pack's assets."""
-    try:
-        from assetboy.execution.kenney_runner import run_kenney_batch
-    except ImportError as exc:
+    mod, err = _import_runner("kenney_runner")
+    if err:
         return AcquisitionResult(
-            ok=False, method="direct_url", provider="kenney",
-            error=f"import_failed: {exc}",
+            ok=False, method="direct_url", provider="kenney", error=err.error,
         )
+    run_kenney_batch = getattr(mod, "run_kenney_batch")
+
     assets = pack.get("assets") or []
     if not assets:
         return AcquisitionResult(
@@ -721,8 +515,6 @@ def _drive_kenney(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> Acqui
                 url = None
                 aid = str(asset)
             if not url:
-                # Kenney recipes that ship without explicit URLs are blocked;
-                # the operator must provide a source_url per asset.
                 return AcquisitionResult(
                     ok=False, method="direct_url", provider="kenney",
                     error=f"kenney_asset_missing_source_url: {aid} "
@@ -744,13 +536,13 @@ def _drive_kenney(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> Acqui
 
 def _drive_ambientcg(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
     """Drive ambientcg_runner. Takes the full asset_id list in one call."""
-    try:
-        from assetboy.execution.ambientcg_runner import run_ambientcg_pack
-    except ImportError as exc:
+    mod, err = _import_runner("ambientcg_runner")
+    if err:
         return AcquisitionResult(
-            ok=False, method="direct_url", provider="ambientcg",
-            error=f"import_failed: {exc}",
+            ok=False, method="direct_url", provider="ambientcg", error=err.error,
         )
+    run_ambientcg_pack = getattr(mod, "run_ambientcg_pack")
+
     assets = pack.get("assets") or []
     asset_ids = [a.get("asset_id") if isinstance(a, dict) else str(a) for a in assets]
     asset_ids = [a for a in asset_ids if a]
@@ -763,7 +555,6 @@ def _drive_ambientcg(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> Ac
     resolution = str(
         (pack.get("flax_import") or {}).get("resolution_default", 2048)
     )
-    # Map int resolutions to AmbientCG's "1K"/"2K"/"4K" labels.
     if resolution in ("1024", "1k", "1K"):
         resolution = "1K"
     elif resolution in ("2048", "2k", "2K"):
@@ -793,13 +584,14 @@ def _drive_ambientcg(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> Ac
 
 
 def _drive_freesound(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
-    try:
-        from assetboy.execution.freesound_runner import run_freesound_batch
-    except ImportError as exc:
+    """Drive freesound_runner with search terms."""
+    mod, err = _import_runner("freesound_runner")
+    if err:
         return AcquisitionResult(
-            ok=False, method="direct_url", provider="freesound",
-            error=f"import_failed: {exc}",
+            ok=False, method="direct_url", provider="freesound", error=err.error,
         )
+    run_freesound_batch = getattr(mod, "run_freesound_batch")
+
     search_terms = pack.get("search_terms") or []
     if not search_terms:
         return AcquisitionResult(
@@ -807,8 +599,6 @@ def _drive_freesound(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> Ac
             error="no_search_terms_in_pack",
         )
     try:
-        # freesound_runner emits a spec file; execute=False keeps it plan-only
-        # (s2.6b retired the execute=True browser-driving path).
         for term in search_terms:
             run_freesound_batch(
                 search=term, count=3, pack_id=pack_id,
@@ -834,22 +624,18 @@ def _drive_quaternius(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> A
       - {asset_id: "nature-kit"}                       - slug (resolved to QUATERNIUS_BASE + .zip)
     Pack with no assets[] but matching a known preset (by pack_id) auto-resolves.
     """
-    try:
-        from assetboy.execution.quaternius_runner import (
-            QUATERNIUS_PRESETS,
-            run_quaternius_batch,
-        )
-    except ImportError as exc:
+    mod, err = _import_runner("quaternius_runner")
+    if err:
         return AcquisitionResult(
-            ok=False, method="direct_url", provider="quaternius",
-            error=f"import_failed: {exc}",
+            ok=False, method="direct_url", provider="quaternius", error=err.error,
         )
+    QUATERNIUS_PRESETS = getattr(mod, "QUATERNIUS_PRESETS", [])
+    run_quaternius_batch = getattr(mod, "run_quaternius_batch")
 
     assets = pack.get("assets") or []
     downloaded = 0
     last_error: str | None = None
 
-    # If no assets specified, try matching pack_id against a preset
     if not assets:
         preset_match = next(
             (p for p in QUATERNIUS_PRESETS if p[0] == pack_id),
@@ -880,7 +666,6 @@ def _drive_quaternius(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> A
             )
             if result.error:
                 last_error = result.error
-                # Continue trying other assets in the pack
                 continue
             downloaded += 1
     except Exception as exc:
@@ -924,7 +709,6 @@ def _acquire_manual_browser(
     marker exists AND the drop folder has files.
     """
     game_scope = str((recipe.get("recipe") or {}).get("game", "unknown"))
-    # Resolve drop_dir tolerantly so dry_run works without workspace.json.
     try:
         drop_dir = manual_drop_dir() / game_scope / pack_id
     except FileNotFoundError:
@@ -953,7 +737,6 @@ def _acquire_manual_browser(
 
     drop_dir.mkdir(parents=True, exist_ok=True)
 
-    # Check if operator has already dropped files
     existing_files = [
         p for p in drop_dir.iterdir()
         if p.is_file() and not p.name.startswith(".")
@@ -965,7 +748,6 @@ def _acquire_manual_browser(
             notes=f"manual drop complete: {len(existing_files)} file(s) in {drop_dir}",
         )
 
-    # No files yet -- emit/refresh marker + return awaiting
     marker_payload = {
         "pack_id": pack_id,
         "provider": provider,
@@ -986,7 +768,7 @@ def _acquire_manual_browser(
     marker_path.write_text(json.dumps(marker_payload, indent=2), encoding="utf-8")
 
     return AcquisitionResult(
-        ok=False,  # not ready yet; caller skips pack_pipeline for this pack
+        ok=False,
         method="manual_browser", provider=provider,
         source_dir=drop_dir,
         awaiting_manual=True,
@@ -1047,38 +829,14 @@ def _acquire_generator(
 # --------------------------------------------------------------------------- #
 
 def _drive_comfyui(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
-    """Drive comfyui_runner.run_comfyui_batch with the pack's prompts.
-
-    Path B s11.1 (2026-05-11): wires real ComfyUI workflow execution.
-
-    Recipe shape expected:
-      provider: comfyui
-      acquisition_method: generator
-      asset_kind: texture | model | hdr   (mapped to comfyui_runner asset_type)
-      prompts:
-        - id: <preset_id>
-          text: "your text-to-image prompt"
-          width: 1024              # optional, default 1024
-          height: 1024             # optional
-          steps: 25                # optional
-          cfg: 7.0                 # optional
-
-    Per-prompt fields override defaults. The runner emits one ComfyUIResult
-    per prompt under out_dir.
-
-    Returns ok=True when at least one prompt completed without error;
-    aggregates errors into the notes string otherwise.
-    """
-    try:
-        from assetboy.execution.comfyui_runner import (
-            is_comfyui_running,
-            run_comfyui_batch,
-        )
-    except ImportError as exc:
+    """Drive comfyui_runner.run_comfyui_batch with the pack's prompts."""
+    mod, err = _import_runner("comfyui_runner")
+    if err:
         return AcquisitionResult(
-            ok=False, method="generator", provider="comfyui",
-            error=f"import_failed: {exc}",
+            ok=False, method="generator", provider="comfyui", error=err.error,
         )
+    is_comfyui_running = getattr(mod, "is_comfyui_running")
+    run_comfyui_batch = getattr(mod, "run_comfyui_batch")
 
     if not is_comfyui_running():
         return AcquisitionResult(
@@ -1093,7 +851,6 @@ def _drive_comfyui(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> Acqu
             error="no_prompts_in_pack (add prompts: [...] to the recipe pack)",
         )
 
-    # Map recipe asset_kind to comfyui_runner asset_type vocabulary.
     asset_kind = str(pack.get("asset_kind", "")).lower()
     asset_type_map = {
         "surface_pbr": "texture",
@@ -1123,9 +880,6 @@ def _drive_comfyui(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> Acqu
             height = int(prompt_entry.get("height", 1024))
             steps = int(prompt_entry.get("steps", 25))
             cfg = float(prompt_entry.get("cfg", 7.0))
-            # v1.5.2: optional input_image enables img2img workflows
-            # (e.g. concept-photo -> game-ready texture). When None,
-            # the runner defaults to text-to-image.
             input_image = prompt_entry.get("input_image")
         else:
             continue
@@ -1133,21 +887,16 @@ def _drive_comfyui(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> Acqu
             errors.append("empty_prompt_text")
             continue
 
-        try:
-            batch_results = run_comfyui_batch(
-                prompt=prompt_text,
-                pack_id=pack_id,
-                asset_type=asset_type,
-                width=width,
-                height=height,
-                steps=steps,
-                cfg=cfg,
-                input_image=input_image,
-                output_dir=out_dir,
-            )
+        batch_results, call_err = _run_batch(
+            run_comfyui_batch,
+            prompt=prompt_text, pack_id=pack_id, asset_type=asset_type,
+            width=width, height=height, steps=steps, cfg=cfg,
+            input_image=input_image, output_dir=out_dir,
+        )
+        if call_err:
+            errors.append(f"{prompt_text[:40]}: {call_err.error}")
+        elif batch_results:
             results.extend(batch_results)
-        except Exception as exc:
-            errors.append(f"{prompt_text[:40]}: {exc}")
 
     if not results:
         return AcquisitionResult(
@@ -1167,31 +916,13 @@ def _drive_comfyui(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> Acqu
 
 
 def _drive_local_image(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
-    """Drive local_image_runner.run_local_image_batch (sd.cpp CUDA wrapper).
-
-    Path B s11.1 (2026-05-11): wires local Stable Diffusion via sd.cpp.
-    Target hardware: RTX 3050 6GB (SD 1.5 fine-tunes; SDXL via GGUF q4).
-
-    Recipe shape:
-      provider: local_image     (or sd.cpp -- both alias to this driver)
-      acquisition_method: generator
-      prompts:
-        - id: <preset_id>
-          text: "your text-to-image prompt"
-          count: 6               # optional; default 6
-          width: 512             # optional; default 512 (SD 1.5 native)
-          height: 512
-          steps: 20
-          cfg: 7.0
-          model_path: "..."      # optional override
-    """
-    try:
-        from assetboy.execution.local_image_runner import run_local_image_batch
-    except ImportError as exc:
+    """Drive local_image_runner.run_local_image_batch (sd.cpp CUDA wrapper)."""
+    mod, err = _import_runner("local_image_runner")
+    if err:
         return AcquisitionResult(
-            ok=False, method="generator", provider="local_image",
-            error=f"import_failed: {exc}",
+            ok=False, method="generator", provider="local_image", error=err.error,
         )
+    run_local_image_batch = getattr(mod, "run_local_image_batch")
 
     prompts = pack.get("prompts") or []
     if not prompts:
@@ -1223,21 +954,16 @@ def _drive_local_image(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> 
             errors.append("empty_prompt_text")
             continue
 
-        try:
-            batch_result = run_local_image_batch(
-                pack_id=pack_id,
-                prompt=prompt_text,
-                count=count,
-                width=width,
-                height=height,
-                steps=steps,
-                cfg=cfg,
-                model_path=model_path,
-                output_dir=out_dir,
-            )
+        batch_result, call_err = _run_batch(
+            run_local_image_batch,
+            pack_id=pack_id, prompt=prompt_text, count=count,
+            width=width, height=height, steps=steps, cfg=cfg,
+            model_path=model_path, output_dir=out_dir,
+        )
+        if call_err:
+            errors.append(f"{prompt_text[:40]}: {call_err.error}")
+        elif batch_result:
             results.append(batch_result)
-        except Exception as exc:
-            errors.append(f"{prompt_text[:40]}: {exc}")
 
     if not results:
         return AcquisitionResult(
@@ -1257,35 +983,14 @@ def _drive_local_image(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> 
 
 
 def _drive_stable_audio(pack: dict[str, Any], *, pack_id: str, out_dir: Path) -> AcquisitionResult:
-    """Drive stable_audio_runner.run_stable_audio_batch.
-
-    Path B v1.4.1 (2026-05-11): wires Stability AI's Stable Audio Open Small
-    text-to-audio model. RTX 3050 6GB compatible. License: Stability
-    Community License (free under $1M annual revenue).
-
-    Recipe shape:
-      provider: stable_audio_open_small    # or just "stable_audio"
-      acquisition_method: generator
-      prompts:
-        - id: forest_dawn_loop
-          text: "forest at dawn, birds chirping, soft wind through leaves"
-          duration_s: 11                   # optional; default 11 (sweet spot)
-
-    The runner emits a job spec per prompt + invokes the operator's
-    Stable Audio CLI (if STABLE_AUDIO_RUNNER_BIN + STABLE_AUDIO_MODEL_DIR
-    are set). When unavailable, returns ok=False with a helpful setup
-    message. Operator can run the emitted job specs manually.
-    """
-    try:
-        from assetboy.execution.stable_audio_runner import (
-            is_stable_audio_available,
-            run_stable_audio_batch,
-        )
-    except ImportError as exc:
+    """Drive stable_audio_runner.run_stable_audio_batch."""
+    mod, err = _import_runner("stable_audio_runner")
+    if err:
         return AcquisitionResult(
-            ok=False, method="generator", provider="stable_audio_open_small",
-            error=f"import_failed: {exc}",
+            ok=False, method="generator", provider="stable_audio_open_small", error=err.error,
         )
+    is_stable_audio_available = getattr(mod, "is_stable_audio_available")
+    run_stable_audio_batch = getattr(mod, "run_stable_audio_batch")
 
     prompts = pack.get("prompts") or []
     if not prompts:
@@ -1312,21 +1017,17 @@ def _drive_stable_audio(pack: dict[str, Any], *, pack_id: str, out_dir: Path) ->
             errors.append("empty_prompt_text")
             continue
 
-        try:
-            batch_result = run_stable_audio_batch(
-                pack_id=pack_id,
-                prompt=prompt_text,
-                duration_s=duration_s,
-                output_dir=out_dir,
-                # Auto-dry-run when the model/runner aren't set up: at least
-                # the job spec lands so operator can invoke later.
-                dry_run=not available,
-            )
+        batch_result, call_err = _run_batch(
+            run_stable_audio_batch,
+            pack_id=pack_id, prompt=prompt_text, duration_s=duration_s,
+            output_dir=out_dir, dry_run=not available,
+        )
+        if call_err:
+            errors.append(f"{prompt_text[:30]}: {call_err.error}")
+        elif batch_result:
             results.append(batch_result)
             if batch_result.error:
                 errors.append(f"{prompt_text[:30]}: {batch_result.error}")
-        except Exception as exc:
-            errors.append(f"{prompt_text[:30]}: {exc}")
 
     if not results:
         return AcquisitionResult(
@@ -1334,7 +1035,6 @@ def _drive_stable_audio(pack: dict[str, Any], *, pack_id: str, out_dir: Path) ->
             error=f"all_prompts_failed: {'; '.join(errors)[:200]}",
         )
 
-    # Distinguish "real success" from "spec-only" honestly.
     succeeded_real = sum(1 for r in results if not r.error and not r.dry_run)
     spec_only = sum(1 for r in results if r.dry_run or r.error)
 
@@ -1345,8 +1045,6 @@ def _drive_stable_audio(pack: dict[str, Any], *, pack_id: str, out_dir: Path) ->
             notes=f"stable_audio generated {succeeded_real} clip(s) -> {out_dir}",
         )
 
-    # No real outputs -- only specs. Treat as awaiting-manual-style pause
-    # rather than failure: operator can invoke the emitted job specs.
     return AcquisitionResult(
         ok=False, method="generator", provider="stable_audio_open_small",
         source_dir=out_dir,
@@ -1381,7 +1079,6 @@ def _resolve_source_staging_dir(
         try:
             return asset_library_root() / "inbox" / lane / game_scope / pack_id
         except FileNotFoundError:
-            # No workspace.json -- return a synthetic placeholder path.
             import tempfile
             return (
                 Path(tempfile.gettempdir())

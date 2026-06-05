@@ -77,13 +77,11 @@ namespace FAW.Core
 
                 if (path == "/api/v1/health" && method == "GET")
                 {
-                    var pythonAlive = await PythonWorkerClient.IsAliveAsync();
                     result = new JObject
                     {
                         ["status"] = "ok",
                         ["version"] = "1.0.0",
                         ["providers"] = ProviderRegistry.Instance.Count,
-                        ["python_worker"] = pythonAlive ? "connected" : "offline",
                         ["uptime_ms"] = sw.ElapsedMilliseconds
                     };
                 }
