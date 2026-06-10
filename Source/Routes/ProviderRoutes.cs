@@ -46,7 +46,12 @@ namespace FAW.Routes
                 var stderrTask = proc.StandardError.ReadToEndAsync();
                 if (!proc.WaitForExit(20000))
                 {
-                    try { proc.Kill(); } catch { }
+                    try { proc.Kill(); }
+                    catch (Exception ex) when (!proc.HasExited)
+                    {
+                        Log.Warning($"Failed to kill process {proc.Id}: {ex.Message}");
+                    }
+                    catch { }
                     return ErrorResult("timeout: pack manifest-stats took > 20s");
                 }
                 var stdout = await stdoutTask;
@@ -99,7 +104,12 @@ namespace FAW.Routes
                 var stderrTask = proc.StandardError.ReadToEndAsync();
                 if (!proc.WaitForExit(15000))
                 {
-                    try { proc.Kill(); } catch { }
+                    try { proc.Kill(); }
+                    catch (Exception ex) when (!proc.HasExited)
+                    {
+                        Log.Warning($"Failed to kill process {proc.Id}: {ex.Message}");
+                    }
+                    catch { }
                     return ErrorResult("timeout: gen list-providers took > 15s");
                 }
                 var stdout = await stdoutTask;
@@ -148,7 +158,7 @@ namespace FAW.Routes
         
         public static Task<JObject> HandleSearchAsync(string path, HttpListenerContext ctx)
         {
-            throw new NotImplementedException("Provider search not yet implemented");
+            return Task.FromResult(ErrorResult("not_implemented: Provider search not yet implemented"));
         }
 
         private static JObject ErrorResult(string error)
