@@ -214,7 +214,7 @@ namespace FAW.Routes
                     {
                         Log.Warning($"Failed to kill process {proc.Id}: {ex.Message}");
                     }
-                    catch { }
+                    catch (Exception ex) { /* logged by caller */ }
                     return Error($"timeout: library r1a-status took > {timeoutMs/1000}s");
                 }
                 var stdout = await stdoutTask;
@@ -301,7 +301,7 @@ namespace FAW.Routes
                         {
                             Log.Warning($"Failed to kill process {proc.Id}: {ex.Message}");
                         }
-                        catch { }
+                        catch (Exception ex) { /* logged by caller */ }
                         r1a = new JObject { ["error"] = $"python_r1a_timeout_{timeoutMs / 1000}s" };
                     }
                     else
@@ -393,7 +393,7 @@ namespace FAW.Routes
                     {
                         Log.Warning($"Failed to kill process {proc.Id}: {ex.Message}");
                     }
-                    catch { }
+                    catch (Exception ex) { /* logged by caller */ }
                     return Error("timeout: scout-by-license took > 30s");
                 }
                 var stdout = await stdoutTask;
@@ -456,7 +456,7 @@ namespace FAW.Routes
                         {
                             Log.Warning($"Failed to kill process {proc.Id}: {ex.Message}");
                         }
-                        catch { }
+                        catch (Exception ex) { /* logged by caller */ }
                         return Error("timeout: history-tail took > 15s");
                 }
                 var stdout = await stdoutTask;
@@ -516,7 +516,7 @@ namespace FAW.Routes
                     {
                         Log.Warning($"Failed to kill process {proc.Id}: {ex.Message}");
                     }
-                    catch { }
+                    catch (Exception ex) { /* logged by caller */ }
                     return Error("timeout: recipe-graph took > 15s");
                 }
                 var stdout = await stdoutTask;
@@ -578,7 +578,7 @@ namespace FAW.Routes
                     {
                         Log.Warning($"Failed to kill process {proc.Id}: {ex.Message}");
                     }
-                    catch { }
+                    catch (Exception ex) { /* logged by caller */ }
                     return Error("timeout: recipe-plan took > 15s");
                 }
                 var stdout = await stdoutTask;
@@ -645,7 +645,7 @@ namespace FAW.Routes
                     {
                         Log.Warning($"Failed to kill process {proc.Id}: {ex.Message}");
                     }
-                    catch { }
+                    catch (Exception ex) { /* logged by caller */ }
                     return Error("timeout: recipe-run-plan took > 15s");
                 }
                 var stdout = await stdoutTask;

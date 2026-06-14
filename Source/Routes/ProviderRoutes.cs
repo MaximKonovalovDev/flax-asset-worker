@@ -51,7 +51,7 @@ namespace FAW.Routes
                     {
                         Log.Warning($"Failed to kill process {proc.Id}: {ex.Message}");
                     }
-                    catch { }
+                    catch (Exception ex) { /* logged by caller */ }
                     return ErrorResult("timeout: pack manifest-stats took > 20s");
                 }
                 var stdout = await stdoutTask;
@@ -109,7 +109,7 @@ namespace FAW.Routes
                     {
                         Log.Warning($"Failed to kill process {proc.Id}: {ex.Message}");
                     }
-                    catch { }
+                    catch (Exception ex) { /* logged by caller */ }
                     return ErrorResult("timeout: gen list-providers took > 15s");
                 }
                 var stdout = await stdoutTask;
