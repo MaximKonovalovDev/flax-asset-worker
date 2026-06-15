@@ -184,7 +184,7 @@ namespace FAW.Routes
                             checkLive = req["check_live"]?.Value<bool>() ?? false;
                         }
                     }
-                    catch { /* ignore malformed body; default check_live=false */ }
+                    catch (Exception ex) { Log.Verbose(ex, "LibraryRoutes: malformed body in HandleR1aStatusAsync"); }
                 }
 
                 var args = checkLive
@@ -214,7 +214,7 @@ namespace FAW.Routes
                     {
                         Log.Warning($"Failed to kill process {proc.Id}: {ex.Message}");
                     }
-                    catch (Exception ex) { /* logged by caller */ }
+                    catch (Exception ex) { Log.Error(ex, "LibraryRoutes: handler failed"); }
                     return Error($"timeout: library r1a-status took > {timeoutMs/1000}s");
                 }
                 var stdout = await stdoutTask;
@@ -256,7 +256,7 @@ namespace FAW.Routes
                             checkLive = req["check_live"]?.Value<bool>() ?? false;
                         }
                     }
-                    catch { /* ignore malformed body */ }
+                    catch (Exception ex) { Log.Verbose(ex, "LibraryRoutes: malformed body in HandleHealthAsync"); }
                 }
 
                 // C# native provider registry side.
@@ -301,7 +301,7 @@ namespace FAW.Routes
                         {
                             Log.Warning($"Failed to kill process {proc.Id}: {ex.Message}");
                         }
-                        catch (Exception ex) { /* logged by caller */ }
+                        catch (Exception ex) { Log.Error(ex, "LibraryRoutes: handler failed"); }
                         r1a = new JObject { ["error"] = $"python_r1a_timeout_{timeoutMs / 1000}s" };
                     }
                     else
@@ -368,13 +368,9 @@ namespace FAW.Routes
                 if (string.IsNullOrWhiteSpace(query))
                     return Error("missing_required_field: query");
 
-                var args = $"-m assetboy.cli gen scout-by-license --license \"{license}\" --query \"{query}\" --count {count} --json";
-                if (dryRun) args += " --dry-run";
-
                 var psi = new ProcessStartInfo
                 {
                     FileName = "python",
-                    Arguments = args,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
@@ -382,6 +378,18 @@ namespace FAW.Routes
                     StandardOutputEncoding = Encoding.UTF8,
                     StandardErrorEncoding = Encoding.UTF8,
                 };
+                psi.ArgumentList.Add("-m");
+                psi.ArgumentList.Add("assetboy.cli");
+                psi.ArgumentList.Add("gen");
+                psi.ArgumentList.Add("scout-by-license");
+                psi.ArgumentList.Add("--license");
+                psi.ArgumentList.Add(license);
+                psi.ArgumentList.Add("--query");
+                psi.ArgumentList.Add(query);
+                psi.ArgumentList.Add("--count");
+                psi.ArgumentList.Add(count.ToString());
+                psi.ArgumentList.Add("--json");
+                if (dryRun) psi.ArgumentList.Add("--dry-run");
                 var proc = new Process { StartInfo = psi };
                 proc.Start();
                 var stdoutTask = proc.StandardOutput.ReadToEndAsync();
@@ -393,7 +401,7 @@ namespace FAW.Routes
                     {
                         Log.Warning($"Failed to kill process {proc.Id}: {ex.Message}");
                     }
-                    catch (Exception ex) { /* logged by caller */ }
+                    catch (Exception ex) { Log.Error(ex, "LibraryRoutes: handler failed"); }
                     return Error("timeout: scout-by-license took > 30s");
                 }
                 var stdout = await stdoutTask;
@@ -430,14 +438,9 @@ namespace FAW.Routes
                         return Error($"bad_last: '{last}' (expected non-negative int)");
                 }
 
-                var args = $"-m assetboy.cli gen history-tail --last {lastN} --json";
-                if (!string.IsNullOrWhiteSpace(kind))
-                    args += $" --kind {kind}";
-
                 var psi = new ProcessStartInfo
                 {
                     FileName = "python",
-                    Arguments = args,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
@@ -445,6 +448,18 @@ namespace FAW.Routes
                     StandardOutputEncoding = Encoding.UTF8,
                     StandardErrorEncoding = Encoding.UTF8,
                 };
+                psi.ArgumentList.Add("-m");
+                psi.ArgumentList.Add("assetboy.cli");
+                psi.ArgumentList.Add("gen");
+                psi.ArgumentList.Add("history-tail");
+                psi.ArgumentList.Add("--last");
+                psi.ArgumentList.Add(lastN.ToString());
+                psi.ArgumentList.Add("--json");
+                if (!string.IsNullOrWhiteSpace(kind))
+                {
+                    psi.ArgumentList.Add("--kind");
+                    psi.ArgumentList.Add(kind);
+                }
                 var proc = new Process { StartInfo = psi };
                 proc.Start();
                 var stdoutTask = proc.StandardOutput.ReadToEndAsync();
@@ -456,7 +471,7 @@ namespace FAW.Routes
                         {
                             Log.Warning($"Failed to kill process {proc.Id}: {ex.Message}");
                         }
-                        catch (Exception ex) { /* logged by caller */ }
+                        catch (Exception ex) { Log.Error(ex, "LibraryRoutes: handler failed"); }
                         return Error("timeout: history-tail took > 15s");
                 }
                 var stdout = await stdoutTask;
@@ -490,14 +505,9 @@ namespace FAW.Routes
             {
                 var recipesRoot = ctx.Request.QueryString["recipes_root"] ?? "";
 
-                var args = "-m assetboy.cli pack list-recipes --graph";
-                if (!string.IsNullOrWhiteSpace(recipesRoot))
-                    args += $" --recipes-root \"{recipesRoot}\"";
-
                 var psi = new ProcessStartInfo
                 {
                     FileName = "python",
-                    Arguments = args,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
@@ -505,6 +515,16 @@ namespace FAW.Routes
                     StandardOutputEncoding = Encoding.UTF8,
                     StandardErrorEncoding = Encoding.UTF8,
                 };
+                psi.ArgumentList.Add("-m");
+                psi.ArgumentList.Add("assetboy.cli");
+                psi.ArgumentList.Add("pack");
+                psi.ArgumentList.Add("list-recipes");
+                psi.ArgumentList.Add("--graph");
+                if (!string.IsNullOrWhiteSpace(recipesRoot))
+                {
+                    psi.ArgumentList.Add("--recipes-root");
+                    psi.ArgumentList.Add(recipesRoot);
+                }
                 var proc = new Process { StartInfo = psi };
                 proc.Start();
                 var stdoutTask = proc.StandardOutput.ReadToEndAsync();
@@ -516,7 +536,7 @@ namespace FAW.Routes
                     {
                         Log.Warning($"Failed to kill process {proc.Id}: {ex.Message}");
                     }
-                    catch (Exception ex) { /* logged by caller */ }
+                    catch (Exception ex) { Log.Error(ex, "LibraryRoutes: handler failed"); }
                     return Error("timeout: recipe-graph took > 15s");
                 }
                 var stdout = await stdoutTask;
@@ -550,16 +570,9 @@ namespace FAW.Routes
                 var recipesRoot = ctx.Request.QueryString["recipes_root"] ?? "";
                 var batches = ctx.Request.QueryString["batches"] ?? "";
 
-                var args = "-m assetboy.cli pack list-recipes --plan --json";
-                if (!string.IsNullOrWhiteSpace(recipesRoot))
-                    args += $" --recipes-root \"{recipesRoot}\"";
-                if (batches.ToLowerInvariant() == "true")
-                    args += " --batches";
-
                 var psi = new ProcessStartInfo
                 {
                     FileName = "python",
-                    Arguments = args,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
@@ -567,6 +580,19 @@ namespace FAW.Routes
                     StandardOutputEncoding = Encoding.UTF8,
                     StandardErrorEncoding = Encoding.UTF8,
                 };
+                psi.ArgumentList.Add("-m");
+                psi.ArgumentList.Add("assetboy.cli");
+                psi.ArgumentList.Add("pack");
+                psi.ArgumentList.Add("list-recipes");
+                psi.ArgumentList.Add("--plan");
+                psi.ArgumentList.Add("--json");
+                if (!string.IsNullOrWhiteSpace(recipesRoot))
+                {
+                    psi.ArgumentList.Add("--recipes-root");
+                    psi.ArgumentList.Add(recipesRoot);
+                }
+                if (batches.ToLowerInvariant() == "true")
+                    psi.ArgumentList.Add("--batches");
                 var proc = new Process { StartInfo = psi };
                 proc.Start();
                 var stdoutTask = proc.StandardOutput.ReadToEndAsync();
@@ -578,7 +604,7 @@ namespace FAW.Routes
                     {
                         Log.Warning($"Failed to kill process {proc.Id}: {ex.Message}");
                     }
-                    catch (Exception ex) { /* logged by caller */ }
+                    catch (Exception ex) { Log.Error(ex, "LibraryRoutes: handler failed"); }
                     return Error("timeout: recipe-plan took > 15s");
                 }
                 var stdout = await stdoutTask;
@@ -611,22 +637,9 @@ namespace FAW.Routes
                 var recipesRoot = ctx.Request.QueryString["recipes_root"] ?? "";
                 var filterCsv = ctx.Request.QueryString["filter"] ?? "";
 
-                var args = "-m assetboy.cli pack run-plan --dry-run --json";
-                if (!string.IsNullOrWhiteSpace(recipesRoot))
-                    args += $" --recipes-root \"{recipesRoot}\"";
-                if (!string.IsNullOrWhiteSpace(filterCsv))
-                {
-                    foreach (var f in filterCsv.Split(','))
-                    {
-                        if (!string.IsNullOrWhiteSpace(f))
-                            args += $" --filter \"{f.Trim()}\"";
-                    }
-                }
-
                 var psi = new ProcessStartInfo
                 {
                     FileName = "python",
-                    Arguments = args,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
@@ -634,6 +647,28 @@ namespace FAW.Routes
                     StandardOutputEncoding = Encoding.UTF8,
                     StandardErrorEncoding = Encoding.UTF8,
                 };
+                psi.ArgumentList.Add("-m");
+                psi.ArgumentList.Add("assetboy.cli");
+                psi.ArgumentList.Add("pack");
+                psi.ArgumentList.Add("run-plan");
+                psi.ArgumentList.Add("--dry-run");
+                psi.ArgumentList.Add("--json");
+                if (!string.IsNullOrWhiteSpace(recipesRoot))
+                {
+                    psi.ArgumentList.Add("--recipes-root");
+                    psi.ArgumentList.Add(recipesRoot);
+                }
+                if (!string.IsNullOrWhiteSpace(filterCsv))
+                {
+                    foreach (var f in filterCsv.Split(','))
+                    {
+                        if (!string.IsNullOrWhiteSpace(f))
+                        {
+                            psi.ArgumentList.Add("--filter");
+                            psi.ArgumentList.Add(f.Trim());
+                        }
+                    }
+                }
                 var proc = new Process { StartInfo = psi };
                 proc.Start();
                 var stdoutTask = proc.StandardOutput.ReadToEndAsync();
@@ -645,7 +680,7 @@ namespace FAW.Routes
                     {
                         Log.Warning($"Failed to kill process {proc.Id}: {ex.Message}");
                     }
-                    catch (Exception ex) { /* logged by caller */ }
+                    catch (Exception ex) { Log.Error(ex, "LibraryRoutes: handler failed"); }
                     return Error("timeout: recipe-run-plan took > 15s");
                 }
                 var stdout = await stdoutTask;
