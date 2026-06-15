@@ -10,7 +10,7 @@
         "mcp_server_colab_exec.server"
       ],
       "env": {
-        "HOME": "C:\\Users\\me\\.assetboy\\colab_primary"
+        "HOME": "${env:USERPROFILE}\\.assetboy\\colab_primary"
       }
     },
     {
@@ -21,7 +21,7 @@
         "mcp_server_colab_exec.server"
       ],
       "env": {
-        "HOME": "C:\\Users\\me\\.assetboy\\colab_secondary"
+        "HOME": "${env:USERPROFILE}\\.assetboy\\colab_secondary"
       }
     }
   ]
