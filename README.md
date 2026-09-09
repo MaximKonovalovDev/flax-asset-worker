@@ -7,7 +7,7 @@ manual_browser / generator), 19 wired direct_url providers (4 CC0 sites + 10 R1A
 public APIs + 5 generators), and a weekly external-API canary.
 
 > **Renamed 2026-05-06:** previously published as `diklaaltman91-ux/faw`.
-> Now at `flax-game-studio/flax-asset-worker`.
+> Now at `MaximKonovalovDev/flax-asset-worker`.
 >
 > **Path B refactors 2026-05-10 → 2026-05-11:** slim-down + Typer rewrite
 > + acquisition router + 4 generator drivers + C# server endpoints +
@@ -133,8 +133,8 @@ python -m assetboy.canary                  # full run, exit 0/1
 python -m assetboy.canary --probe polyhaven  # single probe
 python -m assetboy.canary --json           # tooling-friendly output
 
-# Register weekly Windows Task Scheduler:
-pwsh scripts\install-canary-scheduler.ps1
+# Weekly Task Scheduler wiring is not shipped in scripts/; schedule
+# python -m assetboy.canary via Windows Task Scheduler if needed.
 ```
 
 ### Use the Typer CLI
